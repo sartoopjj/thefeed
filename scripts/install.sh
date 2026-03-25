@@ -328,10 +328,8 @@ install_thefeed() {
         install_service
         start_service
     else
-        # Update: just restart
-        if [[ ! -f "$SERVICE_FILE" ]]; then
-            install_service
-        fi
+        # Update: regenerate service file and restart
+        install_service
         start_service
     fi
 
