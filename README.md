@@ -50,8 +50,9 @@ DNS-based feed reader for Telegram channels. Designed for environments where onl
 
 ## Quick Install (Server)
 
+One-line install (downloads latest release from GitHub)
+
 ```bash
-# One-line install (downloads latest release from GitHub)
 bash <(curl -Ls https://raw.githubusercontent.com/sartoopjj/thefeed/main/scripts/install.sh)
 ```
 
