@@ -245,7 +245,7 @@ func (f *Fetcher) rateWait(ctx context.Context) error {
 // It enqueues through the rate limiter and respects ctx cancellation.
 // On transient failure it retries up to 2 additional times with a short back-off.
 func (f *Fetcher) FetchBlock(ctx context.Context, channel, block uint16) ([]byte, error) {
-	const maxAttempts = 6
+	const maxAttempts = 10
 	var lastErr error
 	for attempt := 0; attempt < maxAttempts; attempt++ {
 		if attempt > 0 {

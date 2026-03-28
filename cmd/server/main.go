@@ -21,7 +21,7 @@ import (
 
 func main() {
 	dataDir := flag.String("data-dir", "./data", "Data directory for channels, session, and config")
-	listen := flag.String("listen", ":5300", "DNS listen address (host:port)")
+	listen := flag.String("listen", ":53", "DNS listen address (host:port)")
 	domain := flag.String("domain", "", "DNS domain (e.g., t.example.com)")
 	key := flag.String("key", "", "Encryption passphrase")
 	channelsFile := flag.String("channels", "", "Path to channels file (default: {data-dir}/channels.txt)")

@@ -81,25 +81,6 @@ func EncodeQuery(queryKey [KeySize]byte, channel, block uint16, domain string, m
 	}
 }
 
-func splitLabel(s string, size int) []string {
-	if size <= 0 {
-		size = maxDNSLabelLen
-	}
-	if size > maxDNSLabelLen {
-		size = maxDNSLabelLen
-	}
-
-	parts := make([]string, 0, (len(s)+size-1)/size)
-	for len(s) > size {
-		parts = append(parts, s[:size])
-		s = s[size:]
-	}
-	if len(s) > 0 {
-		parts = append(parts, s)
-	}
-	return parts
-}
-
 // splitMultiLabel splits a hex string into two labels of randomised, unequal length.
 // The first label is between 12 and (len-4) chars so the second is at least 4 chars.
 // This makes query labels look less uniform across requests.
