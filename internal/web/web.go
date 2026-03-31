@@ -512,12 +512,11 @@ func (s *Server) initFetcher() error {
 	// Start rate limiter and noise goroutines.
 	fetcher.Start(ctx)
 
-	// Start periodic resolver health checks.
+	// Start periodic resolver health checks (runs first check in background immediately).
 	checker := client.NewResolverChecker(fetcher, timeout)
 	checker.SetLogFunc(func(msg string) {
 		s.addLog(msg)
 	})
-	checker.CheckNow()
 	checker.Start(ctx)
 
 	s.fetcher = fetcher
