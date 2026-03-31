@@ -44,7 +44,7 @@ func (rc *ResolverChecker) SetLogFunc(fn LogFunc) {
 func (rc *ResolverChecker) Start(ctx context.Context) {
 	go func() {
 		rc.CheckNow()
-		ticker := time.NewTicker(10 * time.Minute)
+		ticker := time.NewTicker(30 * time.Minute)
 		defer ticker.Stop()
 		for {
 			select {

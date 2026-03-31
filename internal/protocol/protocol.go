@@ -13,7 +13,7 @@ import (
 
 const (
 	// MinBlockPayload is the minimum decrypted payload per DNS TXT block.
-	MinBlockPayload = 300
+	MinBlockPayload = 200
 	// MaxBlockPayload is the maximum decrypted payload per DNS TXT block.
 	MaxBlockPayload = 600
 	// DefaultBlockPayload is kept for compatibility; equals MaxBlockPayload.

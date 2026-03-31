@@ -14,14 +14,15 @@
         }
 
         :root {
-            --bg: #0f0f1a;
-            --surface: #1a1a2e;
-            --surface2: #232340;
-            --border: #2d2d50;
-            --accent: #7c3aed;
-            --accent-dim: #5b21b6;
-            --text: #e4e4e7;
-            --text-dim: #71717a;
+            --bg: #0b1020;
+            --bg2: #131a32;
+            --surface: rgba(18, 26, 48, 0.85);
+            --surface2: rgba(30, 42, 74, 0.9);
+            --border: #2d3d69;
+            --accent: #f59e0b;
+            --accent-dim: #d97706;
+            --text: #edf2ff;
+            --text-dim: #9aa8cf;
             --success: #22c55e;
             --error: #ef4444;
             --send-color: #0ea5e9;
@@ -31,7 +32,7 @@
 
         body {
             font-family: 'Vazirmatn', -apple-system, BlinkMacSystemFont, sans-serif;
-            background: var(--bg);
+            background: radial-gradient(1200px 600px at 85% -10%, #213162 0%, transparent 55%), linear-gradient(165deg, var(--bg) 0%, var(--bg2) 100%);
             color: var(--text);
             height: 100vh;
             overflow: hidden;
@@ -41,15 +42,30 @@
             display: flex;
             align-items: center;
             justify-content: space-between;
-            padding: 8px 16px;
-            background: var(--surface);
+            padding: 10px 16px;
+            background: rgba(14, 20, 38, 0.92);
+            backdrop-filter: blur(8px);
             border-bottom: 1px solid var(--border);
-            height: 48px;
+            height: 58px;
+            position: relative;
+            z-index: 20;
         }
         .header-left { display: flex; align-items: center; gap: 10px; }
-        .header h1 { font-size: 16px; font-weight: 600; }
+        .header h1 { font-size: 17px; font-weight: 700; letter-spacing: 0.3px; }
         .header-actions { display: flex; gap: 8px; align-items: center; }
         .next-fetch-timer { font-size: 11px; color: var(--text-dim); }
+
+        .mobile-menu-btn {
+            display: none;
+            width: 38px;
+            height: 38px;
+            border-radius: 10px;
+            border: 1px solid var(--border);
+            background: var(--surface2);
+            color: var(--text);
+            font-size: 18px;
+            cursor: pointer;
+        }
 
         .status-dot {
             width: 8px; height: 8px;
@@ -62,27 +78,28 @@
         .btn {
             padding: 6px 14px;
             border: 1px solid var(--border);
-            border-radius: 6px;
+            border-radius: 10px;
             background: var(--surface2);
             color: var(--text);
             cursor: pointer;
             font-family: inherit;
             font-size: 13px;
-            transition: background 0.15s;
+            transition: background 0.15s, transform 0.12s;
         }
         .btn:hover { background: var(--border); }
+        .btn:active { transform: translateY(1px); }
         .btn-primary { background: var(--accent); border-color: var(--accent); }
         .btn-primary:hover { background: var(--accent-dim); }
 
         .main {
             display: flex;
-            height: calc(100vh - 48px);
+            height: calc(100vh - 58px);
         }
 
         .sidebar {
-            width: 220px;
-            min-width: 220px;
-            background: var(--surface);
+            width: 260px;
+            min-width: 260px;
+            background: rgba(10, 16, 31, 0.82);
             border-right: 1px solid var(--border);
             display: flex;
             flex-direction: column;
@@ -96,7 +113,7 @@
             letter-spacing: 1px;
         }
         .channel-item {
-            padding: 10px 16px;
+            padding: 12px 16px;
             cursor: pointer;
             border-left: 3px solid transparent;
             transition: all 0.15s;
@@ -140,16 +157,18 @@
         .messages {
             flex: 1;
             overflow-y: auto;
-            padding: 16px;
+            padding: 18px;
             direction: rtl;
             text-align: right;
         }
         .message {
             margin-bottom: 16px;
-            padding: 12px 16px;
+            padding: 12px 14px;
             background: var(--surface);
-            border-radius: 8px;
+            border-radius: 12px;
             border: 1px solid var(--border);
+            box-shadow: 0 6px 20px rgba(5, 10, 22, 0.2);
+            max-width: 920px;
         }
         .message-header {
             display: flex;
@@ -176,7 +195,7 @@
 
         .send-panel {
             display: none;
-            padding: 8px 12px;
+            padding: 10px 12px;
             background: var(--surface);
             border-top: 1px solid var(--border);
             direction: rtl;
@@ -194,9 +213,9 @@
             direction: rtl;
         }
         .send-btn {
-            padding: 8px 16px;
+            padding: 8px 18px;
             border: none;
-            border-radius: 6px;
+            border-radius: 10px;
             background: var(--send-color);
             color: white;
             cursor: pointer;
@@ -208,7 +227,7 @@
         .progress-panel {
             height: 56px;
             min-height: 56px;
-            background: var(--surface);
+            background: rgba(14, 20, 38, 0.95);
             border-top: 1px solid var(--border);
             border-bottom: 1px solid var(--border);
             overflow-y: auto;
@@ -247,7 +266,7 @@
         .log-panel {
             height: 150px;
             min-height: 100px;
-            background: var(--surface);
+            background: rgba(14, 20, 38, 0.95);
             border-top: 1px solid var(--border);
             overflow-y: auto;
             font-size: 12px;
@@ -334,6 +353,96 @@
         .footer-link a:hover { text-decoration: underline; }
         .footer-link .free-iran { color: var(--success); font-weight: bold; }
 
+        .sidebar-overlay {
+            display: none;
+            position: fixed;
+            inset: 58px 0 0 0;
+            background: rgba(2, 6, 20, 0.55);
+            z-index: 9;
+        }
+
+        @media (max-width: 900px) {
+            .mobile-menu-btn { display: inline-flex; align-items: center; justify-content: center; }
+            .header {
+                padding: 10px 12px;
+            }
+            .header-left {
+                gap: 8px;
+                min-width: 0;
+            }
+            .header h1 {
+                font-size: 15px;
+            }
+            .next-fetch-timer {
+                display: none;
+            }
+            .header-actions .btn {
+                padding: 6px 10px;
+                font-size: 12px;
+            }
+            .sidebar {
+                position: fixed;
+                top: 58px;
+                bottom: 0;
+                right: 0;
+                width: min(82vw, 300px);
+                min-width: 0;
+                z-index: 10;
+                transform: translateX(100%);
+                transition: transform 0.22s ease;
+                border-left: 1px solid var(--border);
+                border-right: none;
+            }
+            .main.sidebar-open .sidebar {
+                transform: translateX(0);
+            }
+            .main.sidebar-open + .sidebar-overlay {
+                display: block;
+            }
+            .messages {
+                padding: 12px;
+            }
+            .message {
+                margin-bottom: 12px;
+                border-radius: 10px;
+            }
+            .progress-panel {
+                height: 52px;
+                min-height: 52px;
+                padding: 10px;
+            }
+            .log-panel {
+                height: 120px;
+                min-height: 90px;
+                padding: 8px 10px;
+            }
+            .modal {
+                width: 100%;
+                max-width: 100%;
+                height: 100%;
+                max-height: 100%;
+                border-radius: 0;
+                padding: 16px;
+            }
+        }
+
+        @media (max-width: 520px) {
+            .send-panel.visible {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            .send-btn {
+                width: 100%;
+            }
+            .header-actions {
+                gap: 6px;
+            }
+            .header-actions .btn {
+                padding: 5px 8px;
+                font-size: 11px;
+            }
+        }
+
         .tg-warning {
             background: #3b1f1f;
             border: 1px solid #7f1d1d;
@@ -355,6 +464,7 @@
 <body>
     <div class="header">
         <div class="header-left">
+            <button class="mobile-menu-btn" onclick="toggleSidebar()" aria-label="Open channels">☰</button>
             <h1>thefeed</h1>
             <span class="status-dot disconnected" id="statusDot"></span>
             <span class="next-fetch-timer" id="nextFetchTimer"></span>
@@ -394,6 +504,7 @@
             <div class="log-panel" id="logPanel"></div>
         </div>
     </div>
+    <div class="sidebar-overlay" onclick="toggleSidebar(true)"></div>
 
     <div class="modal-overlay" id="channelModal">
         <div class="modal">
@@ -474,6 +585,16 @@
         var previousMsgIDs = {};
         var newMsgCount = 0;
         var originalTitle = document.title;
+
+        function toggleSidebar(forceClose) {
+            var main = document.querySelector('.main');
+            if (!main) return;
+            if (forceClose) {
+                main.classList.remove('sidebar-open');
+                return;
+            }
+            main.classList.toggle('sidebar-open');
+        }
 
         function getFirstVisibleChannel() {
             if (channels.length > 0) return 1;
@@ -645,6 +766,7 @@
             selectedChannel = num;
             newMsgCount = 0;
             document.title = originalTitle;
+            toggleSidebar(true);
             renderChannels();
             updateSendPanel();
             document.getElementById('messages').innerHTML = '<div class="empty-state"><p>Loading...</p></div>';
@@ -1022,6 +1144,12 @@
             if (e.key === 'Enter' && document.activeElement === document.getElementById('addChannelInput')) {
                 e.preventDefault();
                 addChannel();
+            }
+        });
+
+        window.addEventListener('resize', function() {
+            if (window.innerWidth > 900) {
+                toggleSidebar(true);
             }
         });
 

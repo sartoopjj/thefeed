@@ -65,7 +65,7 @@ func NewFetcher(domain, passphrase string, resolvers []string) (*Fetcher, error)
 		queryMode:       protocol.QuerySingleLabel,
 		allResolvers:    r,
 		activeResolvers: r,
-		timeout:         20 * time.Second,
+		timeout:         30 * time.Second,
 	}, nil
 }
 
