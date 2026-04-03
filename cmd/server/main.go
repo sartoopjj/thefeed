@@ -64,6 +64,10 @@ func main() {
 	if !*allowManage && os.Getenv("THEFEED_ALLOW_MANAGE") == "1" {
 		*allowManage = true
 	}
+	// THEFEED_ALLOW_MANAGE=0 explicitly disables, even if flag was set
+	if os.Getenv("THEFEED_ALLOW_MANAGE") == "0" {
+		*allowManage = false
+	}
 	if *msgLimit == 15 {
 		if v := os.Getenv("THEFEED_MSG_LIMIT"); v != "" {
 			if n, err := strconv.Atoi(v); err == nil && n > 0 {

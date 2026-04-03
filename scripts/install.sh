@@ -298,8 +298,7 @@ ExecStart=${INSTALL_DIR}/thefeed-server \\
     --api-id \${TELEGRAM_API_ID} \\
     --api-hash \${TELEGRAM_API_HASH} \\
     --phone \${TELEGRAM_PHONE} \\
-    --listen \${THEFEED_LISTEN} \\
-    --msg-limit \${THEFEED_MSG_LIMIT} ${extra_flags}
+    --listen \${THEFEED_LISTEN} ${extra_flags}
 
 Restart=on-failure
 RestartSec=10
