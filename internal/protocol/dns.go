@@ -28,6 +28,10 @@ const (
 	UpstreamInitChannel uint16 = 0xFFFC
 	// UpstreamDataChannel carries one chunk of a chunked upstream session.
 	UpstreamDataChannel uint16 = 0xFFFB
+	// MediaInitChannel starts a downstream media download session.
+	MediaInitChannel uint16 = 0xFFFA
+	// MediaDataChannel requests one block of media payload by index.
+	MediaDataChannel uint16 = 0xFFF9
 
 	// MaxUpstreamBlockPayload keeps uploaded query chunks comfortably below DNS
 	// name limits across typical domains and resolver paths.
@@ -428,6 +432,101 @@ func DecodeAdminQuery(queryKey [KeySize]byte, qname, domain string) (cmd AdminCm
 		arg = payload[1:]
 	}
 	return cmd, arg, nil
+}
+
+// EncodeMediaInitQuery creates a DNS query that asks the server for metadata
+// of a media token (name, mime, size, block count).
+func EncodeMediaInitQuery(queryKey [KeySize]byte, token, domain string, mode QueryEncoding) (string, error) {
+	token = strings.TrimSpace(token)
+	if token == "" {
+		return "", fmt.Errorf("empty media token")
+	}
+	return encodeDataQuery(queryKey, MediaInitChannel, 0, []byte(token), domain, mode)
+}
+
+// EncodeMediaBlockQuery creates a DNS query that requests a single media block.
+func EncodeMediaBlockQuery(queryKey [KeySize]byte, token string, block uint16, domain string, mode QueryEncoding) (string, error) {
+	token = strings.TrimSpace(token)
+	if token == "" {
+		return "", fmt.Errorf("empty media token")
+	}
+	return encodeDataQuery(queryKey, MediaDataChannel, block, []byte(token), domain, mode)
+}
+
+// DecodeMediaInitQuery parses a media init query and returns the requested token.
+func DecodeMediaInitQuery(queryKey [KeySize]byte, qname, domain string) (string, error) {
+	ch, _, payload, err := decodeSpecialDataQuery(queryKey, qname, domain)
+	if err != nil {
+		return "", err
+	}
+	if ch != MediaInitChannel {
+		return "", fmt.Errorf("not a media init query (channel=%d)", ch)
+	}
+	if len(payload) == 0 {
+		return "", fmt.Errorf("empty media init payload")
+	}
+	return string(payload), nil
+}
+
+// DecodeMediaBlockQuery parses a media block query and returns block index + token.
+func DecodeMediaBlockQuery(queryKey [KeySize]byte, qname, domain string) (block uint16, token string, err error) {
+	ch, blk, payload, err := decodeSpecialDataQuery(queryKey, qname, domain)
+	if err != nil {
+		return 0, "", err
+	}
+	if ch != MediaDataChannel {
+		return 0, "", fmt.Errorf("not a media data query (channel=%d)", ch)
+	}
+	if len(payload) == 0 {
+		return 0, "", fmt.Errorf("empty media token payload")
+	}
+	return blk, string(payload), nil
+}
+
+func decodeSpecialDataQuery(queryKey [KeySize]byte, qname, domain string) (channel uint16, block uint16, payload []byte, err error) {
+	qname = strings.TrimSuffix(qname, ".")
+	domain = strings.TrimSuffix(domain, ".")
+
+	suffix := "." + domain
+	if !strings.HasSuffix(strings.ToLower(qname), strings.ToLower(suffix)) {
+		return 0, 0, nil, fmt.Errorf("domain mismatch")
+	}
+
+	encoded := qname[:len(qname)-len(suffix)]
+	parts := strings.Split(encoded, ".")
+	if len(parts) < 2 {
+		return 0, 0, nil, fmt.Errorf("query needs at least header + data labels")
+	}
+
+	headerLabel := parts[0]
+	headerCT, err := b32.DecodeString(strings.ToUpper(headerLabel))
+	if err != nil {
+		headerCT, err = hex.DecodeString(headerLabel)
+		if err != nil {
+			return 0, 0, nil, fmt.Errorf("decode header: %w", err)
+		}
+	}
+
+	plaintext, err := decryptQueryBlock(queryKey, headerCT)
+	if err != nil {
+		return 0, 0, nil, fmt.Errorf("decrypt header: %w", err)
+	}
+
+	channel = binary.BigEndian.Uint16(plaintext[QueryPaddingSize:])
+	block = binary.BigEndian.Uint16(plaintext[QueryPaddingSize+QueryChannelSize:])
+
+	dataHex := strings.Join(parts[1:], "")
+	dataCT, err := hex.DecodeString(dataHex)
+	if err != nil {
+		return 0, 0, nil, fmt.Errorf("decode data: %w", err)
+	}
+
+	payload, err = Decrypt(queryKey, dataCT)
+	if err != nil {
+		return 0, 0, nil, fmt.Errorf("decrypt payload: %w", err)
+	}
+
+	return channel, block, payload, nil
 }
 
 // EncodeUpstreamInitQuery creates a compact single-label query that registers

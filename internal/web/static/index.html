@@ -81,6 +81,13 @@ input,textarea,select{font-family:inherit}
 .msg{max-width:min(82%,580px);padding:7px 10px 4px;border-radius:12px;line-height:1.7;word-break:break-word;white-space:pre-wrap;font-size:inherit;background:var(--msg-in);border:1px solid rgba(255,255,255,.07);align-self:flex-start;border-bottom-left-radius:4px}
 .msg-meta{display:flex;justify-content:flex-end;gap:6px;font-size:10px;color:var(--text-dim);margin-top:2px;direction:ltr}
 .media-tag{display:block;padding:2px 6px;border-radius:4px;background:rgba(51,144,236,.15);color:var(--accent);font-size:11px;margin-bottom:6px}
+.media-card{display:flex;align-items:center;gap:10px;background:rgba(51,144,236,.08);border:1px solid rgba(51,144,236,.22);padding:8px 10px;border-radius:10px;margin-bottom:6px}
+.media-icon{width:34px;height:34px;border-radius:8px;background:rgba(51,144,236,.16);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0}
+.media-meta{flex:1;min-width:0}
+.media-title{font-size:12px;font-weight:600;color:var(--text);line-height:1.2}
+.media-sub{font-size:10px;color:var(--text-dim)}
+.media-download-btn{border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:10px;border-radius:7px;padding:4px 8px;white-space:nowrap}
+.media-download-btn:hover{background:var(--hover)}
 
 /* ===== SEND PANEL ===== */
 .send-panel{display:none;padding:8px 14px;background:var(--surface);border-top:1px solid var(--border);gap:8px;align-items:flex-end}
@@ -494,6 +501,7 @@ function setLang(l){lang=l;localStorage.setItem('thefeed_lang',l);applyLang()}
 // ===== STATE =====
 var selectedChannel=0,channels=[],eventSource=null,autoRefreshTimer=null,telegramLoggedIn=false,logVisible=false;
 var serverNextFetch=0,nextFetchInterval=null,previousMsgIDs={},currentMsgTexts=[];
+var mediaDownloadControllers={};
 var profiles=null,activeProfileId='',editingProfileId=null,resolverScanHint='',resolverScanHealthy=0,resolverScanDone=0,resolverScanTotal=0;
 
 // ===== MOBILE NAV =====
@@ -1036,18 +1044,186 @@ function renderMessages(msgs, gaps){
     var timeStr=ts.toLocaleTimeString(dateLocale,{hour:'2-digit',minute:'2-digit'});
     var text=msg.Text||msg.text||'';
     currentMsgTexts.push(text);
-    var mediaHtml='',textHtml=esc(text);
+    var parsed=parseMediaText(text);
+    var mediaHtml='',textHtml=esc(parsed.text);
     var mediaTypes=['[IMAGE]','[VIDEO]','[FILE]','[AUDIO]','[STICKER]','[GIF]','[POLL]','[CONTACT]','[LOCATION]'];
     for(var m=0;m<mediaTypes.length;m++){
-      if(text.indexOf(mediaTypes[m])===0){
-        mediaHtml='<div class="media-tag">'+mediaTypes[m]+'</div>';
-        textHtml=esc(text.substring(mediaTypes[m].length).replace(/^\n/,''));break
+      if(parsed.text.indexOf(mediaTypes[m])===0){
+        mediaHtml=buildMediaCard(mediaTypes[m], parsed.text.substring(mediaTypes[m].length).replace(/^\n/,''), i, parsed.token);
+        textHtml=esc(parsed.text.substring(mediaTypes[m].length).replace(/^\n/,''));break
       }
     }
     html+='<div class="msg'+(isPersian(text)?' rtl-msg':'')+'" dir="auto">'+mediaHtml+textHtml+'<div class="msg-meta"><button class="msg-copy-btn" onclick="copyMsg('+i+')" title="'+t('copy')+'">&#128203;</button><span>#'+id+'</span><span>'+timeStr+'</span></div></div>';
   }
   el.innerHTML=html;
   if(isFirstRender||wasAtBottom){el.scrollTop=el.scrollHeight;document.getElementById('scrollDownBtn').classList.remove('visible');}
+}
+
+function mediaTypeLabel(tag){
+  var labels={
+    '[IMAGE]':'Image',
+    '[VIDEO]':'Video',
+    '[FILE]':'File',
+    '[AUDIO]':'Audio',
+    '[STICKER]':'Sticker',
+    '[GIF]':'GIF',
+    '[POLL]':'Poll',
+    '[CONTACT]':'Contact',
+    '[LOCATION]':'Location'
+  };
+  return labels[tag]||'Media';
+}
+
+function mediaTypeIcon(tag){
+  var icons={
+    '[IMAGE]':'🖼️',
+    '[VIDEO]':'🎬',
+    '[FILE]':'📎',
+    '[AUDIO]':'🎵',
+    '[STICKER]':'🏷️',
+    '[GIF]':'🎞️',
+    '[POLL]':'📊',
+    '[CONTACT]':'👤',
+    '[LOCATION]':'📍'
+  };
+  return icons[tag]||'📦';
+}
+
+function buildMediaCard(tag, caption, index, token){
+  var title=mediaTypeLabel(tag);
+  var sub=caption&&caption.trim()?esc(caption.trim().slice(0,60)):'No caption';
+  return '<div class="media-card">'+
+    '<div class="media-icon">'+mediaTypeIcon(tag)+'</div>'+
+    '<div class="media-meta"><div class="media-title">'+title+'</div><div class="media-sub">'+sub+'</div></div>'+
+    '<button class="media-download-btn" onclick="downloadMediaInfo('+index+',\''+escAttr(token||'')+'\')">Download</button>'+
+  '</div>';
+}
+
+async function downloadMediaInfo(index, token){
+  if(token){
+    await downloadMediaByToken(token);
+    return;
+  }
+  if(!currentMsgTexts||!currentMsgTexts[index])return;
+  var parsed=parseMediaText(currentMsgTexts[index]);
+  var content='thefeed media placeholder\n\n'+parsed.text+'\n';
+  var blob=new Blob([content],{type:'text/plain;charset=utf-8'});
+  var a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download='thefeed-media.txt';
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(function(){URL.revokeObjectURL(a.href);a.remove();},0);
+}
+
+async function downloadMediaByToken(token){
+  var id='prog-media-'+token;
+  var panel=document.getElementById('progressPanel');
+  var item=document.getElementById(id);
+  if(!item){
+    item=document.createElement('div');
+    item.id=id;
+    item.className='progress-item';
+    item.innerHTML='<button class="progress-close" onclick="cancelMediaDownload(this)" title="Cancel">&times;</button><div class="progress-label">Downloading media...</div><div class="progress-bar"><div class="progress-fill" style="width:0%"></div></div>';
+    panel.insertBefore(item,panel.firstChild);
+  }
+  item.dataset.token=token||'';
+  var label=item.querySelector('.progress-label');
+  var fill=item.querySelector('.progress-fill');
+  label.textContent='Downloading media...';
+  fill.style.width='0%';
+
+  try{
+    var controller=new AbortController();
+    mediaDownloadControllers[token]=controller;
+    var res=await fetch('/api/media?token='+encodeURIComponent(token),{credentials:'same-origin',signal:controller.signal});
+    if(!res.ok)throw new Error('HTTP '+res.status);
+    var total=parseInt(res.headers.get('content-length')||'0',10);
+    var disp=res.headers.get('content-disposition')||'';
+    var nameMatch=disp.match(/filename="?([^";]+)"?/i);
+    var filename=nameMatch&&nameMatch[1]?nameMatch[1]:'media.bin';
+    var mime=res.headers.get('content-type')||'application/octet-stream';
+
+    if(!res.body){
+      var blobFallback=await res.blob();
+      saveBlob(blobFallback, filename);
+      fill.style.width='100%';
+      label.textContent='Download complete';
+      setTimeout(function(){if(item.parentNode)item.parentNode.removeChild(item)},1200);
+      addLogLine('Media downloaded: '+filename);
+      delete mediaDownloadControllers[token];
+      return;
+    }
+
+    var reader=res.body.getReader();
+    var chunks=[];
+    var received=0;
+    while(true){
+      var part=await reader.read();
+      if(part.done)break;
+      chunks.push(part.value);
+      received+=part.value.length;
+      if(total>0){
+        var pct=Math.round((received/total)*100);
+        if(pct>100)pct=100;
+        fill.style.width=pct+'%';
+        label.textContent='Downloading media... '+pct+'%';
+      }else{
+        label.textContent='Downloading media... '+Math.round(received/1024)+' KB';
+      }
+    }
+
+    var blob=new Blob(chunks,{type:mime});
+    saveBlob(blob, filename);
+    fill.style.width='100%';
+    label.textContent='Download complete';
+    addLogLine('Media downloaded: '+filename+' ('+Math.round(blob.size/1024)+' KB)');
+    setTimeout(function(){if(item.parentNode)item.parentNode.removeChild(item)},1200);
+    delete mediaDownloadControllers[token];
+  }catch(e){
+    delete mediaDownloadControllers[token];
+    if(e&&e.name==='AbortError'){
+      label.textContent='Download cancelled';
+      addLogLine('Media download cancelled');
+      setTimeout(function(){if(item.parentNode)item.parentNode.removeChild(item)},500);
+      return;
+    }
+    fill.style.width='100%';
+    label.textContent='Download failed';
+    addLogLine('Error: media download failed');
+    showToast('Download failed');
+  }
+}
+
+function cancelMediaDownload(btn){
+  var item=btn&&btn.parentNode?btn.parentNode:null;
+  if(!item)return;
+  var token=item.dataset&&item.dataset.token?item.dataset.token:'';
+  if(token&&mediaDownloadControllers[token]){
+    try{mediaDownloadControllers[token].abort();}catch(_e){}
+    delete mediaDownloadControllers[token];
+  }
+  if(item.parentNode)item.parentNode.removeChild(item);
+}
+
+function saveBlob(blob, filename){
+  var a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download=filename||'media.bin';
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(function(){URL.revokeObjectURL(a.href);a.remove();},0);
+}
+
+function parseMediaText(text){
+  if(!text)return {text:'',token:''};
+  var token='';
+  var cleaned=text.replace(/\n?\[MEDIA_TOKEN:([a-fA-F0-9]+)\]\s*$/m,function(_m,t){token=t;return ''});
+  return {text:cleaned,token:token};
+}
+
+function escAttr(s){
+  return String(s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 
 // ===== LOG =====
@@ -1059,6 +1235,7 @@ function addLogLine(line){
     // Handle structured resolver scan events — show progress bar, suppress from log
     if(line.includes('RESOLVER_SCAN ')){updateResolverScanDisplay(line);return}
     if(line.includes('SERVER_FETCH_WAIT ')){updateServerFetchDisplay(line);return}
+    if(line.includes('MEDIA_FETCH ')){updateMediaFetchDisplay(line);return}
     if(line.includes('Error:')||line.includes('error')||line.includes('Invalid passphrase'))cls='err';
     else if(line.includes('Warning:'))cls='warn';
     else if(line.includes('OK')||line.includes('success')||line.includes('done'))cls='ok';
@@ -1067,6 +1244,65 @@ function addLogLine(line){
   div.className='log-line '+cls;div.textContent=line;
   el.appendChild(div);el.scrollTop=el.scrollHeight;
   while(el.children.length>200)el.removeChild(el.firstChild);
+}
+
+function ensureMediaProgressItem(token){
+  var safeToken=(token||'').replace(/[^a-zA-Z0-9_-]/g,'');
+  var id='prog-media-'+safeToken;
+  var panel=document.getElementById('progressPanel');
+  var item=document.getElementById(id);
+  if(!item){
+    item=document.createElement('div');
+    item.id=id;
+    item.className='progress-item';
+    item.innerHTML='<button class="progress-close" onclick="cancelMediaDownload(this)" title="Cancel">&times;</button><div class="progress-label">Downloading media...</div><div class="progress-bar"><div class="progress-fill" style="width:0%"></div></div>';
+    panel.insertBefore(item,panel.firstChild);
+  }
+  item.dataset.token=token||'';
+  return item;
+}
+
+function updateMediaFetchDisplay(line){
+  var tokenMatch=line.match(/token=([a-fA-F0-9]+)/);
+  if(!tokenMatch)return;
+  var token=tokenMatch[1];
+  var item=ensureMediaProgressItem(token);
+  var label=item.querySelector('.progress-label');
+  var fill=item.querySelector('.progress-fill');
+
+  if(line.includes('MEDIA_FETCH start')){
+    label.textContent='Preparing media...';
+    fill.style.width='2%';
+    item.dataset.lastUpdate=Date.now();
+    return;
+  }
+  var initMatch=line.match(/MEDIA_FETCH init token=[a-fA-F0-9]+ blocks=(\d+) size=(\d+)/);
+  if(initMatch){
+    var blocks=parseInt(initMatch[1],10)||0;
+    var size=parseInt(initMatch[2],10)||0;
+    label.textContent='Downloading media... 0% ('+blocks+' blocks, '+Math.round(size/1024)+' KB)';
+    fill.style.width='3%';
+    item.dataset.lastUpdate=Date.now();
+    return;
+  }
+  var progMatch=line.match(/MEDIA_FETCH progress token=[a-fA-F0-9]+ (\d+)\/(\d+) (\d+)%/);
+  if(progMatch){
+    var done=parseInt(progMatch[1],10)||0;
+    var total=parseInt(progMatch[2],10)||0;
+    var pct=parseInt(progMatch[3],10)||0;
+    label.textContent='Downloading media... '+pct+'% ('+done+'/'+total+')';
+    fill.style.width=pct+'%';
+    item.dataset.lastUpdate=Date.now();
+    return;
+  }
+  var doneMatch=line.match(/MEDIA_FETCH done token=[a-fA-F0-9]+ bytes=(\d+)/);
+  if(doneMatch){
+    var bytes=parseInt(doneMatch[1],10)||0;
+    label.textContent='Download complete ('+Math.round(bytes/1024)+' KB)';
+    fill.style.width='100%';
+    item.dataset.lastUpdate=Date.now();
+    setTimeout(function(){if(item.parentNode)item.parentNode.removeChild(item)},1500);
+  }
 }
 
 function updateServerFetchDisplay(line){

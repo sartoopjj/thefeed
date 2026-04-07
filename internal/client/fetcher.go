@@ -4,6 +4,7 @@ import (
 	"context"
 	cryptoRand "crypto/rand"
 	"encoding/binary"
+	"encoding/json"
 	"fmt"
 	"math/rand"
 	"sort"
@@ -819,4 +820,55 @@ func (f *Fetcher) SendAdminCommand(ctx context.Context, cmd protocol.AdminCmd, a
 		return "", fmt.Errorf("admin command failed: %w", err)
 	}
 	return string(data), nil
+}
+
+type mediaInitResponse struct {
+	Name   string `json:"name"`
+	Mime   string `json:"mime"`
+	Size   int    `json:"size"`
+	Blocks int    `json:"blocks"`
+}
+
+// FetchMedia downloads media bytes identified by token over DNS.
+func (f *Fetcher) FetchMedia(ctx context.Context, token string) ([]byte, string, string, error) {
+	f.log("MEDIA_FETCH start token=%s", token)
+	initQname, err := protocol.EncodeMediaInitQuery(f.queryKey, token, f.domain, f.queryMode)
+	if err != nil {
+		return nil, "", "", fmt.Errorf("encode media init: %w", err)
+	}
+
+	initRaw, err := f.queryUpload(ctx, initQname)
+	if err != nil {
+		return nil, "", "", fmt.Errorf("media init query: %w", err)
+	}
+
+	var initResp mediaInitResponse
+	if err := json.Unmarshal(initRaw, &initResp); err != nil {
+		return nil, "", "", fmt.Errorf("parse media init: %w", err)
+	}
+	if initResp.Blocks <= 0 {
+		return nil, "", "", fmt.Errorf("invalid media block count: %d", initResp.Blocks)
+	}
+	f.log("MEDIA_FETCH init token=%s blocks=%d size=%d", token, initResp.Blocks, initResp.Size)
+
+	var data []byte
+	for i := 0; i < initResp.Blocks; i++ {
+		qname, err := protocol.EncodeMediaBlockQuery(f.queryKey, token, uint16(i), f.domain, f.queryMode)
+		if err != nil {
+			return nil, "", "", fmt.Errorf("encode media block %d: %w", i, err)
+		}
+		block, err := f.queryUpload(ctx, qname)
+		if err != nil {
+			return nil, "", "", fmt.Errorf("fetch media block %d: %w", i, err)
+		}
+		data = append(data, block...)
+		pct := int(float64(i+1) * 100.0 / float64(initResp.Blocks))
+		f.log("MEDIA_FETCH progress token=%s %d/%d %d%%", token, i+1, initResp.Blocks, pct)
+	}
+
+	if initResp.Size >= 0 && len(data) > initResp.Size {
+		data = data[:initResp.Size]
+	}
+	f.log("MEDIA_FETCH done token=%s bytes=%d", token, len(data))
+	return data, initResp.Name, initResp.Mime, nil
 }

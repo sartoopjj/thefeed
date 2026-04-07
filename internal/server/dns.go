@@ -3,6 +3,7 @@ package server
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"os"
@@ -29,6 +30,9 @@ type DNSServer struct {
 
 	sessionsMu sync.Mutex
 	sessions   map[uint16]*uploadSession
+
+	mediaMu    sync.Mutex
+	mediaCache map[string]*cachedMedia
 }
 
 type uploadSession struct {
@@ -38,6 +42,14 @@ type uploadSession struct {
 	blocks        [][]byte
 	received      []bool
 	expiresAt     time.Time
+}
+
+type cachedMedia struct {
+	fileName  string
+	mimeType  string
+	size      int
+	blocks    [][]byte
+	expiresAt time.Time
 }
 
 // NewDNSServer creates a DNS server for the given domain.
@@ -53,6 +65,7 @@ func NewDNSServer(listenAddr, domain string, feed *Feed, queryKey, responseKey [
 		allowManage:  allowManage,
 		channelsFile: channelsFile,
 		sessions:     make(map[uint16]*uploadSession),
+		mediaCache:   make(map[string]*cachedMedia),
 	}
 	return s
 }
@@ -110,6 +123,12 @@ func (s *DNSServer) handleQuery(w dns.ResponseWriter, r *dns.Msg) {
 		return
 	case protocol.UpstreamDataChannel:
 		s.handleUpstreamDataQuery(w, m, q)
+		return
+	case protocol.MediaInitChannel:
+		s.handleMediaInitQuery(w, m, q)
+		return
+	case protocol.MediaDataChannel:
+		s.handleMediaDataQuery(w, m, q)
 		return
 	}
 
@@ -195,6 +214,101 @@ func (s *DNSServer) cleanupExpiredSessions(now time.Time) {
 			delete(s.sessions, id)
 		}
 	}
+}
+
+func (s *DNSServer) cleanupExpiredMedia(now time.Time) {
+	for token, item := range s.mediaCache {
+		if now.After(item.expiresAt) {
+			delete(s.mediaCache, token)
+		}
+	}
+}
+
+func (s *DNSServer) handleMediaInitQuery(w dns.ResponseWriter, m *dns.Msg, q dns.Question) {
+	if s.reader == nil {
+		m.Rcode = dns.RcodeRefused
+		w.WriteMsg(m)
+		return
+	}
+
+	token, err := protocol.DecodeMediaInitQuery(s.queryKey, q.Name, s.domain)
+	if err != nil {
+		log.Printf("[dns] decode media init: %v", err)
+		m.Rcode = dns.RcodeNameError
+		w.WriteMsg(m)
+		return
+	}
+
+	now := time.Now()
+	s.mediaMu.Lock()
+	s.cleanupExpiredMedia(now)
+	item, ok := s.mediaCache[token]
+	s.mediaMu.Unlock()
+
+	if !ok {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+		defer cancel()
+		data, name, mime, err := s.reader.DownloadMedia(ctx, token)
+		if err != nil {
+			log.Printf("[dns] media download token=%s: %v", token, err)
+			m.Rcode = dns.RcodeServerFailure
+			w.WriteMsg(m)
+			return
+		}
+
+		item = &cachedMedia{
+			fileName:  name,
+			mimeType:  mime,
+			size:      len(data),
+			blocks:    protocol.SplitIntoBlocks(data),
+			expiresAt: now.Add(20 * time.Minute),
+		}
+		s.mediaMu.Lock()
+		s.mediaCache[token] = item
+		s.mediaMu.Unlock()
+	}
+
+	resp, _ := json.Marshal(map[string]any{
+		"name":   item.fileName,
+		"mime":   item.mimeType,
+		"size":   item.size,
+		"blocks": len(item.blocks),
+	})
+	s.writeEncodedResponse(w, m, q.Name, resp)
+}
+
+func (s *DNSServer) handleMediaDataQuery(w dns.ResponseWriter, m *dns.Msg, q dns.Question) {
+	tokenBlock, token, err := protocol.DecodeMediaBlockQuery(s.queryKey, q.Name, s.domain)
+	if err != nil {
+		log.Printf("[dns] decode media block: %v", err)
+		m.Rcode = dns.RcodeNameError
+		w.WriteMsg(m)
+		return
+	}
+
+	now := time.Now()
+	s.mediaMu.Lock()
+	s.cleanupExpiredMedia(now)
+	item, ok := s.mediaCache[token]
+	if ok {
+		item.expiresAt = now.Add(20 * time.Minute)
+	}
+	s.mediaMu.Unlock()
+
+	if !ok || item == nil {
+		m.Rcode = dns.RcodeRefused
+		w.WriteMsg(m)
+		return
+	}
+
+	idx := int(tokenBlock)
+	if idx < 0 || idx >= len(item.blocks) {
+		m.Rcode = dns.RcodeNameError
+		w.WriteMsg(m)
+		return
+	}
+
+	s.writeEncodedResponse(w, m, q.Name, item.blocks[idx])
 }
 
 func (s *DNSServer) handleUpstreamInitQuery(w dns.ResponseWriter, m *dns.Msg, q dns.Question) {

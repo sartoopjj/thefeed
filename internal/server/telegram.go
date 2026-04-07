@@ -1,8 +1,11 @@
 package server
 
 import (
+	"bytes"
 	"context"
 	cryptoRand "crypto/rand"
+	"crypto/sha1"
+	"encoding/hex"
 	"fmt"
 	"log"
 	"os"
@@ -13,6 +16,7 @@ import (
 
 	"github.com/gotd/td/session"
 	"github.com/gotd/td/telegram"
+	"github.com/gotd/td/telegram/downloader"
 	"github.com/gotd/td/telegram/auth"
 	"github.com/gotd/td/tg"
 
@@ -70,6 +74,15 @@ type TelegramReader struct {
 	api   *tg.Client
 
 	refreshCh chan struct{} // signals Run() to re-fetch immediately
+
+	mediaMu    sync.RWMutex
+	mediaIndex map[string]*mediaDescriptor
+}
+
+type mediaDescriptor struct {
+	location tg.InputFileLocationClass
+	fileName string
+	mimeType string
 }
 
 // resolvedPeer holds the resolved Telegram peer along with its chat type.
@@ -101,6 +114,7 @@ func NewTelegramReader(cfg TelegramConfig, channelUsernames []string, feed *Feed
 		cache:     make(map[string]cachedMessages),
 		cacheTTL:  10 * time.Minute,
 		refreshCh: make(chan struct{}, 1),
+		mediaIndex: make(map[string]*mediaDescriptor),
 	}
 }
 
@@ -415,6 +429,12 @@ func (tr *TelegramReader) extractText(msg *tg.Message) string {
 	}
 
 	if mediaPrefix != "" {
+		if token := tr.registerMedia(msg); token != "" {
+			if text != "" {
+				text += "\n"
+			}
+			text += "[MEDIA_TOKEN:" + token + "]"
+		}
 		if text != "" {
 			return mediaPrefix + "\n" + text
 		}
@@ -422,6 +442,109 @@ func (tr *TelegramReader) extractText(msg *tg.Message) string {
 	}
 
 	return text
+}
+
+func (tr *TelegramReader) registerMedia(msg *tg.Message) string {
+	if msg.Media == nil {
+		return ""
+	}
+
+	tokenBase := fmt.Sprintf("%d:%d", msg.PeerID.TypeID(), msg.ID)
+	sum := sha1.Sum([]byte(tokenBase))
+	token := hex.EncodeToString(sum[:8])
+
+	var desc *mediaDescriptor
+	switch media := msg.Media.(type) {
+	case *tg.MessageMediaPhoto:
+		photo, ok := media.Photo.(*tg.Photo)
+		if !ok {
+			return ""
+		}
+		loc := &tg.InputPhotoFileLocation{
+			ID:            photo.ID,
+			AccessHash:    photo.AccessHash,
+			FileReference: photo.FileReference,
+			ThumbSize:     bestPhotoSizeType(photo.Sizes),
+		}
+		desc = &mediaDescriptor{
+			location: loc,
+			fileName: fmt.Sprintf("photo_%d.jpg", photo.ID),
+			mimeType: "image/jpeg",
+		}
+	case *tg.MessageMediaDocument:
+		doc, ok := media.Document.(*tg.Document)
+		if !ok {
+			return ""
+		}
+		desc = &mediaDescriptor{
+			location: doc.AsInputDocumentFileLocation(),
+			fileName: documentFileName(doc),
+			mimeType: doc.MimeType,
+		}
+	default:
+		return ""
+	}
+
+	tr.mediaMu.Lock()
+	tr.mediaIndex[token] = desc
+	tr.mediaMu.Unlock()
+	return token
+}
+
+func bestPhotoSizeType(sizes []tg.PhotoSizeClass) string {
+	bestType := ""
+	bestArea := 0
+	for _, sz := range sizes {
+		switch s := sz.(type) {
+		case *tg.PhotoSize:
+			area := s.W * s.H
+			if area > bestArea {
+				bestArea = area
+				bestType = s.Type
+			}
+		case *tg.PhotoSizeProgressive:
+			area := s.W * s.H
+			if area > bestArea {
+				bestArea = area
+				bestType = s.Type
+			}
+		}
+	}
+	return bestType
+}
+
+func documentFileName(doc *tg.Document) string {
+	for _, attr := range doc.Attributes {
+		if f, ok := attr.(*tg.DocumentAttributeFilename); ok && strings.TrimSpace(f.FileName) != "" {
+			return f.FileName
+		}
+	}
+	return fmt.Sprintf("file_%d", doc.ID)
+}
+
+// DownloadMedia downloads media bytes for a previously indexed media token.
+func (tr *TelegramReader) DownloadMedia(ctx context.Context, token string) ([]byte, string, string, error) {
+	tr.apiMu.RLock()
+	api := tr.api
+	tr.apiMu.RUnlock()
+	if api == nil {
+		return nil, "", "", fmt.Errorf("not authenticated")
+	}
+
+	tr.mediaMu.RLock()
+	desc, ok := tr.mediaIndex[token]
+	tr.mediaMu.RUnlock()
+	if !ok || desc == nil {
+		return nil, "", "", fmt.Errorf("media token not found")
+	}
+
+	var out bytes.Buffer
+	dl := downloader.NewDownloader().WithPartSize(64 * 1024)
+	if _, err := dl.Download(api, desc.location).Stream(ctx, &out); err != nil {
+		return nil, "", "", fmt.Errorf("download media: %w", err)
+	}
+
+	return out.Bytes(), desc.fileName, desc.mimeType, nil
 }
 
 func (tr *TelegramReader) classifyDocument(media *tg.MessageMediaDocument) string {
