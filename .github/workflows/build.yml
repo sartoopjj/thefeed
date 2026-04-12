@@ -49,7 +49,7 @@ jobs:
           go-version: '1.26'
 
       - name: Install UPX
-        if: matrix.goos == 'linux' || matrix.goos == 'windows' || matrix.goos == 'android'
+        if: matrix.goos == 'linux' || matrix.goos == 'windows'
         run: sudo apt-get update && sudo apt-get install -y upx-ucl
 
       - name: Build Server
@@ -82,7 +82,7 @@ jobs:
           go build -trimpath -ldflags="${LDFLAGS}" -o build/thefeed-client-${{ matrix.goos }}-${{ matrix.goarch }}${ext} ./cmd/client
 
       - name: Compress with UPX
-        if: matrix.goos == 'linux' || matrix.goos == 'windows' || matrix.goos == 'android'
+        if: matrix.goos == 'linux' || matrix.goos == 'windows'
         run: |
           for f in build/*; do
             if [ -f "$f" ]; then
@@ -102,10 +102,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-go@v5
-        with:
-          go-version: '1.26'
-
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
@@ -114,20 +110,8 @@ jobs:
 
       - name: Stage Android client binary as JNI library
         run: |
-          # Package binaries as .so in jniLibs — Android installer extracts only the
-          # folder matching the device ABI into nativeLibraryDir (the only exec-safe
-          # location under Android's W^X policy). ABI splits in build.gradle ensure
-          # the arm64 APK only contains arm64-v8a and universal contains all three.
           mkdir -p android/app/src/main/jniLibs/arm64-v8a
           test -f artifacts/thefeed-client-android-arm64
-
-      - name: Build raw Android client binary (non-UPX)
-        run: |
-          VERSION=${GITHUB_REF_NAME:-dev}
-          COMMIT=$(git rev-parse --short HEAD)
-          DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-          LDFLAGS="-s -w -X github.com/sartoopjj/thefeed/internal/version.Version=${VERSION} -X github.com/sartoopjj/thefeed/internal/version.Commit=${COMMIT} -X github.com/sartoopjj/thefeed/internal/version.Date=${DATE}"
-          GOOS=android GOARCH=arm64 CGO_ENABLED=0 go build -trimpath -ldflags="${LDFLAGS}" -o artifacts/thefeed-client-android-arm64-raw ./cmd/client
 
       - name: Decode signing keystore
         env:
@@ -149,7 +133,7 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Build APK variants (UPX and raw)
+      - name: Build Android APK
         working-directory: android
         env:
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
@@ -161,21 +145,14 @@ jobs:
 
           cp ../artifacts/thefeed-client-android-arm64 app/src/main/jniLibs/arm64-v8a/libthefeed.so
           ./gradlew --no-daemon clean $TASK
-          APK_UPX=$(find app/build/outputs/apk/$BT -name "*.apk" | head -1)
-          cp "$APK_UPX" ../artifacts/thefeed-android-arm64-upx.apk
-
-          cp ../artifacts/thefeed-client-android-arm64-raw app/src/main/jniLibs/arm64-v8a/libthefeed.so
-          ./gradlew --no-daemon clean $TASK
-          APK_RAW=$(find app/build/outputs/apk/$BT -name "*.apk" | head -1)
-          cp "$APK_RAW" ../artifacts/thefeed-android-arm64.apk
+          APK=$(find app/build/outputs/apk/$BT -name "*.apk" | head -1)
+          cp "$APK" ../artifacts/thefeed-android-arm64.apk
 
       - name: Upload Android APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: thefeed-android-apk
-          path: |
-            artifacts/thefeed-android-arm64.apk
-            artifacts/thefeed-android-arm64-upx.apk
+          path: artifacts/thefeed-android-arm64.apk
 
   release:
     needs: [build, android-apk]

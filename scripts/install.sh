@@ -460,7 +460,7 @@ show_usage() {
     echo -e "│  All data in: ${blue}${INSTALL_DIR}/${plain}                             │"
     echo -e "│  ${blue}Config:${plain}   ${DATA_DIR}/thefeed.env                │"
     echo -e "│  ${blue}Channels:${plain} ${DATA_DIR}/channels.txt               │"
-    echo -e "│  ${blue}X acct:${plain}  ${DATA_DIR}/x_accounts.txt             │"
+    echo -e "│  ${blue}X acct:${plain}  ${DATA_DIR}/x_accounts.txt              │"
     echo -e "│  ${blue}Session:${plain}  ${DATA_DIR}/session.json               │"
     echo -e "│  ${blue}Binary:${plain}   ${INSTALL_DIR}/thefeed-server                  │"
     echo -e "│                                                         │"
