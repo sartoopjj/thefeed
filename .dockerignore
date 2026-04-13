@@ -1,0 +1,50 @@
+# Build outputs
+build/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Git
+.git/
+.gitignore
+
+# Data (user-specific, mounted as volume)
+data/
+thefeeddata/
+.thefeed/
+
+# Environment secrets
+.env
+
+# Session data
+session.json
+
+# Agent config
+.agent/
+
+# Temporary
+tmp/
+todo
+todo.md
+
+# Documentation (not needed in image)
+README.md
+README-FA.md
+LICENSE
+docs/
+
+# Android (not relevant for server)
+android/
+
+# Tests (not needed in production image)
+test/
+
+# Scripts (not needed in image)
+scripts/

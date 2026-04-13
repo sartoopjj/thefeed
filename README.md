@@ -80,6 +80,125 @@ sudo bash -c "$(curl -Ls https://raw.githubusercontent.com/sartoopjj/thefeed/mai
 Re-login: `curl -Ls https://raw.githubusercontent.com/sartoopjj/thefeed/main/scripts/install.sh | sudo bash -s -- --login`
 Uninstall: `curl -Ls https://raw.githubusercontent.com/sartoopjj/thefeed/main/scripts/install.sh | sudo bash -s -- --uninstall`
 
+## Docker Deployment (Server)
+
+Run the server with Docker — no Go toolchain needed.
+
+### Quick Start (public channels, no Telegram login)
+
+```bash
+# 1. Configure environment
+cp .env.example .env
+nano .env   # set THEFEED_DOMAIN and THEFEED_KEY
+
+# 2. Prepare data directory with your channels
+mkdir -p data
+cp configs/channels.txt data/
+cp configs/x_accounts.txt data/   # optional
+
+# 3. Build and run
+docker compose up -d
+
+# 4. Redirect external DNS traffic to the container
+#    Replace eth0 with your network interface (check with: ip a)
+sudo iptables -t nat -I PREROUTING -i eth0 -p udp --dport 53 -j REDIRECT --to-ports 5300
+sudo iptables -I INPUT -p udp --dport 5300 -j ACCEPT
+sudo ip6tables -t nat -I PREROUTING -i eth0 -p udp --dport 53 -j REDIRECT --to-ports 5300
+sudo ip6tables -I INPUT -p udp --dport 5300 -j ACCEPT
+
+# Make iptables rules persistent across reboots
+sudo apt install -y iptables-persistent
+sudo netfilter-persistent save
+
+# 5. View logs
+docker compose logs -f
+```
+
+> **Note:** The container listens on port 5300 (not 53) to avoid conflict with `systemd-resolved`.
+> The `iptables PREROUTING` rule redirects only **external** DNS traffic (port 53) to the container,
+> while local DNS resolution on the server continues to work normally.
+
+### With Telegram (one-time interactive login)
+
+```bash
+# 1. Configure environment (uncomment Telegram vars in .env)
+cp .env.example .env
+nano .env
+
+# 2. One-time login (interactive — enter auth code when prompted)
+docker compose run -it --rm server \
+  --login-only --data-dir /data \
+  --domain YOUR_DOMAIN --key YOUR_KEY \
+  --api-id YOUR_API_ID --api-hash YOUR_HASH \
+  --phone YOUR_PHONE
+
+# 3. Edit docker-compose.yml: remove --no-telegram and add Telegram flags
+# 4. Start the server
+docker compose up -d
+# 5. Set up iptables redirect (same as Quick Start step 4)
+```
+
+### Docker Details
+
+| Item | Value |
+|------|-------|
+| Base image | `alpine:3.21` (~23 MB total) |
+| Build | Multi-stage (`golang:1.26-alpine` → `alpine`) |
+| User | `thefeed` (UID 1000, non-root) |
+| Container port | `:5300/udp` (host `:5300/udp` + iptables redirect from `:53`) |
+| Data | `./data` volume (channels, session, cache) |
+| Config | `.env` file (gitignored) |
+
+```bash
+# Rebuild after code changes
+docker compose build
+
+# Stop
+docker compose down
+```
+
+### Port 53 & Service Safety
+
+The container listens on port **5300** (not 53) to avoid conflicts with `systemd-resolved` or other DNS services on the host. External DNS traffic is redirected via `iptables PREROUTING` which only affects packets arriving on the external network interface — local DNS resolution is **not** affected.
+
+**Before setup — check what uses port 53:**
+
+```bash
+# Check if port 53 is in use
+ss -ulnp | grep ':53 '
+
+# Expected: systemd-resolved on 127.0.0.53 only (safe)
+# UNCONN  127.0.0.53%lo:53  users:(("systemd-resolve",...))
+```
+
+**After setup — verify nothing is broken:**
+
+```bash
+# 1. Local DNS still works (server can resolve domains)
+dig +short google.com @127.0.0.53
+
+# 2. thefeed container is running
+docker ps --filter name=thefeed
+
+# 3. thefeed is fetching channels
+docker logs thefeed-server --tail 5
+
+# 4. iptables rule is active
+iptables -t nat -L PREROUTING -n | grep 5300
+
+# 5. Other containers are healthy
+docker ps --format 'table {{.Names}}\t{{.Status}}' | head -10
+```
+
+**If something goes wrong — remove the redirect instantly:**
+
+```bash
+# Remove the iptables rule (restores original behavior)
+sudo iptables -t nat -D PREROUTING -i eth0 -p udp --dport 53 -j REDIRECT --to-ports 5300
+sudo iptables -D INPUT -p udp --dport 5300 -j ACCEPT
+sudo netfilter-persistent save
+```
+
 ## Manual Setup
 
 ### Prerequisites

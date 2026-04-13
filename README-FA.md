@@ -107,6 +107,125 @@ sudo bash install.sh --login
 sudo bash install.sh --uninstall
 ```
 
+## 🐳 نصب با Docker (سرور)
+
+اجرای سرور با Docker — بدون نیاز به نصب Go.
+
+### شروع سریع (کانال‌های عمومی، بدون لاگین تلگرام)
+
+```bash
+# ۱. تنظیم محیط
+cp .env.example .env
+nano .env   # مقادیر THEFEED_DOMAIN و THEFEED_KEY را وارد کنید
+
+# ۲. آماده‌سازی دایرکتوری داده
+mkdir -p data
+cp configs/channels.txt data/
+cp configs/x_accounts.txt data/   # اختیاری
+
+# ۳. ساخت و اجرا
+docker compose up -d
+
+# ۴. هدایت ترافیک DNS خارجی به کانتینر
+#    نام اینترفیس شبکه خود را با ip a پیدا کنید و eth0 را جایگزین کنید
+sudo iptables -t nat -I PREROUTING -i eth0 -p udp --dport 53 -j REDIRECT --to-ports 5300
+sudo iptables -I INPUT -p udp --dport 5300 -j ACCEPT
+sudo ip6tables -t nat -I PREROUTING -i eth0 -p udp --dport 53 -j REDIRECT --to-ports 5300
+sudo ip6tables -I INPUT -p udp --dport 5300 -j ACCEPT
+
+# ماندگار کردن قوانین iptables بعد از ریبوت
+sudo apt install -y iptables-persistent
+sudo netfilter-persistent save
+
+# ۵. مشاهده لاگ‌ها
+docker compose logs -f
+```
+
+> **توجه:** کانتینر روی پورت 5300 listen می‌کند (نه 53) تا با `systemd-resolved` تداخل نداشته باشد.
+> قانون `iptables PREROUTING` فقط ترافیک DNS **خارجی** (پورت 53) را به کانتینر هدایت می‌کند
+> و DNS محلی سرور بدون مشکل کار می‌کند.
+
+### با تلگرام (لاگین یکباره)
+
+```bash
+# ۱. تنظیم محیط (متغیرهای تلگرام را در .env از حالت کامنت خارج کنید)
+cp .env.example .env
+nano .env
+
+# ۲. لاگین یکباره (تعاملی — کد تأیید را وارد کنید)
+docker compose run -it --rm server \
+  --login-only --data-dir /data \
+  --domain YOUR_DOMAIN --key YOUR_KEY \
+  --api-id YOUR_API_ID --api-hash YOUR_HASH \
+  --phone YOUR_PHONE
+
+# ۳. در docker-compose.yml فلگ --no-telegram را حذف و فلگ‌های تلگرام را اضافه کنید
+# ۴. اجرای سرور
+docker compose up -d
+# ۵. تنظیم iptables redirect (مشابه قدم ۴ در شروع سریع)
+```
+
+### جزئیات Docker
+
+| مورد | مقدار |
+|------|-------|
+| ایمیج پایه | `alpine:3.21` (حدود ۲۳ مگابایت) |
+| ساخت | دو مرحله‌ای (`golang:1.26-alpine` → `alpine`) |
+| کاربر | `thefeed` (UID 1000، غیر root) |
+| پورت کانتینر | `:5300/udp` (هاست `:5300/udp` + iptables redirect از `:53`) |
+| داده | ولوم `./data` (کانال‌ها، session، کش) |
+| تنظیمات | فایل `.env` (در git ذخیره نمی‌شود) |
+
+```bash
+# ساخت مجدد بعد از تغییرات کد
+docker compose build
+
+# توقف
+docker compose down
+```
+
+### ایمنی پورت ۵۳ و سرویس‌ها
+
+کانتینر روی پورت **5300** (نه 53) listen می‌کند تا با `systemd-resolved` یا سرویس‌های DNS دیگر سرور تداخل نداشته باشد. ترافیک DNS خارجی توسط `iptables PREROUTING` هدایت می‌شود که **فقط** بسته‌های ورودی از اینترفیس شبکه خارجی را تحت تأثیر قرار می‌دهد — DNS محلی سرور **دست‌نخورده** باقی می‌ماند.
+
+**قبل از راه‌اندازی — بررسی پورت ۵۳:**
+
+```bash
+# چه سرویسی از پورت 53 استفاده می‌کند؟
+ss -ulnp | grep ':53 '
+
+# نتیجه مورد انتظار: فقط systemd-resolved روی 127.0.0.53 (بی‌خطر)
+# UNCONN  127.0.0.53%lo:53  users:(("systemd-resolve",...))
+```
+
+**بعد از راه‌اندازی — بررسی سلامت سرویس‌ها:**
+
+```bash
+# ۱. DNS محلی سرور هنوز کار می‌کند
+dig +short google.com @127.0.0.53
+
+# ۲. کانتینر thefeed در حال اجراست
+docker ps --filter name=thefeed
+
+# ۳. کانال‌ها در حال دریافت هستند
+docker logs thefeed-server --tail 5
+
+# ۴. قانون iptables فعال است
+iptables -t nat -L PREROUTING -n | grep 5300
+
+# ۵. بقیه کانتینرها سالم هستند
+docker ps --format 'table {{.Names}}\t{{.Status}}' | head -10
+```
+
+**اگر مشکلی پیش آمد — حذف فوری redirect:**
+
+```bash
+# حذف قانون iptables (بازگشت به حالت اولیه)
+sudo iptables -t nat -D PREROUTING -i eth0 -p udp --dport 53 -j REDIRECT --to-ports 5300
+sudo iptables -D INPUT -p udp --dport 5300 -j ACCEPT
+sudo netfilter-persistent save
+```
+
 ## 🖥️ نصب کلاینت
 
 ### لینوکس / macOS / ویندوز
