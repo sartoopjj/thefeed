@@ -2,12 +2,3 @@
 # Lines starting with # are comments
 PahlaviReza
 RezaVaisi
-IranIntlbrk
-indypersian
-IDFFarsi
-IranIntl
-pouriazeraati
-CENTCOMFarsi
-IsraelPersian
-Vahid
-euronews_pe
