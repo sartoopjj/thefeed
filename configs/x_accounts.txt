@@ -1,4 +1,4 @@
 # X usernames (one per line, without @)
 # Lines starting with # are comments
-PahlaviReza
-RezaVaisi
+Vahid
+IranIntl
