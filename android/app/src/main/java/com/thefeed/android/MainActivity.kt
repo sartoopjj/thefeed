@@ -20,6 +20,7 @@ import android.view.View
 import android.widget.TextView
 import android.webkit.JsResult
 import android.webkit.WebChromeClient
+import android.webkit.ValueCallback
 import android.app.AlertDialog
 import androidx.activity.ComponentActivity
 import androidx.activity.OnBackPressedCallback
@@ -35,6 +36,14 @@ class MainActivity : ComponentActivity() {
     private lateinit var webView: WebView
     private lateinit var txtStatus: TextView
     private val handler = Handler(Looper.getMainLooper())
+    private var fileChooserCallback: ValueCallback<Array<Uri>>? = null
+
+    private val fileChooserLauncher = registerForActivityResult(
+        ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        fileChooserCallback?.onReceiveValue(if (uri != null) arrayOf(uri) else emptyArray())
+        fileChooserCallback = null
+    }
 
     private val notificationPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -158,6 +167,18 @@ class MainActivity : ComponentActivity() {
 
         // Required for confirm() / alert() / prompt() to work in WebView
         webView.webChromeClient = object : WebChromeClient() {
+            override fun onShowFileChooser(
+                webView: WebView?,
+                filePathCallback: ValueCallback<Array<Uri>>?,
+                fileChooserParams: FileChooserParams?
+            ): Boolean {
+                fileChooserCallback?.onReceiveValue(emptyArray())
+                fileChooserCallback = filePathCallback
+                val accept = fileChooserParams?.acceptTypes?.firstOrNull() ?: "image/*"
+                fileChooserLauncher.launch(accept)
+                return true
+            }
+
             override fun onJsConfirm(
                 view: WebView?, url: String?, message: String?, result: JsResult?
             ): Boolean {
