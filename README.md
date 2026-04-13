@@ -310,6 +310,8 @@ chmod +x thefeed-client
 
 Also available: `thefeed-android-arm64-upx.apk` (UPX-compressed embedded client).
 
+The Android app automatically requests battery optimization exemption on first launch so the background service is not killed by the OS.
+
 
 You can build or download a native Android app that:
 - runs thefeed client binary in a foreground/background service
@@ -354,8 +356,13 @@ The browser-based UI has:
 - **New message badges**: visual indicators for channels with new messages
 - **Next-fetch timer**: countdown to next automatic refresh
 - **Media detection**: `[IMAGE]`, `[VIDEO]`, `[DOCUMENT]` tag highlighting
+- **Message search**: search within the current channel's messages with match highlighting and prev/next navigation
+- **Export messages**: export the last N messages of a channel to clipboard
 - **Log panel** (bottom): live DNS query log
 - **Settings modal**: configure domain, passphrase, resolvers, query mode, rate limit, concurrent requests (scatter), timeout, debug mode
+- **Working resolvers**: view the list of currently active/healthy resolvers from settings
+- **Background image**: set a custom background image URL for the messages panel (stored locally)
+- **DNS query timeout**: configurable per-profile DNS query timeout (default 15s) in the profile editor
 - **Per-profile cache**: 1-hour browser cache so data is visible instantly on reopen
 - **Resolver Scanner**: scan IP ranges and CIDRs to discover working DNS resolvers
 
@@ -365,11 +372,12 @@ The web UI includes a built-in resolver scanner (🔍 icon in sidebar) that prob
 
 - **Flexible targets**: enter individual IPs, CIDRs (e.g. `5.1.0.0/16`), or domain names — one per line
 - **Iran CIDRs preset**: one-click button to load a curated list of Iranian ISP ranges
+- **Clear targets**: button to quickly clear the scanner CIDR/IP list
 - **Profile-aware**: select which profile's domain and passphrase to use for probing
 - **Configurable**: set concurrency (default 50), timeout (default 15s), and max IPs to scan
 - **Expand /24**: when a working resolver is found, automatically scan all nearby IPs in the same /24 subnet
 - **Pause / Resume / Stop**: full control over long-running scans (pause actually stops dispatching new probes)
-- **Response time**: results include latency so you can pick the fastest resolvers
+- **Response time**: results are sorted by latency so the fastest resolvers appear first
 - **Selectable results**: checkboxes to select which resolvers to apply or copy
 - **Apply results**: append to or overwrite your profile's resolver list directly from the scanner
 - **Copy**: per-IP copy buttons, copy selected, or copy all discovered resolver IPs

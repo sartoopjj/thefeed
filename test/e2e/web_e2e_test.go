@@ -537,3 +537,70 @@ func TestE2E_MessagesHaveTimestamps(t *testing.T) {
 	// This verifies the API structure supports the timestamp-based separator.
 	t.Logf("messages response contains %d messages", len(result.Messages))
 }
+
+// TestE2E_ActiveResolversAPI verifies the /api/resolvers/active endpoint.
+func TestE2E_ActiveResolversAPI(t *testing.T) {
+	base, _ := startWebServer(t)
+
+	// Before config: should return empty resolvers
+	resp, err := http.Get(base + "/api/resolvers/active")
+	if err != nil {
+		t.Fatalf("GET /api/resolvers/active: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+	var result map[string]any
+	json.NewDecoder(resp.Body).Decode(&result)
+	resolvers, ok := result["resolvers"].([]any)
+	if !ok {
+		t.Fatal("expected 'resolvers' key in response")
+	}
+	t.Logf("active resolvers: %d", len(resolvers))
+
+	// Method not allowed
+	resp2, err := http.Post(base+"/api/resolvers/active", "application/json", nil)
+	if err != nil {
+		t.Fatalf("POST /api/resolvers/active: %v", err)
+	}
+	defer resp2.Body.Close()
+	if resp2.StatusCode != 405 {
+		t.Errorf("expected 405 for POST, got %d", resp2.StatusCode)
+	}
+}
+
+// TestE2E_WebUI_NewFeatures verifies the index.html includes new UI elements.
+func TestE2E_WebUI_NewFeatures(t *testing.T) {
+	base, _ := startWebServer(t)
+
+	resp, err := http.Get(base + "/")
+	if err != nil {
+		t.Fatalf("GET /: %v", err)
+	}
+	defer resp.Body.Close()
+	bodyBytes, _ := io.ReadAll(resp.Body)
+	html := string(bodyBytes)
+
+	checks := map[string]string{
+		"message search bar":   "msgSearchBar",
+		"search input":         "msgSearchInput",
+		"export modal":         "exportModal",
+		"resolvers modal":      "resolversModal",
+		"background image":     "bgImageInput",
+		"dns timeout field":    "peTimeout",
+		"scanner clear button": "scanner_clear_targets",
+		"search function":      "doMsgSearch",
+		"export function":      "doExport",
+		"bg image function":    "applyBgImage",
+		"resolvers function":   "openResolversModal",
+		"sidebar toolbar":      "sidebar-toolbar",
+		"resolvers badge":      "resolversBadge",
+		"normalize function":   "normalizeArabicPersian",
+	}
+	for name, needle := range checks {
+		if !strings.Contains(html, needle) {
+			t.Errorf("%s: expected HTML to contain %q", name, needle)
+		}
+	}
+}

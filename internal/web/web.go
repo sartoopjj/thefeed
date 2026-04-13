@@ -187,6 +187,9 @@ func (s *Server) Run() error {
 	mux.HandleFunc("/api/version-check", s.handleVersionCheck)
 	mux.HandleFunc("/api/cache/clear", s.handleClearCache)
 	mux.HandleFunc("/api/resolvers/apply-saved", s.handleApplySavedResolvers)
+	mux.HandleFunc("/api/resolvers/active", s.handleActiveResolvers)
+	mux.HandleFunc("/api/resolvers/remove", s.handleRemoveResolver)
+	mux.HandleFunc("/api/resolvers/reset-stats", s.handleResetResolverStats)
 	mux.HandleFunc("/api/scanner/start", s.handleScannerStart)
 	mux.HandleFunc("/api/scanner/stop", s.handleScannerStop)
 	mux.HandleFunc("/api/scanner/pause", s.handleScannerPause)
@@ -626,6 +629,11 @@ func (s *Server) initFetcher() error {
 
 	// Cancel goroutines from the previous fetcher configuration.
 	// This also cancels any in-progress manual rescan (via the context chain).
+	// Preserve resolver stats across fetcher re-creation (e.g. profile switch).
+	var prevStats map[string][3]int64
+	if s.fetcher != nil {
+		prevStats = s.fetcher.ExportStats()
+	}
 	if s.fetcherCancel != nil {
 		s.fetcherCancel()
 	}
@@ -644,6 +652,11 @@ func (s *Server) initFetcher() error {
 	fetcher, err := client.NewFetcher(cfg.Domain, cfg.Key, cfg.Resolvers)
 	if err != nil {
 		return fmt.Errorf("create fetcher: %w", err)
+	}
+
+	// Restore resolver stats from the previous fetcher.
+	if prevStats != nil {
+		fetcher.ImportStats(prevStats)
 	}
 
 	if cfg.QueryMode == "double" {
@@ -1168,6 +1181,64 @@ func (s *Server) handleApplySavedResolvers(w http.ResponseWriter, r *http.Reques
 	fetcher.SetActiveResolvers(ls.Resolvers)
 	go s.refreshMetadataOnly()
 	writeJSON(w, map[string]any{"ok": true, "count": len(ls.Resolvers)})
+}
+
+func (s *Server) handleActiveResolvers(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", 405)
+		return
+	}
+	s.mu.RLock()
+	fetcher := s.fetcher
+	s.mu.RUnlock()
+	if fetcher == nil {
+		writeJSON(w, map[string]any{"resolvers": []string{}, "scoreboard": []client.ResolverInfo{}})
+		return
+	}
+	writeJSON(w, map[string]any{
+		"resolvers":  fetcher.Resolvers(),
+		"all":        fetcher.AllResolvers(),
+		"scoreboard": fetcher.ResolverScoreboard(),
+	})
+}
+
+func (s *Server) handleRemoveResolver(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", 405)
+		return
+	}
+	var req struct {
+		Addr string `json:"addr"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Addr == "" {
+		http.Error(w, "addr required", 400)
+		return
+	}
+	s.mu.RLock()
+	fetcher := s.fetcher
+	s.mu.RUnlock()
+	if fetcher == nil {
+		http.Error(w, "no active fetcher", 400)
+		return
+	}
+	fetcher.RemoveActiveResolver(req.Addr)
+	writeJSON(w, map[string]any{"ok": true})
+}
+
+func (s *Server) handleResetResolverStats(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", 405)
+		return
+	}
+	s.mu.RLock()
+	fetcher := s.fetcher
+	s.mu.RUnlock()
+	if fetcher == nil {
+		http.Error(w, "no active fetcher", 400)
+		return
+	}
+	fetcher.ResetStats()
+	writeJSON(w, map[string]any{"ok": true})
 }
 
 func (s *Server) saveConfig(cfg *Config) error {

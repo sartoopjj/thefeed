@@ -41,7 +41,7 @@ func (s *resolverStat) score() float64 {
 	totalMs := atomic.LoadInt64(&s.totalMs)
 	total := success + failure
 	if total == 0 {
-		return 1.0 // no data yet → neutral weight
+		return 0.2 // no data yet → low initial weight
 	}
 	successRate := float64(success) / float64(total)
 	var avgMs float64
@@ -50,8 +50,12 @@ func (s *resolverStat) score() float64 {
 	} else {
 		avgMs = 30000 // 30 s effective penalty for 0% success resolvers
 	}
-	// Higher success rate + lower latency → higher score.
-	return successRate / (avgMs/1000.0 + 0.1)
+	// Success rate dominates (squared); latency is a mild tiebreaker.
+	score := successRate * successRate / (avgMs/5000.0 + 1.0)
+	if score < 0.001 {
+		score = 0.001
+	}
+	return score
 }
 
 // Fetcher fetches feed blocks over DNS.
@@ -174,6 +178,55 @@ func (f *Fetcher) SetResolvers(resolvers []string) {
 	copy(f.activeResolvers, resolvers)
 }
 
+// RemoveActiveResolver removes a resolver from the active pool.
+func (f *Fetcher) RemoveActiveResolver(addr string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	filtered := make([]string, 0, len(f.activeResolvers))
+	for _, r := range f.activeResolvers {
+		if r != addr {
+			filtered = append(filtered, r)
+		}
+	}
+	f.activeResolvers = filtered
+	f.log("removed resolver %s, %d active remaining", addr, len(filtered))
+}
+
+// ResetStats clears all resolver scoring data.
+func (f *Fetcher) ResetStats() {
+	f.stats.Range(func(key, _ any) bool {
+		f.stats.Delete(key)
+		return true
+	})
+	f.log("resolver scoreboard reset")
+}
+
+// ExportStats returns a snapshot of all resolver stats.
+func (f *Fetcher) ExportStats() map[string][3]int64 {
+	out := make(map[string][3]int64)
+	f.stats.Range(func(key, val any) bool {
+		s := val.(*resolverStat)
+		out[key.(string)] = [3]int64{
+			atomic.LoadInt64(&s.success),
+			atomic.LoadInt64(&s.failure),
+			atomic.LoadInt64(&s.totalMs),
+		}
+		return true
+	})
+	return out
+}
+
+// ImportStats loads previously exported stats into this fetcher.
+func (f *Fetcher) ImportStats(m map[string][3]int64) {
+	for key, vals := range m {
+		f.stats.Store(key, &resolverStat{
+			success: vals[0],
+			failure: vals[1],
+			totalMs: vals[2],
+		})
+	}
+}
+
 // AllResolvers returns all user-configured resolvers.
 func (f *Fetcher) AllResolvers() []string {
 	f.mu.RLock()
@@ -190,6 +243,42 @@ func (f *Fetcher) Resolvers() []string {
 	result := make([]string, len(f.activeResolvers))
 	copy(result, f.activeResolvers)
 	return result
+}
+
+// ResolverInfo holds public stats for a single resolver.
+type ResolverInfo struct {
+	Addr    string  `json:"addr"`
+	Score   float64 `json:"score"`
+	Success int64   `json:"success"`
+	Failure int64   `json:"failure"`
+	AvgMs   float64 `json:"avgMs"`
+}
+
+// ResolverScoreboard returns stats for all active resolvers sorted by score descending.
+func (f *Fetcher) ResolverScoreboard() []ResolverInfo {
+	resolvers := f.Resolvers()
+	infos := make([]ResolverInfo, 0, len(resolvers))
+	for _, r := range resolvers {
+		key := r
+		if !strings.Contains(key, ":") {
+			key += ":53"
+		}
+		info := ResolverInfo{Addr: r}
+		if v, ok := f.stats.Load(key); ok {
+			s := v.(*resolverStat)
+			info.Success = atomic.LoadInt64(&s.success)
+			info.Failure = atomic.LoadInt64(&s.failure)
+			if info.Success > 0 {
+				info.AvgMs = float64(atomic.LoadInt64(&s.totalMs)) / float64(info.Success)
+			}
+			info.Score = s.score()
+		} else {
+			info.Score = 0.2
+		}
+		infos = append(infos, info)
+	}
+	sort.Slice(infos, func(i, j int) bool { return infos[i].Score > infos[j].Score })
+	return infos
 }
 
 // SetScatter sets the number of resolvers queried simultaneously per DNS block request.

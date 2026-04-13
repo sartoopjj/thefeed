@@ -215,6 +215,42 @@
       color: var(--accent)
     }
 
+    /* Sidebar toolbar: compact text buttons */
+    .sidebar-toolbar {
+      display: flex;
+      gap: 4px;
+      padding: 4px 12px 6px;
+      flex-wrap: wrap
+    }
+    .sidebar-toolbar .stb {
+      flex: 1 1 auto;
+      padding: 5px 8px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--surface);
+      color: var(--text-dim);
+      font-size: 11px;
+      font-weight: 500;
+      cursor: pointer;
+      text-align: center;
+      white-space: nowrap;
+      transition: background .15s, color .15s
+    }
+    .sidebar-toolbar .stb:hover {
+      background: var(--hover);
+      color: var(--text)
+    }
+    .sidebar-toolbar .stb.scanning {
+      color: var(--accent);
+      border-color: var(--accent)
+    }
+    .sidebar-toolbar .stb .stb-badge {
+      font-size: 10px;
+      font-weight: 700;
+      margin-left: 3px;
+      vertical-align: middle
+    }
+
     /* ===== CHANNEL LIST ===== */
     .channel-list {
       flex: 1;
@@ -420,6 +456,37 @@
       cursor: help;
       line-height: 1
     }
+
+    /* ===== SEARCH BAR ===== */
+    .msg-search-bar {
+      display: none;
+      padding: 6px 14px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      gap: 8px;
+      align-items: center
+    }
+    .msg-search-bar.active { display: flex }
+    .msg-search-bar input {
+      flex: 1;
+      padding: 6px 10px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--bg);
+      color: var(--text);
+      font-size: 13px;
+      outline: none
+    }
+    .msg-search-bar input:focus { border-color: var(--accent) }
+    .msg-search-bar .search-nav { display: flex; gap: 4px; align-items: center; font-size: 12px; color: var(--text-dim) }
+    .msg-search-bar button { background: none; border: none; color: var(--text-dim); font-size: 16px; cursor: pointer; padding: 4px }
+    .msg-search-bar button:hover { color: var(--text) }
+    .msg .search-highlight { background: rgba(255,200,0,.35); border-radius: 2px; padding: 0 1px }
+    .msg .search-highlight.current { background: rgba(255,200,0,.7) }
+
+    /* ===== EXPORT MODAL ===== */
+    .export-row { display: flex; gap: 8px; align-items: center; margin-bottom: 12px }
+    .export-row input[type=number] { width: 80px; padding: 6px 8px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); color: var(--text); font-size: 13px }
 
     /* ===== MESSAGES ===== */
     .messages {
@@ -1376,8 +1443,11 @@
             <span class="profile-btn-arrow"><span class="plus">+</span>&#9660;</span>
           </button>
           <button class="icon-btn" onclick="openSettings()" title="Settings" data-i18n-title="settings">&#9881;</button>
-          <button class="icon-btn" id="scannerIconBtn" onclick="openScanner()" title="Scanner" data-i18n-title="scanner_title" style="font-size:18px">&#128269;</button>
-          <button class="icon-btn" onclick="jumpToLog()" title="LOG">&#128220;</button>
+        </div>
+        <div class="sidebar-toolbar">
+          <button class="stb" id="scannerIconBtn" onclick="openScanner()" data-i18n="sidebar_scanner">Scanner</button>
+          <button class="stb" id="resolversSidebarBtn" onclick="openResolversModal()"><span data-i18n="sidebar_resolvers">Resolvers</span> <span class="stb-badge" id="resolversBadge" style="color:var(--error)">0</span></button>
+          <button class="stb" onclick="jumpToLog()" data-i18n="sidebar_log">Log</button>
         </div>
         <input class="sidebar-search" id="channelSearch" type="text" data-i18n-ph="search" placeholder="Search..."
           oninput="filterChannels()">
@@ -1404,8 +1474,21 @@
           <span class="next-fetch-label" id="nextFetchTimer"></span><span class="next-fetch-info" id="nextFetchInfoBtn"
             style="display:none" data-i18n-title="next_fetch_info" title="" onclick="showToast(t('next_fetch_info'))"
             tabindex="0">ⓘ</span>
+          <button class="icon-btn" onclick="toggleMsgSearch()" title="Search" data-i18n-title="search_messages"
+            style="width:auto;height:30px;font-size:12px;padding:0 10px;border-radius:8px;border:1px solid var(--border);background:var(--surface)" data-i18n="search_messages">Search</button>
+          <button class="icon-btn" onclick="openExportModal()" title="Export" data-i18n-title="export_messages"
+            style="width:auto;height:30px;font-size:12px;padding:0 10px;border-radius:8px;border:1px solid var(--border);background:var(--surface)" data-i18n="export_messages">Export</button>
           <button class="icon-btn" id="refreshBtn" onclick="doRefreshUI()" title="Refresh"
             style="width:40px;height:40px;font-size:20px">&#8635;</button>
+        </div>
+      </div>
+      <div class="msg-search-bar" id="msgSearchBar">
+        <input type="text" id="msgSearchInput" data-i18n-ph="search_messages" placeholder="Search messages..." oninput="doMsgSearch()">
+        <div class="search-nav">
+          <span id="msgSearchCount"></span>
+          <button onclick="msgSearchPrev()" title="Previous">&#9650;</button>
+          <button onclick="msgSearchNext()" title="Next">&#9660;</button>
+          <button onclick="closeMsgSearch()" title="Close">&times;</button>
         </div>
       </div>
       <div class="messages" id="messages">
@@ -1496,6 +1579,13 @@
           style="font-size:11px;padding:4px 12px;color:var(--danger,#e74c3c)" data-i18n="clear_cache">Clear
           Cache</button>
       </div>
+      <div class="form-group" style="margin-top:12px">
+        <label data-i18n="bg_image">Background Image</label>
+        <div style="display:flex;gap:6px;align-items:center">
+          <input type="file" id="bgImageInput" accept="image/*" style="flex:1;font-size:12px;color:var(--text)" onchange="applyBgImage()">
+          <button class="btn btn-flat" onclick="clearBgImage()" style="font-size:11px;padding:4px 10px;color:var(--error)" data-i18n="clear_bg">Clear</button>
+        </div>
+      </div>
       <div class="modal-actions">
         <button class="btn btn-flat" onclick="closeSettings()" data-i18n="cancel">Cancel</button>
         <button class="btn btn-primary" onclick="saveSettings()" data-i18n="save">Save</button>
@@ -1551,6 +1641,8 @@
           id="peRateLimit" value="6" min="0" step="0.1"></div>
         <div class="form-group"><label data-i18n="scatter">Parallel resolvers per block</label><input type="number" id="peScatter"
           value="4" min="1" max="5" title="How many resolvers are queried at the same time for one block"></div>
+        <div class="form-group"><label data-i18n="dns_timeout">DNS Query Timeout (seconds)</label><input type="number" id="peTimeout"
+          value="15" min="1" max="60" step="1"></div>
       <!-- Channel Management (editing only) -->
       <div id="peChannelSection" style="display:none">
         <hr class="section-divider">
@@ -1575,6 +1667,38 @@
     </div>
   </div>
 
+  <!-- ===== EXPORT MODAL ===== -->
+  <div class="modal-overlay" id="exportModal">
+    <div class="modal" style="max-width:380px">
+      <h2 data-i18n="export_title">Copy Messages</h2>
+      <div class="export-row">
+        <label data-i18n="export_count">Number of messages</label>
+        <div style="display:flex;align-items:center;gap:8px">
+          <button class="btn btn-outline" onclick="var e=document.getElementById('exportCount');e.value=Math.max(1,parseInt(e.value||1)-1)" style="width:32px;height:32px;padding:0;font-size:18px;border-radius:8px">&minus;</button>
+          <input type="number" id="exportCount" value="10" min="1" max="500" style="width:70px;text-align:center">
+          <button class="btn btn-outline" onclick="var e=document.getElementById('exportCount');e.value=Math.min(parseInt(e.max)||500,parseInt(e.value||0)+1)" style="width:32px;height:32px;padding:0;font-size:18px;border-radius:8px">&plus;</button>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-flat" onclick="closeExportModal()" data-i18n="cancel">Cancel</button>
+        <button class="btn btn-primary" onclick="doExport()" data-i18n="export_copy">Copy to Clipboard</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== RESOLVERS MODAL ===== -->
+  <div class="modal-overlay" id="resolversModal">
+    <div class="modal" style="max-width:560px">
+      <h2 data-i18n="resolvers_title">Working Resolvers</h2>
+      <div id="resolversListEl" style="max-height:400px;overflow-y:auto;font-size:13px;margin-bottom:14px"></div>
+      <div class="modal-actions">
+        <button class="btn btn-flat" onclick="closeResolversModal()" data-i18n="close">Close</button>
+        <button class="btn btn-outline" onclick="resetScoreboard()" data-i18n="reset_scoreboard">Reset Scores</button>
+        <button class="btn btn-outline" onclick="copyResolversList()" data-i18n="copy">Copy</button>
+      </div>
+    </div>
+  </div>
+
   <!-- ===== SCANNER MODAL ===== -->
   <div class="modal-overlay" id="scannerModal">
     <div class="modal" style="max-width:520px">
@@ -1594,7 +1718,10 @@
         <div class="form-group">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
             <label data-i18n="scanner_targets">IPs or CIDRs (one per line)</label>
-            <button class="btn btn-flat" onclick="loadScannerPresets()" data-i18n="scanner_load_presets" style="font-size:12px;padding:4px 10px">🇮🇷 IR</button>
+            <div style="display:flex;gap:4px">
+              <button class="btn btn-flat" onclick="document.getElementById('scanTargets').value=''" data-i18n="scanner_clear_targets" style="font-size:12px;padding:4px 10px">&#128465; Clear</button>
+              <button class="btn btn-flat" onclick="loadScannerPresets()" data-i18n="scanner_load_presets" style="font-size:12px;padding:4px 10px">🇮🇷 IR</button>
+            </div>
           </div>
           <textarea id="scanTargets" rows="3" placeholder="5.1.0.0/16&#10;8.8.8.8&#10;1.1.1.1" style="width:100%;font-family:monospace;font-size:13px"></textarea>
         </div>
@@ -1781,6 +1908,29 @@
         rescan_prompt_msg: '{n} ریزالور سالم از اسکن قبلی موجود است. بدون بررسی مجدد ادامه دهیم؟',
         rescan_prompt_skip: 'ادامه بدون اسکن',
         rescan_prompt_yes: 'بررسی مجدد',
+        search_messages: 'جستجو',
+        search_no_results: 'نتیجه‌ای یافت نشد',
+        sidebar_scanner: 'اسکنر',
+        sidebar_resolvers: 'ریزالورها',
+        sidebar_log: 'لاگ',
+        export_title: 'کپی پیام‌ها',
+        export_messages: 'کپی پیام',
+        export_count: 'تعداد پیام',
+        export_copy: 'کپی در کلیپ‌بورد',
+        export_copied: 'پیام‌ها کپی شدند!',
+        export_no_messages: 'پیامی برای خروجی وجود ندارد',
+        show_resolvers: 'ریزالورهای فعال',
+        show_resolvers_btn: 'نمایش',
+        resolvers_title: 'ریزالورهای فعال',
+        no_active_resolvers: 'ریزالور فعالی وجود ندارد',
+        resolver_speed: 'سرعت',
+        resolver_score: 'امتیاز',
+        reset_scoreboard: 'ریست امتیازها',
+        bg_image: 'تصویر پس‌زمینه',
+        apply: 'اعمال',
+        clear_bg: 'پاک کردن',
+        dns_timeout: 'تایم‌اوت DNS (ثانیه)',
+        scanner_clear_targets: '\uD83D\uDDD1 پاک کردن',
       },
       en: {
         search: 'Search...', settings: 'Settings', profiles: 'Profiles',
@@ -1869,6 +2019,29 @@
         rescan_prompt_msg: '{n} healthy resolvers from previous scan. Continue without rescanning?',
         rescan_prompt_skip: 'Skip Rescan',
         rescan_prompt_yes: 'Rescan',
+        search_messages: 'Search',
+        search_no_results: 'No results',
+        sidebar_scanner: 'Scanner',
+        sidebar_resolvers: 'Resolvers',
+        sidebar_log: 'Log',
+        export_title: 'Copy Messages',
+        export_messages: 'Copy',
+        export_count: 'Number of messages',
+        export_copy: 'Copy to Clipboard',
+        export_copied: 'Messages copied!',
+        export_no_messages: 'No messages to export',
+        show_resolvers: 'Working Resolvers',
+        show_resolvers_btn: 'Show',
+        resolvers_title: 'Working Resolvers',
+        no_active_resolvers: 'No active resolvers',
+        resolver_speed: 'Speed',
+        resolver_score: 'Score',
+        reset_scoreboard: 'Reset Scores',
+        bg_image: 'Background Image',
+        apply: 'Apply',
+        clear_bg: 'Clear',
+        dns_timeout: 'DNS Query Timeout (s)',
+        scanner_clear_targets: '\uD83D\uDDD1 Clear',
       }
     };
     var lang = localStorage.getItem('thefeed_lang') || 'fa';
@@ -1921,7 +2094,9 @@
       loadTheme();
       applyLang();
       await loadFontSize();
+      loadBgImage();
       connectSSE();
+      refreshResolversBadge();
       try {
         var r = await fetch('/api/status'); var st = await r.json();
         await loadProfiles();
@@ -2203,9 +2378,9 @@
         if (isActive) h += '<span class="active-badge">' + t('active') + '</span>';
         h += '</div><div class="profile-row-domain">' + esc(p.config.domain) + '</div></div>';
         h += '<div class="profile-row-btns">';
-        if (isActive) h += '<button class="btn btn-flat btn-sm" onclick="event.stopPropagation();doRescanFromProfiles()" title="' + t('rescan') + '" style="color:var(--success)">&#128260;</button>';
-        h += '<button class="btn btn-flat btn-sm" onclick="event.stopPropagation();toggleSharePanel(\'' + p.id + '\')" title="' + t('share') + '">&#128279;</button>';
-        h += '<button class="btn btn-flat btn-sm" onclick="event.stopPropagation();openProfileEditor(\'' + p.id + '\')" title="' + t('edit') + '">&#9998;</button>';
+        if (isActive) h += '<button class="btn btn-flat btn-sm" onclick="event.stopPropagation();doRescanFromProfiles()" title="' + t('rescan') + '" style="color:var(--success);font-size:11px">' + t('rescan') + '</button>';
+        h += '<button class="btn btn-flat btn-sm" onclick="event.stopPropagation();toggleSharePanel(\'' + p.id + '\')" title="' + t('share') + '" style="font-size:11px">' + t('share') + '</button>';
+        h += '<button class="btn btn-flat btn-sm" onclick="event.stopPropagation();openProfileEditor(\'' + p.id + '\')" title="' + t('edit') + '" style="font-size:11px">' + t('edit') + '</button>';
         h += '</div></div>';
         // Share panel (hidden by default)
         h += '<div class="share-panel" id="' + shareId + '" style="display:none">';
@@ -2305,6 +2480,7 @@
           document.getElementById('peQueryMode').value = p.config.queryMode || 'single';
           document.getElementById('peRateLimit').value = p.config.rateLimit || 6;
           document.getElementById('peScatter').value = p.config.scatter || 4;
+          document.getElementById('peTimeout').value = p.config.timeout || 15;
         }
         document.getElementById('peChannelSection').style.display = '';
         var isActive = id === activeProfileId;
@@ -2328,6 +2504,7 @@
         document.getElementById('peQueryMode').value = 'single';
         document.getElementById('peRateLimit').value = '6';
         document.getElementById('peScatter').value = '4';
+        document.getElementById('peTimeout').value = '15';
         document.getElementById('peChannelSection').style.display = 'none';
       }
     }
@@ -2376,7 +2553,7 @@
       var key = document.getElementById('peKey').value;
       var resolvers = document.getElementById('peResolvers').value.trim().split(/[\n,]+/).map(function (s) { return s.trim() }).filter(Boolean);
       if (!domain || !key || !resolvers.length) { errEl.textContent = t('resolvers') + ' / ' + t('domain') + ' / ' + t('passphrase'); errEl.style.display = 'block'; return }
-      var profile = { id: editingProfileId || '', nickname: nick || domain, config: { domain: domain, key: key, resolvers: resolvers, queryMode: document.getElementById('peQueryMode').value, rateLimit: parseFloat(document.getElementById('peRateLimit').value) || 6, scatter: parseInt(document.getElementById('peScatter').value) || 4 } };
+      var profile = { id: editingProfileId || '', nickname: nick || domain, config: { domain: domain, key: key, resolvers: resolvers, queryMode: document.getElementById('peQueryMode').value, rateLimit: parseFloat(document.getElementById('peRateLimit').value) || 6, scatter: parseInt(document.getElementById('peScatter').value) || 4, timeout: parseInt(document.getElementById('peTimeout').value) || 15 } };
       var action = editingProfileId ? 'update' : 'create';
       var wasFirst = !profiles || !profiles.profiles || profiles.profiles.length === 0;
       // Check if we should skip resolver check (existing healthy resolvers)
@@ -3199,11 +3376,289 @@
       navigator.clipboard.writeText(ips.join('\n')).then(function () { showToast(t('copied')) });
     }
 
+    // ===== MESSAGE SEARCH =====
+    var msgSearchMatches = [], msgSearchIdx = -1;
+    // Normalize Arabic/Persian: map ي→ی, ك→ک, ة→ه, etc.
+    function normalizeArabicPersian(s) {
+      return s
+        .replace(/\u064A/g, '\u06CC')   // Arabic Ya -> Persian Ya
+        .replace(/\u0643/g, '\u06A9')   // Arabic Kaf -> Persian Kaf
+        .replace(/\u0629/g, '\u0647')   // Arabic Ta Marbuta -> He
+        .replace(/\u0649/g, '\u06CC')   // Arabic Alef Maksura -> Persian Ya
+        .replace(/\u06C0/g, '\u0647')   // He with Hamza above -> He
+        .replace(/[\u0623\u0625\u0622]/g, '\u0627') // Alef variants -> plain Alef
+        .replace(/\u0624/g, '\u0648')   // Waw with Hamza -> plain Waw
+        .replace(/\u0626/g, '\u06CC')   // Ya with Hamza -> Ya
+        .replace(/\u0621/g, '')          // standalone Hamza -> remove
+        .replace(/[\u064B-\u065F\u0610-\u061A\u0670]/g, '') // strip tashkil/diacritics
+        .replace(/[\u200C\u200D\u200E\u200F]/g, '') // strip ZWNJ, ZWJ, directional marks
+    }
+    function toggleMsgSearch() {
+      var bar = document.getElementById('msgSearchBar');
+      if (bar.classList.contains('active')) { closeMsgSearch(); return }
+      bar.classList.add('active');
+      var inp = document.getElementById('msgSearchInput');
+      inp.value = '';
+      inp.focus();
+      msgSearchMatches = []; msgSearchIdx = -1;
+      document.getElementById('msgSearchCount').textContent = '';
+    }
+    function closeMsgSearch() {
+      document.getElementById('msgSearchBar').classList.remove('active');
+      document.getElementById('msgSearchInput').value = '';
+      // Remove highlights
+      document.querySelectorAll('.msg .search-highlight').forEach(function (el) {
+        el.outerHTML = el.textContent;
+      });
+      msgSearchMatches = []; msgSearchIdx = -1;
+      document.getElementById('msgSearchCount').textContent = '';
+    }
+    function doMsgSearch() {
+      var q = normalizeArabicPersian(document.getElementById('msgSearchInput').value.trim().toLowerCase());
+      // Remove old highlights
+      document.querySelectorAll('.msg .search-highlight').forEach(function (el) {
+        el.outerHTML = el.textContent;
+      });
+      msgSearchMatches = []; msgSearchIdx = -1;
+      if (!q) { document.getElementById('msgSearchCount').textContent = ''; return }
+      var msgs = document.querySelectorAll('.msg');
+      msgs.forEach(function (msgEl) {
+        highlightTextNodes(msgEl, q);
+      });
+      msgSearchMatches = Array.from(document.querySelectorAll('.msg .search-highlight'));
+      if (msgSearchMatches.length > 0) {
+        // Start from the last match (bottom of chat, most recent)
+        msgSearchIdx = msgSearchMatches.length - 1;
+        scrollToSearchMatch();
+        document.getElementById('msgSearchCount').textContent = (msgSearchIdx + 1) + '/' + msgSearchMatches.length;
+      } else {
+        document.getElementById('msgSearchCount').textContent = t('search_no_results');
+      }
+    }
+    function highlightTextNodes(el, q) {
+      // Skip metadata and buttons
+      if (el.classList && (el.classList.contains('msg-meta') || el.classList.contains('media-tag'))) return;
+      var walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, null, false);
+      var nodes = [];
+      while (walker.nextNode()) {
+        // Skip nodes inside msg-meta
+        var p = walker.currentNode.parentNode;
+        var skip = false;
+        while (p && p !== el) { if (p.classList && (p.classList.contains('msg-meta') || p.classList.contains('media-tag'))) { skip = true; break } p = p.parentNode; }
+        if (!skip) nodes.push(walker.currentNode);
+      }
+      for (var i = nodes.length - 1; i >= 0; i--) {
+        var node = nodes[i];
+        var src = node.textContent;
+        var normalized = normalizeArabicPersian(src.toLowerCase());
+        var idx = normalized.indexOf(q);
+        if (idx === -1) continue;
+        // Map normalized indices back to original string positions
+        var frag = document.createDocumentFragment();
+        var pos = 0;
+        while (idx !== -1) {
+          // Find the original char positions that correspond to normalized idx..idx+q.length
+          var origStart = mapNormIdx(src, idx);
+          var origEnd = mapNormIdx(src, idx + q.length);
+          if (origStart > pos) frag.appendChild(document.createTextNode(src.substring(pos, origStart)));
+          var span = document.createElement('span');
+          span.className = 'search-highlight';
+          span.textContent = src.substring(origStart, origEnd);
+          frag.appendChild(span);
+          pos = origEnd;
+          idx = normalized.indexOf(q, idx + q.length);
+        }
+        if (pos < src.length) frag.appendChild(document.createTextNode(src.substring(pos)));
+        node.parentNode.replaceChild(frag, node);
+      }
+    }
+    // Map a position in normalized text to position in original text
+    function mapNormIdx(original, normPos) {
+      var ni = 0;
+      for (var oi = 0; oi <= original.length; oi++) {
+        if (ni >= normPos) return oi;
+        if (oi < original.length) {
+          var ch = original[oi];
+          var norm = normalizeArabicPersian(ch.toLowerCase());
+          ni += norm.length;
+        }
+      }
+      return original.length;
+    }
+    function scrollToSearchMatch() {
+      if (msgSearchMatches.length === 0) return;
+      msgSearchMatches.forEach(function (el) { el.classList.remove('current') });
+      var cur = msgSearchMatches[msgSearchIdx];
+      if (cur) { cur.classList.add('current'); cur.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+      document.getElementById('msgSearchCount').textContent = (msgSearchIdx + 1) + '/' + msgSearchMatches.length;
+    }
+    function msgSearchNext() {
+      if (msgSearchMatches.length === 0) return;
+      msgSearchIdx = (msgSearchIdx + 1) % msgSearchMatches.length;
+      scrollToSearchMatch();
+    }
+    function msgSearchPrev() {
+      if (msgSearchMatches.length === 0) return;
+      msgSearchIdx = (msgSearchIdx - 1 + msgSearchMatches.length) % msgSearchMatches.length;
+      scrollToSearchMatch();
+    }
+
+    // ===== EXPORT MESSAGES =====
+    function openExportModal() {
+      if (!currentMsgTexts.length) { showToast(t('export_no_messages')); return }
+      document.getElementById('exportCount').value = Math.min(10, currentMsgTexts.length);
+      document.getElementById('exportCount').max = currentMsgTexts.length;
+      document.getElementById('exportModal').classList.add('active');
+    }
+    function closeExportModal() { document.getElementById('exportModal').classList.remove('active') }
+    function doExport() {
+      var n = parseInt(document.getElementById('exportCount').value) || 10;
+      if (n < 1) n = 1;
+      if (n > currentMsgTexts.length) n = currentMsgTexts.length;
+      var chName = selectedChannel > 0 && channels[selectedChannel - 1] ? (channels[selectedChannel - 1].Name || channels[selectedChannel - 1].name || 'Channel') : 'Channel';
+      // Take last N messages (most recent)
+      var start = currentMsgTexts.length - n;
+      var lines = [];
+      lines.push('=== ' + chName + ' ===');
+      for (var i = start; i < currentMsgTexts.length; i++) {
+        lines.push('');
+        lines.push(currentMsgTexts[i]);
+      }
+      navigator.clipboard.writeText(lines.join('\n')).then(function () {
+        showToast(t('export_copied'));
+        closeExportModal();
+      }).catch(function () { showToast('Copy failed') });
+    }
+
+    // ===== WORKING RESOLVERS =====
+    function updateResolversBadge(count) {
+      var badge = document.getElementById('resolversBadge');
+      if (!badge) return;
+      badge.textContent = count;
+      badge.style.color = count > 0 ? 'var(--success, #27ae60)' : 'var(--error, #e74c3c)';
+    }
+    async function refreshResolversBadge() {
+      try {
+        var r = await fetch('/api/resolvers/active');
+        if (!r.ok) return;
+        var data = await r.json();
+        updateResolversBadge((data.resolvers || []).length);
+      } catch (e) { }
+    }
+    var resolversRefreshTimer = null;
+    async function _fetchResolversBoard(el) {
+      try {
+        var r = await fetch('/api/resolvers/active');
+        if (!r.ok) throw new Error(await r.text());
+        var data = await r.json();
+        var board = data.scoreboard || [];
+        if (!board.length) { el.innerHTML = '<div style="color:var(--text-dim)">' + t('no_active_resolvers') + '</div>'; updateResolversBadge(0); return }
+        updateResolversBadge(board.length);
+        var h = '<table style="width:100%;border-collapse:collapse;font-size:12px">';
+        h += '<thead><tr style="border-bottom:2px solid var(--border);text-align:left">';
+        h += '<th style="padding:6px 8px">Resolver</th>';
+        h += '<th style="padding:6px 8px;text-align:right">' + t('resolver_speed') + '</th>';
+        h += '<th style="padding:6px 8px;text-align:right">' + t('resolver_score') + '</th>';
+        h += '<th style="padding:6px 8px;text-align:center">\u2705</th>';
+        h += '<th style="padding:6px 8px;text-align:center">\u274C</th>';
+        h += '<th style="padding:6px 8px"></th>';
+        h += '</tr></thead><tbody>';
+        for (var i = 0; i < board.length; i++) {
+          var b = board[i];
+          var scoreColor = b.score >= 0.5 ? 'var(--success)' : b.score >= 0.15 ? 'var(--text)' : 'var(--error)';
+          h += '<tr style="border-bottom:1px solid var(--border)">';
+          h += '<td style="padding:5px 8px;font-family:monospace">' + esc(b.addr) + '</td>';
+          h += '<td style="padding:5px 8px;text-align:right">' + (b.avgMs > 0 ? Math.round(b.avgMs) + 'ms' : '-') + '</td>';
+          h += '<td style="padding:5px 8px;text-align:right;color:' + scoreColor + ';font-weight:600">' + b.score.toFixed(2) + '</td>';
+          h += '<td style="padding:5px 8px;text-align:center;color:var(--success)">' + b.success + '</td>';
+          h += '<td style="padding:5px 8px;text-align:center;color:var(--error)">' + b.failure + '</td>';
+          h += '<td style="padding:5px 8px;text-align:center"><button onclick="removeResolver(\'' + esc(b.addr) + '\')" style="background:none;border:none;color:var(--error);cursor:pointer;font-size:14px;padding:2px 4px" title="Remove">&times;</button></td>';
+          h += '</tr>';
+        }
+        h += '</tbody></table>';
+        el.innerHTML = h;
+      } catch (e) { el.innerHTML = '<div style="color:var(--error)">' + esc(e.message) + '</div>' }
+    }
+    async function openResolversModal() {
+      var el = document.getElementById('resolversListEl');
+      el.innerHTML = '<div style="color:var(--text-dim)">' + t('loading') + '</div>';
+      document.getElementById('resolversModal').classList.add('active');
+      await _fetchResolversBoard(el);
+      if (resolversRefreshTimer) clearInterval(resolversRefreshTimer);
+      resolversRefreshTimer = setInterval(function () {
+        if (!document.getElementById('resolversModal').classList.contains('active')) {
+          clearInterval(resolversRefreshTimer); resolversRefreshTimer = null; return;
+        }
+        _fetchResolversBoard(document.getElementById('resolversListEl'));
+      }, 3000);
+    }
+    function closeResolversModal() {
+      document.getElementById('resolversModal').classList.remove('active');
+      if (resolversRefreshTimer) { clearInterval(resolversRefreshTimer); resolversRefreshTimer = null; }
+    }
+    async function removeResolver(addr) {
+      try {
+        await fetch('/api/resolvers/remove', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ addr: addr }) });
+        _fetchResolversBoard(document.getElementById('resolversListEl'));
+      } catch (e) { }
+    }
+    async function resetScoreboard() {
+      try {
+        await fetch('/api/resolvers/reset-stats', { method: 'POST' });
+        _fetchResolversBoard(document.getElementById('resolversListEl'));
+      } catch (e) { }
+    }
+    function copyResolversList() {
+      var rows = document.querySelectorAll('#resolversListEl tbody tr');
+      var lines = [];
+      rows.forEach(function (tr) {
+        var cells = tr.querySelectorAll('td');
+        if (cells.length > 0) lines.push(cells[0].textContent.trim());
+      });
+      if (!lines.length) { showToast(t('no_active_resolvers')); return }
+      navigator.clipboard.writeText(lines.join('\n')).then(function () { showToast(t('copied')) });
+    }
+
+    // ===== BACKGROUND IMAGE =====
+    function _setBg(data) {
+      var m = document.getElementById('messages');
+      m.style.backgroundImage = data ? 'url("' + data + '")' : '';
+      m.style.backgroundSize = data ? 'cover' : '';
+      m.style.backgroundPosition = data ? 'center' : '';
+      m.style.backgroundRepeat = data ? 'no-repeat' : '';
+      m.style.backgroundAttachment = data ? 'fixed' : '';
+    }
+    function loadBgImage() {
+      var data = localStorage.getItem('thefeed_bg_image') || '';
+      if (data) _setBg(data);
+    }
+    function applyBgImage() {
+      var inp = document.getElementById('bgImageInput');
+      if (!inp.files || !inp.files[0]) return;
+      var file = inp.files[0];
+      if (file.size > 5 * 1024 * 1024) { showToast('File too large (max 5MB)'); return }
+      var reader = new FileReader();
+      reader.onload = function (e) {
+        var data = e.target.result;
+        try { localStorage.setItem('thefeed_bg_image', data) } catch (ex) { showToast('File too large for storage'); return }
+        _setBg(data);
+        showToast(t('apply'));
+      };
+      reader.readAsDataURL(file);
+    }
+    function clearBgImage() {
+      localStorage.removeItem('thefeed_bg_image');
+      _setBg('');
+      document.getElementById('bgImageInput').value = '';
+      showToast(t('clear_bg'));
+    }
+
     // ===== EVENTS =====
     document.addEventListener('keydown', function (e) {
       if (e.key === 'Enter' && document.activeElement === document.getElementById('sendInput')) { e.preventDefault(); sendMessage() }
       if (e.key === 'Enter' && document.activeElement === document.getElementById('peAddChannelInput')) { e.preventDefault(); addChannelEditor() }
-      if (e.key === 'Escape') { closeSettings(); closeProfiles(); closeProfileEditor(); closeScanner() }
+      if (e.key === 'Enter' && document.activeElement === document.getElementById('msgSearchInput')) { e.preventDefault(); msgSearchNext() }
+      if (e.key === 'Escape') { closeSettings(); closeProfiles(); closeProfileEditor(); closeScanner(); closeMsgSearch(); closeExportModal(); closeResolversModal() }
     });
     window.addEventListener('resize', function () { if (window.innerWidth > 768) document.getElementById('app').classList.remove('chat-open') });
 
