@@ -1643,6 +1643,7 @@
           value="4" min="1" max="5" title="How many resolvers are queried at the same time for one block"></div>
         <div class="form-group"><label data-i18n="dns_timeout">DNS Query Timeout (seconds)</label><input type="number" id="peTimeout"
           value="15" min="1" max="60" step="1"></div>
+        <div class="form-group" style="display:flex;align-items:center;gap:8px"><input type="checkbox" id="peAutoScan" style="width:auto" checked><label for="peAutoScan" data-i18n="auto_scan">Automatic hourly resolver check</label></div>
       <!-- Channel Management (editing only) -->
       <div id="peChannelSection" style="display:none">
         <hr class="section-divider">
@@ -1930,6 +1931,7 @@
         apply: 'اعمال',
         clear_bg: 'پاک کردن',
         dns_timeout: 'تایم‌اوت DNS (ثانیه)',
+        auto_scan: 'بررسی خودکار ریزالورها (هر ساعت)',
         scanner_clear_targets: '\uD83D\uDDD1 پاک کردن',
       },
       en: {
@@ -2041,6 +2043,7 @@
         apply: 'Apply',
         clear_bg: 'Clear',
         dns_timeout: 'DNS Query Timeout (s)',
+        auto_scan: 'Automatic hourly resolver check',
         scanner_clear_targets: '\uD83D\uDDD1 Clear',
       }
     };
@@ -2497,6 +2500,7 @@
           document.getElementById('peRateLimit').value = p.config.rateLimit || 6;
           document.getElementById('peScatter').value = p.config.scatter || 4;
           document.getElementById('peTimeout').value = p.config.timeout || 15;
+          document.getElementById('peAutoScan').checked = p.config.autoScan !== false;
         }
         document.getElementById('peChannelSection').style.display = '';
         var isActive = id === activeProfileId;
@@ -2521,6 +2525,7 @@
         document.getElementById('peRateLimit').value = '6';
         document.getElementById('peScatter').value = '4';
         document.getElementById('peTimeout').value = '15';
+        document.getElementById('peAutoScan').checked = true;
         document.getElementById('peChannelSection').style.display = 'none';
       }
     }
@@ -2569,7 +2574,7 @@
       var key = document.getElementById('peKey').value;
       var resolvers = document.getElementById('peResolvers').value.trim().split(/[\n,]+/).map(function (s) { return s.trim() }).filter(Boolean);
       if (!domain || !key || !resolvers.length) { errEl.textContent = t('resolvers') + ' / ' + t('domain') + ' / ' + t('passphrase'); errEl.style.display = 'block'; return }
-      var profile = { id: editingProfileId || '', nickname: nick || domain, config: { domain: domain, key: key, resolvers: resolvers, queryMode: document.getElementById('peQueryMode').value, rateLimit: parseFloat(document.getElementById('peRateLimit').value) || 6, scatter: parseInt(document.getElementById('peScatter').value) || 4, timeout: parseInt(document.getElementById('peTimeout').value) || 15 } };
+      var profile = { id: editingProfileId || '', nickname: nick || domain, config: { domain: domain, key: key, resolvers: resolvers, queryMode: document.getElementById('peQueryMode').value, rateLimit: parseFloat(document.getElementById('peRateLimit').value) || 6, scatter: parseInt(document.getElementById('peScatter').value) || 4, timeout: parseInt(document.getElementById('peTimeout').value) || 15, autoScan: document.getElementById('peAutoScan').checked ? undefined : false } };
       var action = editingProfileId ? 'update' : 'create';
       var wasFirst = !profiles || !profiles.profiles || profiles.profiles.length === 0;
       // Check if we should skip resolver check (existing healthy resolvers)
@@ -2951,6 +2956,12 @@
         item.dataset.lastUpdate = Date.now();
         resolverScanHint = t('scanning_resolvers') + ' (' + done + '/' + tot + ', \u2713' + resolverScanHealthy + ')' + ' <button onclick="jumpToLog()" style="background:none;border:none;cursor:pointer;font-size:13px;vertical-align:middle;padding:0 2px">&#128220;</button>';
         var hintEl = document.getElementById('no-ch-hint'); if (hintEl) hintEl.innerHTML = resolverScanHint;
+        return;
+      }
+      // RESOLVER_SCAN cancelled
+      if (line.includes('RESOLVER_SCAN cancelled')) {
+        resolverScanHint = '';
+        if (item && item.parentNode) item.parentNode.removeChild(item);
         return;
       }
       // RESOLVER_SCAN done K/T

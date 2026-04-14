@@ -41,6 +41,9 @@ type Config struct {
 	// Scatter is the number of resolvers queried simultaneously per DNS block request
 	// (0 or 1 = sequential, 4 = default parallel pair).
 	Scatter int `json:"scatter,omitempty"`
+	// AutoScan enables hourly automatic resolver health-check scans.
+	// nil means enabled (default); set to a false pointer to disable.
+	AutoScan *bool `json:"autoScan,omitempty"`
 }
 
 // Profile wraps a Config with a user-chosen nickname and a unique ID.
@@ -709,6 +712,9 @@ func (s *Server) initFetcher() error {
 			s.saveLastScan(healthy)
 		}
 	})
+	// nil means enabled (the default); only an explicit false pointer disables it.
+	autoScan := cfg.AutoScan == nil || *cfg.AutoScan
+	checker.SetAutoScan(autoScan)
 	s.checker = checker
 
 	s.fetcher = fetcher

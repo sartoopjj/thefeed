@@ -101,6 +101,15 @@ func (s *Server) handleScannerStart(w http.ResponseWriter, r *http.Request) {
 		Passphrase:   profileCfg.Key,
 	}
 
+	// Cancel any in-progress resolver checker scan to avoid resource
+	// contention (both the checker and scanner do DNS probes).
+	s.mu.RLock()
+	checker := s.checker
+	s.mu.RUnlock()
+	if checker != nil {
+		checker.CancelCurrentScan()
+	}
+
 	s.scanner.SetLogFunc(func(msg string) {
 		s.addLog(msg)
 	})
@@ -243,6 +252,14 @@ func (s *Server) handleScannerApply(w http.ResponseWriter, r *http.Request) {
 			s.mu.Lock()
 			s.config = cfg
 			s.mu.Unlock()
+		}
+		// Cancel any in-progress checker scan before re-initializing so the
+		// old goroutine exits quickly and doesn't race with the new fetcher.
+		s.mu.RLock()
+		oldChecker := s.checker
+		s.mu.RUnlock()
+		if oldChecker != nil {
+			oldChecker.CancelCurrentScan()
 		}
 		if err := s.initFetcher(); err != nil {
 			http.Error(w, fmt.Sprintf("init fetcher: %v", err), 500)

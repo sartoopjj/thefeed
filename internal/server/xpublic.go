@@ -14,6 +14,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"golang.org/x/net/html"
 
@@ -247,7 +249,20 @@ func (xr *XPublicReader) fetchAccount(ctx context.Context, username string) ([]p
 			lastErr = fmt.Errorf("%s: %w", instance, err)
 			continue
 		}
-		return msgs, nil
+		// Filter out garbled messages (invalid UTF-8 or mostly non-printable).
+		cleaned := msgs[:0]
+		for _, m := range msgs {
+			if isReadableText(m.Text) {
+				cleaned = append(cleaned, m)
+			} else {
+				log.Printf("[x] @%s: skipping garbled message ID=%d (len=%d)", username, m.ID, len(m.Text))
+			}
+		}
+		if len(cleaned) == 0 {
+			lastErr = fmt.Errorf("%s: all %d messages were garbled", instance, len(msgs))
+			continue
+		}
+		return cleaned, nil
 	}
 	if lastErr == nil {
 		lastErr = fmt.Errorf("no Nitter instances configured")
@@ -271,6 +286,7 @@ type xRSSItem struct {
 }
 
 func parseXRSSMessages(body []byte, feedUser string) ([]protocol.Message, error) {
+	body = sanitizeUTF8(body)
 	var feed xRSS
 	if err := xml.Unmarshal(body, &feed); err != nil {
 		return nil, fmt.Errorf("parse rss: %w", err)
@@ -541,4 +557,36 @@ func formatXQuoteMarkers(s string) string {
 		}
 	}
 	return strings.TrimSpace(b.String())
+}
+
+// isReadableText returns true if s is valid UTF-8 and at least half of its
+// runes are printable (letters, digits, punctuation, symbols, spaces).
+// This filters out garbled binary data that some Nitter instances return.
+func isReadableText(s string) bool {
+	if s == "" {
+		return false
+	}
+	if !utf8.ValidString(s) {
+		return false
+	}
+	var total, printable int
+	for _, r := range s {
+		total++
+		if unicode.IsPrint(r) || r == '\n' || r == '\r' || r == '\t' {
+			printable++
+		}
+	}
+	if total == 0 {
+		return false
+	}
+	return float64(printable)/float64(total) >= 0.5
+}
+
+// sanitizeUTF8 replaces invalid UTF-8 sequences with the Unicode replacement
+// character so xml.Unmarshal doesn't choke on broken encodings.
+func sanitizeUTF8(data []byte) []byte {
+	if utf8.Valid(data) {
+		return data
+	}
+	return []byte(strings.ToValidUTF8(string(data), "\uFFFD"))
 }

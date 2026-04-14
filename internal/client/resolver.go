@@ -22,6 +22,7 @@ type ResolverChecker struct {
 	timeout    time.Duration
 	logFunc    LogFunc
 	onScanDone func([]string)     // called after each completed scan with healthy resolvers
+	autoScan   bool               // if true, run hourly periodic scans
 	started    atomic.Bool        // guards against double-start
 	scanMu     sync.Mutex         // protects scanCancel
 	scanRunMu  sync.Mutex         // only one CheckNow at a time (via TryLock)
@@ -49,6 +50,11 @@ func (rc *ResolverChecker) SetLogFunc(fn LogFunc) {
 // with the list of healthy resolver addresses. Not called when the scan is cancelled.
 func (rc *ResolverChecker) SetOnScanDone(fn func([]string)) {
 	rc.onScanDone = fn
+}
+
+// SetAutoScan enables or disables the hourly periodic health-check loop.
+func (rc *ResolverChecker) SetAutoScan(enabled bool) {
+	rc.autoScan = enabled
 }
 
 // Start begins the periodic health-check loop in the background.
@@ -90,7 +96,9 @@ func (rc *ResolverChecker) StartAndNotify(ctx context.Context, onFirstDone func(
 			onFirstDone()
 		}
 
-		rc.runPeriodicLoop(ctx)
+		if rc.autoScan {
+			rc.runPeriodicLoop(ctx)
+		}
 	}()
 }
 
@@ -102,7 +110,9 @@ func (rc *ResolverChecker) StartPeriodic(ctx context.Context) {
 	if !rc.started.CompareAndSwap(false, true) {
 		return
 	}
-	go rc.runPeriodicLoop(ctx)
+	if rc.autoScan {
+		go rc.runPeriodicLoop(ctx)
+	}
 }
 
 // runPeriodicLoop is the shared Hour ticker loop used by both
@@ -238,6 +248,7 @@ func (rc *ResolverChecker) CheckNow(ctx context.Context) bool {
 	wg.Wait()
 
 	if scanCtx.Err() != nil {
+		rc.log("RESOLVER_SCAN cancelled")
 		return false // context cancelled — don't update resolver list
 	}
 

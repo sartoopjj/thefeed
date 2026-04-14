@@ -256,3 +256,24 @@ func TestParseXRSSMessages_PureRetweet(t *testing.T) {
 		t.Fatalf("original content missing; got: %q", text)
 	}
 }
+
+func TestIsReadableText(t *testing.T) {
+	tests := []struct {
+		input string
+		want  bool
+	}{
+		{"Hello world", true},
+		{"سلام دنیا", true},
+		{"", false},
+		{"\x00\x01\x02\x03\x04\x05", false},
+		{"Y;\x80\x81 $ \x82) \x83\x84", false},
+		{"abc\x00\x01\x02\x03\x04\x05\x06\x07\x08", false},
+		{"Hello\nWorld\t!", true},
+	}
+	for _, tt := range tests {
+		got := isReadableText(tt.input)
+		if got != tt.want {
+			t.Errorf("isReadableText(%q) = %v, want %v", tt.input, got, tt.want)
+		}
+	}
+}

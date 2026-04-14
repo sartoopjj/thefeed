@@ -79,12 +79,16 @@ class MainActivity : ComponentActivity() {
     private fun registerBackHandler() {
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
-                if (webView.canGoBack()) {
-                    webView.goBack()
-                } else {
-                    // No WebView history to go back to — move app to background
-                    // instead of finishing the activity (keeps the service alive).
-                    moveTaskToBack(true)
+                // Check if the chat view is open (mobile nav). If yes, go back
+                // to the channel list. If already on the channel list, minimize.
+                webView.evaluateJavascript(
+                    "(document.getElementById('app').classList.contains('chat-open')).toString()"
+                ) { result ->
+                    if (result.trim('"') == "true") {
+                        webView.goBack()
+                    } else {
+                        moveTaskToBack(true)
+                    }
                 }
             }
         })
@@ -100,20 +104,41 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private var batteryOptRequested = false
+
     @Suppress("BatteryLife")
     private fun requestDisableBatteryOptimization() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
-            if (!pm.isIgnoringBatteryOptimizations(packageName)) {
-                val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
-                    data = Uri.parse("package:$packageName")
-                }
-                try {
-                    startActivity(intent)
-                } catch (_: Exception) {
-                    // Some devices don't support this intent
+            if (pm.isIgnoringBatteryOptimizations(packageName)) return
+            val prefs = getSharedPreferences(ThefeedService.PREFS_NAME, Context.MODE_PRIVATE)
+            if (prefs.getBoolean(PREF_BATTERY_OPT_DECLINED, false)) return
+            batteryOptRequested = true
+            val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                data = Uri.parse("package:$packageName")
+            }
+            try {
+                startActivity(intent)
+            } catch (_: Exception) {
+                batteryOptRequested = false
+            }
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (batteryOptRequested) {
+            batteryOptRequested = false
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
+                if (!pm.isIgnoringBatteryOptimizations(packageName)) {
+                    // User declined — save preference so we don't ask again
+                    getSharedPreferences(ThefeedService.PREFS_NAME, Context.MODE_PRIVATE)
+                        .edit().putBoolean(PREF_BATTERY_OPT_DECLINED, true).apply()
                 }
             }
+        }
+    }
         }
     }
 
@@ -265,6 +290,7 @@ class MainActivity : ComponentActivity() {
         private const val PROBE_INTERVAL_MS = 1000L   // 1s between probes → up to 30s total
         private const val PROBE_TIMEOUT_MS  = 1000L   // 1s HTTP connect timeout per probe
         private const val RETRY_DELAY_MS    = 2000L   // delay before restarting probe cycle on error
+        private const val PREF_BATTERY_OPT_DECLINED = "battery_opt_declined"
     }
 }
 
