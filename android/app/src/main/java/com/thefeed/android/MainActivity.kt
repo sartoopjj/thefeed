@@ -139,8 +139,6 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
-        }
-    }
 
     private fun startThefeedService() {
         val intent = Intent(this, ThefeedService::class.java)
