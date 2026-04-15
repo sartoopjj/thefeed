@@ -67,11 +67,12 @@ class MainActivity : ComponentActivity() {
         controller.isAppearanceLightNavigationBars = false
         setContentView(R.layout.activity_main)
 
-        // Apply top inset as padding so content isn't hidden behind the status bar
+        // Apply insets so content isn't hidden behind the status bar or keyboard
         val rootView = findViewById<View>(android.R.id.content)
         ViewCompat.setOnApplyWindowInsetsListener(rootView) { v, insets ->
             val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
-            v.setPadding(0, systemBars.top, 0, systemBars.bottom)
+            val ime = insets.getInsets(WindowInsetsCompat.Type.ime())
+            v.setPadding(0, systemBars.top, 0, maxOf(systemBars.bottom, ime.bottom))
             insets
         }
         // Trigger inset dispatch explicitly — required on some older Android versions
@@ -98,6 +99,23 @@ class MainActivity : ComponentActivity() {
         return prefs.getString(AndroidBridge.PREF_PASSWORD_HASH, null) != null
     }
 
+    private fun resolvePresetName(key: String?, isPersian: Boolean): String {
+        if (key == null) return getString(R.string.app_name)
+        val presets = mapOf(
+            "weather" to ("Weather" to "آب و هوا"),
+            "calculator" to ("Calculator" to "ماشین‌حساب"),
+            "calendar" to ("Calendar" to "تقویم"),
+            "notes" to ("Notes" to "یادداشت"),
+            "clock" to ("Clock" to "ساعت"),
+            "camera" to ("Camera" to "دوربین"),
+            "compass" to ("Compass" to "قطب‌نما"),
+            "gallery" to ("Gallery" to "گالری"),
+            "recorder" to ("Recorder" to "ضبط صدا"),
+        )
+        val pair = presets[key] ?: return key
+        return if (isPersian) pair.second else pair.first
+    }
+
     @SuppressLint("SetTextI18n")
     private fun showLockScreen() {
         lockScreenVisible = true
@@ -109,10 +127,11 @@ class MainActivity : ComponentActivity() {
         val lockError = findViewById<TextView>(R.id.lockError)
 
         val prefs = getSharedPreferences(ThefeedService.PREFS_NAME, Context.MODE_PRIVATE)
-        val appName = prefs.getString(AndroidBridge.PREF_CUSTOM_APP_NAME, null)
-            ?.takeIf { it.isNotBlank() } ?: getString(R.string.app_name)
         val lang = prefs.getString(AndroidBridge.PREF_LANG, "fa") ?: "fa"
         val isPersian = lang == "fa"
+        val presetKey = prefs.getString(AndroidBridge.PREF_CUSTOM_APP_NAME, null)
+            ?.takeIf { it.isNotBlank() }
+        val appName = resolvePresetName(presetKey, isPersian)
 
         lockTitle.text = appName
         lockSubtitle.text = if (isPersian) "رمز عبور را وارد کنید" else "Enter password to unlock"

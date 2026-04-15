@@ -768,6 +768,119 @@
       background: var(--hover)
     }
 
+    /* ===== SETTINGS SECTIONS ===== */
+    .settings-section {
+      margin-top: 14px;
+      padding-top: 12px;
+      border-top: 1px solid var(--border)
+    }
+
+    .settings-section-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 8px
+    }
+
+    .settings-info-row {
+      font-size: 11px;
+      color: var(--text-dim);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-top: 10px
+    }
+
+    .settings-info-row span:last-child {
+      font-family: monospace;
+      color: var(--text)
+    }
+
+    /* Preset name grid */
+    .preset-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 6px;
+      margin-top: 6px
+    }
+
+    .preset-btn {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+      padding: 12px 4px 8px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: var(--bg);
+      color: var(--text-dim);
+      font-size: 11px;
+      cursor: pointer;
+      transition: all .15s;
+      text-align: center;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis
+    }
+
+    .preset-btn svg {
+      width: 32px;
+      height: 32px;
+      flex-shrink: 0
+    }
+
+    .preset-btn:hover {
+      background: var(--hover)
+    }
+
+    .preset-btn.active-preset {
+      border-color: var(--accent);
+      background: rgba(51, 144, 236, .12);
+      color: var(--accent);
+      font-weight: 600
+    }
+
+    /* Experimental badge */
+    .experimental-badge {
+      display: inline-block;
+      font-size: 10px;
+      padding: 2px 8px;
+      border-radius: 4px;
+      background: rgba(241, 196, 15, .15);
+      color: #f1c40f;
+      border: 1px solid rgba(241, 196, 15, .3);
+      margin-inline-start: 8px;
+      vertical-align: middle;
+      font-weight: 600
+    }
+
+    /* Password status */
+    .password-status {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 12px;
+      border-radius: 8px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      margin-top: 8px
+    }
+
+    .password-status-left {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      color: var(--text)
+    }
+
+    .password-status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--accent)
+    }
+
     .theme-btn.active-theme {
       border-color: var(--accent);
       background: rgba(51, 144, 236, .12);
@@ -1558,57 +1671,42 @@
           <button class="theme-btn" id="themeLight" onclick="setTheme('light')" data-i18n="theme_light">Light</button>
         </div>
       </div>
-      <div
-        style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border);font-size:11px;color:var(--text-dim);display:flex;align-items:center;justify-content:space-between">
-        <span data-i18n="version">Version</span>
-        <span id="appVersionEl" style="font-family:monospace;color:var(--text)">-</span>
-      </div>
-      <div
-        style="margin-top:10px;font-size:11px;color:var(--text-dim);display:flex;align-items:center;justify-content:space-between">
-        <span data-i18n="latest_version">Latest Version</span>
-        <span id="latestVersionEl" style="font-family:monospace;color:var(--text)">-</span>
-      </div>
-      <div style="margin-top:10px;display:flex;align-items:center;justify-content:space-between">
-        <span style="font-size:12px;color:var(--text-dim)" data-i18n="check_latest_version">Check for Updates</span>
-        <button class="btn btn-outline" id="checkVersionBtn" onclick="checkLatestVersion()"
-          style="font-size:11px;padding:4px 12px" data-i18n="check_now">Check Now</button>
-      </div>
-      <div style="margin-top:10px;display:flex;align-items:center;justify-content:space-between">
-        <span style="font-size:12px;color:var(--text-dim)" data-i18n="clear_cache">Clear Cache</span>
-        <button class="btn btn-flat" onclick="clearCache()"
-          style="font-size:11px;padding:4px 12px;color:var(--danger,#e74c3c)" data-i18n="clear_cache">Clear
-          Cache</button>
+      <div class="settings-section">
+        <div class="settings-info-row" style="margin-top:0">
+          <span data-i18n="version">Version</span>
+          <span id="appVersionEl">-</span>
+        </div>
+        <div class="settings-info-row">
+          <span data-i18n="latest_version">Latest Version</span>
+          <span id="latestVersionEl">-</span>
+        </div>
+        <div class="settings-info-row">
+          <span data-i18n="check_latest_version">Check for Updates</span>
+          <button class="btn btn-outline btn-sm" id="checkVersionBtn" onclick="checkLatestVersion()"
+            data-i18n="check_now">Check Now</button>
+        </div>
+        <div class="settings-info-row">
+          <span data-i18n="clear_cache">Clear Cache</span>
+          <button class="btn btn-flat btn-sm" onclick="clearCache()"
+            style="color:var(--danger,#e74c3c)" data-i18n="clear_cache">Clear Cache</button>
+        </div>
       </div>
       <div class="form-group" style="margin-top:12px">
         <label data-i18n="bg_image">Background Image</label>
         <div style="display:flex;gap:6px;align-items:center">
           <input type="file" id="bgImageInput" accept="image/*" style="flex:1;font-size:12px;color:var(--text)" onchange="applyBgImage()">
-          <button class="btn btn-flat" onclick="clearBgImage()" style="font-size:11px;padding:4px 10px;color:var(--error)" data-i18n="clear_bg">Clear</button>
+          <button class="btn btn-flat btn-sm" onclick="clearBgImage()" style="color:var(--error)" data-i18n="clear_bg">Clear</button>
         </div>
       </div>
-      <!-- Android-only: App Customization -->
-      <div id="androidAppSection" style="display:none;margin-top:14px;padding-top:12px;border-top:1px solid var(--border)">
-        <label style="font-size:13px;font-weight:600;color:var(--text)" data-i18n="app_customization">App Customization</label>
-        <div style="margin-top:8px">
-          <label style="font-size:12px;color:var(--text-dim)" data-i18n="app_name_label">App Name</label>
-          <input type="text" id="customAppName" placeholder="thefeed"
-            style="width:100%;margin-top:4px;padding:8px 12px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:13px;box-sizing:border-box">
-        </div>
-        <div style="margin-top:8px">
-          <label style="font-size:12px;color:var(--text-dim)" data-i18n="app_icon_label">App Icon</label>
-          <div style="display:flex;gap:6px;align-items:center;margin-top:4px">
-            <img id="customIconPreview" src="" style="width:40px;height:40px;border-radius:8px;border:1px solid var(--border);display:none;object-fit:cover">
-            <input type="file" id="customIconInput" accept="image/*" style="flex:1;font-size:12px;color:var(--text)">
-          </div>
-        </div>
-        <div style="display:flex;gap:6px;margin-top:10px">
-          <button class="btn btn-primary" onclick="applyAppCustomization()" style="font-size:12px;padding:6px 14px" data-i18n="app_apply">Apply</button>
-          <button class="btn btn-flat" onclick="resetAppCustomization()" style="font-size:12px;padding:6px 14px;color:var(--error)" data-i18n="app_reset">Reset</button>
-        </div>
+      <!-- Android-only: App Name Preset -->
+      <div id="androidAppSection" class="settings-section" style="display:none">
+        <div class="settings-section-title"><span data-i18n="app_customization">App Customization</span><span class="experimental-badge" data-i18n="experimental">Experimental</span></div>
+        <div style="font-size:12px;color:var(--text-dim);margin-bottom:6px" data-i18n="app_preset_hint">Choose a display name for the app (shown on lock screen)</div>
+        <div class="preset-grid" id="presetNameGrid"></div>
       </div>
       <!-- Android-only: App Password -->
-      <div id="androidPasswordSection" style="display:none;margin-top:14px;padding-top:12px;border-top:1px solid var(--border)">
-        <label style="font-size:13px;font-weight:600;color:var(--text)" data-i18n="app_password">App Password</label>
+      <div id="androidPasswordSection" class="settings-section" style="display:none">
+        <div class="settings-section-title"><span data-i18n="app_password">App Password</span><span class="experimental-badge" data-i18n="experimental">Experimental</span></div>
         <div id="passwordSetSection" style="margin-top:8px">
           <input type="password" id="appPasswordInput" placeholder=""
             data-i18n-ph="password_new_ph"
@@ -1617,18 +1715,28 @@
             data-i18n-ph="password_confirm_ph"
             style="width:100%;padding:8px 12px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:13px;box-sizing:border-box">
           <div id="passwordError" style="color:var(--error);font-size:12px;margin-top:4px;display:none"></div>
-          <div style="display:flex;gap:6px;margin-top:8px">
+          <div style="margin-top:8px">
             <button class="btn btn-primary" onclick="setAppPassword()" style="font-size:12px;padding:6px 14px" data-i18n="password_set">Set Password</button>
           </div>
         </div>
-        <div id="passwordRemoveSection" style="margin-top:8px;display:none">
-          <div style="font-size:12px;color:var(--text-dim);margin-bottom:6px" data-i18n="password_active">Password is active</div>
-          <input type="password" id="appPasswordCurrent" placeholder=""
-            data-i18n-ph="password_current_ph"
-            style="width:100%;padding:8px 12px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:13px;box-sizing:border-box">
-          <div id="passwordRemoveError" style="color:var(--error);font-size:12px;margin-top:4px;display:none"></div>
-          <div style="display:flex;gap:6px;margin-top:8px">
-            <button class="btn btn-flat" onclick="removeAppPassword()" style="font-size:12px;padding:6px 14px;color:var(--error)" data-i18n="password_remove">Remove Password</button>
+        <div id="passwordRemoveSection" style="display:none">
+          <div class="password-status">
+            <div class="password-status-left">
+              <span class="password-status-dot"></span>
+              <span data-i18n="password_active">Password is active</span>
+            </div>
+            <button class="btn btn-flat btn-sm" onclick="showPasswordRemovePrompt()" style="color:var(--error)" data-i18n="password_change_remove">Change / Remove</button>
+          </div>
+          <div id="passwordRemovePrompt" style="display:none;margin-top:8px">
+            <input type="password" id="appPasswordCurrent" placeholder=""
+              data-i18n-ph="password_current_ph"
+              style="width:100%;padding:8px 12px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:13px;box-sizing:border-box">
+            <div id="passwordRemoveError" style="color:var(--error);font-size:12px;margin-top:4px;display:none"></div>
+            <div style="display:flex;gap:6px;margin-top:8px">
+              <button class="btn btn-primary" onclick="changeAppPassword()" style="font-size:12px;padding:6px 14px" data-i18n="password_change">Change</button>
+              <button class="btn btn-flat" onclick="removeAppPassword()" style="font-size:12px;padding:6px 14px;color:var(--error)" data-i18n="password_remove">Remove</button>
+              <button class="btn btn-flat" onclick="hidePasswordRemovePrompt()" style="font-size:12px;padding:6px 14px" data-i18n="cancel">Cancel</button>
+            </div>
           </div>
         </div>
       </div>
@@ -2042,20 +2150,18 @@
         auto_scan: 'بررسی خودکار ریزالورها (هر ساعت)',
         scanner_clear_targets: '\uD83D\uDDD1 پاک کردن',
         app_customization: 'شخصی\u200cسازی برنامه',
-        app_name_label: 'نام برنامه',
-        app_icon_label: 'آیکون برنامه',
-        app_apply: 'اعمال',
-        app_reset: 'بازنشانی',
-        app_identity_applied: 'نام و آیکون برنامه تغییر کرد!',
-        app_identity_failed: 'خطا در تغییر آیکون',
-        app_identity_name_only: 'نام برنامه ذخیره شد!',
-        app_reset_done: 'بازنشانی شد!',
+        app_preset_hint: 'نام نمایشی برنامه را انتخاب کنید (در صفحه قفل نمایش داده می‌شود)',
+        app_name_saved: 'نام برنامه ذخیره شد!',
         app_password: 'رمز عبور برنامه',
         password_new_ph: 'رمز عبور جدید',
         password_confirm_ph: 'تکرار رمز عبور',
         password_current_ph: 'رمز عبور فعلی',
         password_set: 'تنظیم رمز',
+        password_change_remove: 'تغییر / حذف',
+        password_change: 'تغییر رمز',
         password_remove: 'حذف رمز',
+        password_remove_confirm: 'آیا مطمئن هستید که می‌خواهید رمز عبور را حذف کنید؟',
+        password_enter_new: 'رمز عبور جدید را وارد کنید',
         password_active: 'رمز عبور فعال است',
         password_set_ok: 'رمز عبور تنظیم شد!',
         password_removed: 'رمز عبور حذف شد!',
@@ -2195,20 +2301,19 @@
         auto_scan: 'Automatic hourly resolver check',
         scanner_clear_targets: '\uD83D\uDDD1 Clear',
         app_customization: 'App Customization',
-        app_name_label: 'App Name',
-        app_icon_label: 'App Icon',
-        app_apply: 'Apply',
-        app_reset: 'Reset',
-        app_identity_applied: 'App icon and name changed!',
-        app_identity_failed: 'Failed to change app icon',
-        app_identity_name_only: 'App name saved!',
-        app_reset_done: 'Reset done!',
+        experimental: 'Experimental',
+        app_preset_hint: 'Choose a display name for the app (shown on lock screen)',
+        app_name_saved: 'App name saved!',
         app_password: 'App Password',
         password_new_ph: 'New password',
         password_confirm_ph: 'Confirm password',
         password_current_ph: 'Current password',
         password_set: 'Set Password',
-        password_remove: 'Remove Password',
+        password_change_remove: 'Change / Remove',
+        password_change: 'Change',
+        password_remove: 'Remove',
+        password_remove_confirm: 'Are you sure you want to remove the password?',
+        password_enter_new: 'Enter your new password',
         password_active: 'Password is active',
         password_set_ok: 'Password set!',
         password_removed: 'Password removed!',
@@ -2433,72 +2538,79 @@
     }
 
     // ===== ANDROID SETTINGS =====
+    var _presetIcons = {
+      weather: '<svg viewBox="0 0 32 32" fill="none"><circle cx="16" cy="14" r="6" fill="#f39c12"/><path d="M16 4v3M16 21v3M6 14H3M29 14h-3M8.1 6.1l2.1 2.1M21.8 20.8l2.1 2.1M8.1 21.9l2.1-2.1M21.8 7.2l2.1-2.1" stroke="#f39c12" stroke-width="2" stroke-linecap="round"/><path d="M22 22c0-3.3 2.7-6 6-6a5 5 0 01-1 10H10a4 4 0 010-8c.3-2.8 2.6-5 5.5-5 2.4 0 4.4 1.5 5.2 3.6" stroke="#bdc3c7" stroke-width="1.5" fill="rgba(189,195,199,.2)"/></svg>',
+      calculator: '<svg viewBox="0 0 32 32" fill="none"><rect x="6" y="3" width="20" height="26" rx="3" fill="#2c3e50" stroke="#7f8c8d" stroke-width="1"/><rect x="9" y="6" width="14" height="6" rx="1.5" fill="#1abc9c"/><circle cx="11.5" cy="16.5" r="1.5" fill="#ecf0f1"/><circle cx="16" cy="16.5" r="1.5" fill="#ecf0f1"/><circle cx="20.5" cy="16.5" r="1.5" fill="#ecf0f1"/><circle cx="11.5" cy="21" r="1.5" fill="#ecf0f1"/><circle cx="16" cy="21" r="1.5" fill="#ecf0f1"/><circle cx="20.5" cy="21" r="1.5" fill="#e74c3c"/><circle cx="11.5" cy="25.5" r="1.5" fill="#ecf0f1"/><rect x="14.5" y="24" width="7.5" height="3" rx="1.5" fill="#3498db"/></svg>',
+      calendar: '<svg viewBox="0 0 32 32" fill="none"><rect x="4" y="6" width="24" height="22" rx="3" fill="#e74c3c"/><rect x="4" y="12" width="24" height="16" rx="0" fill="#ecf0f1"/><rect x="10" y="3" width="2" height="6" rx="1" fill="#7f8c8d"/><rect x="20" y="3" width="2" height="6" rx="1" fill="#7f8c8d"/><text x="16" y="24" text-anchor="middle" font-size="12" font-weight="bold" fill="#2c3e50">17</text></svg>',
+      notes: '<svg viewBox="0 0 32 32" fill="none"><rect x="6" y="3" width="20" height="26" rx="2" fill="#f1c40f"/><line x1="10" y1="10" x2="22" y2="10" stroke="#7f6c00" stroke-width="1.5" stroke-linecap="round"/><line x1="10" y1="14" x2="22" y2="14" stroke="#7f6c00" stroke-width="1.5" stroke-linecap="round"/><line x1="10" y1="18" x2="18" y2="18" stroke="#7f6c00" stroke-width="1.5" stroke-linecap="round"/></svg>',
+      clock: '<svg viewBox="0 0 32 32" fill="none"><circle cx="16" cy="16" r="13" fill="#2c3e50" stroke="#ecf0f1" stroke-width="1.5"/><circle cx="16" cy="16" r="11" fill="#1a1a2e"/><line x1="16" y1="16" x2="16" y2="8" stroke="#ecf0f1" stroke-width="2" stroke-linecap="round"/><line x1="16" y1="16" x2="22" y2="16" stroke="#e74c3c" stroke-width="1.5" stroke-linecap="round"/><circle cx="16" cy="16" r="1.5" fill="#ecf0f1"/></svg>',
+      camera: '<svg viewBox="0 0 32 32" fill="none"><rect x="3" y="9" width="26" height="18" rx="3" fill="#2c3e50"/><path d="M11 9l1.5-4h7L21 9" fill="#34495e"/><circle cx="16" cy="18" r="5.5" stroke="#ecf0f1" stroke-width="2" fill="none"/><circle cx="16" cy="18" r="3" fill="#3498db"/><circle cx="24" cy="13" r="1.5" fill="#e74c3c"/></svg>',
+      compass: '<svg viewBox="0 0 32 32" fill="none"><circle cx="16" cy="16" r="13" fill="#2c3e50" stroke="#7f8c8d" stroke-width="1"/><circle cx="16" cy="16" r="11" fill="#1a252f"/><polygon points="16,6 18,15 16,17 14,15" fill="#e74c3c"/><polygon points="16,26 14,17 16,15 18,17" fill="#ecf0f1"/><circle cx="16" cy="16" r="2" fill="#7f8c8d"/></svg>',
+      gallery: '<svg viewBox="0 0 32 32" fill="none"><rect x="4" y="5" width="24" height="22" rx="3" fill="#2980b9"/><circle cx="12" cy="13" r="3" fill="#f1c40f"/><path d="M4 22l7-7 5 5 4-3 8 6v2a3 3 0 01-3 3H7a3 3 0 01-3-3v-3z" fill="#27ae60"/></svg>',
+      recorder: '<svg viewBox="0 0 32 32" fill="none"><rect x="11" y="4" width="10" height="16" rx="5" fill="#e74c3c"/><path d="M8 18c0 4.4 3.6 8 8 8s8-3.6 8-8" stroke="#7f8c8d" stroke-width="2" fill="none" stroke-linecap="round"/><line x1="16" y1="26" x2="16" y2="30" stroke="#7f8c8d" stroke-width="2" stroke-linecap="round"/><line x1="12" y1="30" x2="20" y2="30" stroke="#7f8c8d" stroke-width="2" stroke-linecap="round"/></svg>',
+    };
+    var _presetNames = [
+      { key: 'thefeed', en: 'thefeed', fa: 'thefeed', icon: '' },
+      { key: 'weather', en: 'Weather', fa: 'آب و هوا', icon: 'weather' },
+      { key: 'calculator', en: 'Calculator', fa: 'ماشین‌حساب', icon: 'calculator' },
+      { key: 'calendar', en: 'Calendar', fa: 'تقویم', icon: 'calendar' },
+      { key: 'notes', en: 'Notes', fa: 'یادداشت', icon: 'notes' },
+      { key: 'clock', en: 'Clock', fa: 'ساعت', icon: 'clock' },
+      { key: 'camera', en: 'Camera', fa: 'دوربین', icon: 'camera' },
+      { key: 'compass', en: 'Compass', fa: 'قطب‌نما', icon: 'compass' },
+      { key: 'gallery', en: 'Gallery', fa: 'گالری', icon: 'gallery' },
+      { key: 'recorder', en: 'Recorder', fa: 'ضبط صدا', icon: 'recorder' },
+    ];
+
     function initAndroidSettings() {
       if (typeof Android === 'undefined') return;
-      // Show Android-only sections
       document.getElementById('androidAppSection').style.display = '';
       document.getElementById('androidPasswordSection').style.display = '';
-      // Populate current custom name
-      try {
-        var name = Android.getCustomAppName();
-        if (name) document.getElementById('customAppName').value = name;
-      } catch (e) { }
+      // Build preset name grid
+      var grid = document.getElementById('presetNameGrid');
+      var current = '';
+      try { current = Android.getPresetName(); } catch (e) { }
+      grid.innerHTML = '';
+      _presetNames.forEach(function (p) {
+        var btn = document.createElement('button');
+        btn.className = 'preset-btn' + (current === p.key ? ' active-preset' : '');
+        var iconHtml = p.icon && _presetIcons[p.icon] ? _presetIcons[p.icon] : '<svg viewBox="0 0 32 32" fill="none"><rect x="4" y="4" width="24" height="24" rx="6" fill="var(--accent)"/><text x="16" y="21" text-anchor="middle" font-size="14" font-weight="bold" fill="#fff">tf</text></svg>';
+        btn.innerHTML = iconHtml + '<span>' + (currentLang === 'fa' ? p.fa : p.en) + '</span>';
+        btn.onclick = function () { selectPresetName(p.key); };
+        grid.appendChild(btn);
+      });
       // Show correct password section
       try {
         var hasPw = Android.hasPassword();
         document.getElementById('passwordSetSection').style.display = hasPw ? 'none' : '';
         document.getElementById('passwordRemoveSection').style.display = hasPw ? '' : 'none';
+        if (!hasPw) document.getElementById('passwordRemovePrompt').style.display = 'none';
       } catch (e) { }
     }
 
-    var _customIconData = null;
-    (function () {
-      // Listen for icon file selection
-      document.addEventListener('DOMContentLoaded', function () {
-        var inp = document.getElementById('customIconInput');
-        if (!inp) return;
-        inp.addEventListener('change', function () {
-          var file = this.files && this.files[0];
-          if (!file) return;
-          var reader = new FileReader();
-          reader.onload = function (e) {
-            _customIconData = e.target.result;
-            var preview = document.getElementById('customIconPreview');
-            preview.src = _customIconData;
-            preview.style.display = '';
-          };
-          reader.readAsDataURL(file);
-        });
-      });
-    })();
-
-    function applyAppCustomization() {
-      if (typeof Android === 'undefined') return;
-      var name = document.getElementById('customAppName').value.trim() || 'thefeed';
-      if (_customIconData) {
-        try {
-          var ok = Android.setAppIdentity(name, _customIconData);
-          showToast(ok ? t('app_identity_applied') : t('app_identity_failed'));
-        } catch (e) { showToast(t('app_identity_failed')) }
-      } else {
-        // Name-only change (no custom icon)
-        try {
-          Android.setAppIdentity(name, '');
-        } catch (e) { }
-        showToast(t('app_identity_name_only'));
-      }
-    }
-
-    function resetAppCustomization() {
+    function selectPresetName(key) {
       if (typeof Android === 'undefined') return;
       try {
-        Android.resetAppIdentity();
-        document.getElementById('customAppName').value = '';
-        document.getElementById('customIconPreview').style.display = 'none';
-        document.getElementById('customIconInput').value = '';
-        _customIconData = null;
-        showToast(t('app_reset_done'));
+        Android.setPresetName(key === 'thefeed' ? '' : key);
+        var btns = document.querySelectorAll('.preset-btn');
+        var idx = _presetNames.findIndex(function (p) { return p.key === key; });
+        btns.forEach(function (b, i) {
+          b.classList.toggle('active-preset', i === idx);
+        });
+        var preset = _presetNames[idx];
+        var displayName = preset ? (currentLang === 'fa' ? preset.fa : preset.en) : key;
+        showToast(t('app_name_saved') + ' — ' + displayName);
       } catch (e) { }
+    }
+
+    function showPasswordRemovePrompt() {
+      document.getElementById('passwordRemovePrompt').style.display = '';
+      document.getElementById('appPasswordCurrent').value = '';
+      document.getElementById('passwordRemoveError').style.display = 'none';
+    }
+
+    function hidePasswordRemovePrompt() {
+      document.getElementById('passwordRemovePrompt').style.display = 'none';
     }
 
     function setAppPassword() {
@@ -2527,6 +2639,7 @@
       var errEl = document.getElementById('passwordRemoveError');
       errEl.style.display = 'none';
       if (!pw) { errEl.textContent = t('password_empty'); errEl.style.display = ''; return }
+      if (!confirm(t('password_remove_confirm'))) return;
       try {
         var ok = Android.removePassword(pw);
         if (ok) {
@@ -2534,10 +2647,34 @@
           document.getElementById('appPasswordCurrent').value = '';
           document.getElementById('passwordSetSection').style.display = '';
           document.getElementById('passwordRemoveSection').style.display = 'none';
+          document.getElementById('passwordRemovePrompt').style.display = 'none';
         } else {
           errEl.textContent = t('password_wrong');
           errEl.style.display = '';
         }
+      } catch (e) { }
+    }
+
+    function changeAppPassword() {
+      if (typeof Android === 'undefined') return;
+      var pw = document.getElementById('appPasswordCurrent').value;
+      var errEl = document.getElementById('passwordRemoveError');
+      errEl.style.display = 'none';
+      if (!pw) { errEl.textContent = t('password_empty'); errEl.style.display = ''; return }
+      try {
+        var ok = Android.checkPassword(pw);
+        if (!ok) {
+          errEl.textContent = t('password_wrong');
+          errEl.style.display = '';
+          return;
+        }
+        // Remove old and show set section for new password
+        Android.removePassword(pw);
+        document.getElementById('appPasswordCurrent').value = '';
+        document.getElementById('passwordRemoveSection').style.display = 'none';
+        document.getElementById('passwordRemovePrompt').style.display = 'none';
+        document.getElementById('passwordSetSection').style.display = '';
+        showToast(t('password_enter_new'));
       } catch (e) { }
     }
 
@@ -4212,6 +4349,27 @@
         messagesEl.addEventListener('touchcancel', stopAutoScroll);
         messagesEl.addEventListener('mousemove', function (e) { if (e.buttons === 1) handleMove(e.clientY) });
         document.addEventListener('mouseup', stopAutoScroll);
+      });
+    })();
+
+    // Close modals (bottom sheets) when clicking outside
+    (function () {
+      var modalMap = {
+        settingsModal: function () { closeSettings() },
+        profilesModal: function () { closeProfiles() },
+        profileEditorModal: function () { closeProfileEditor && closeProfileEditor() },
+        exportModal: function () { closeExportModal() },
+        resolversModal: function () { closeResolversModal() },
+        scannerModal: function () { closeScanner() },
+        savedResolversModal: function () { savedResolversSkip && savedResolversSkip() },
+      };
+      document.addEventListener('click', function (e) {
+        var overlay = e.target;
+        if (!overlay.classList.contains('modal-overlay') || !overlay.classList.contains('active')) return;
+        // Only close if user clicked directly on the overlay backdrop, not the modal content
+        if (e.target !== overlay) return;
+        var fn = modalMap[overlay.id];
+        if (fn) fn();
       });
     })();
 
