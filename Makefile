@@ -87,7 +87,7 @@ build-android-arm64:
 
 build-android-arm:
 	@mkdir -p $(BUILD_DIR)
-	CGO_ENABLED=0 GOOS=android GOARCH=arm GOARM=7 go build $(GOFLAGS) -o $(BUILD_DIR)/$(BINARY_CLIENT)-android-arm ./cmd/client
+	GOOS=linux GOARCH=arm GOARM=7 go build $(GOFLAGS) -o $(BUILD_DIR)/$(BINARY_CLIENT)-android-arm ./cmd/client
 
 # UPX compression (requires upx in PATH) — only for Linux/Windows binaries
 upx:

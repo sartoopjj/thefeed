@@ -42,9 +42,10 @@ jobs:
             goarch: amd64
           - goos: android
             goarch: arm64
-          - goos: android
+          - goos: linux
             goarch: arm
             goarm: '7'
+            android_arm: true
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -56,7 +57,7 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y upx-ucl
 
       - name: Build Server
-        if: matrix.goos != 'android'
+        if: matrix.goos != 'android' && !matrix.android_arm
         env:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
@@ -83,7 +84,12 @@ jobs:
           LDFLAGS="-s -w -X github.com/sartoopjj/thefeed/internal/version.Version=${VERSION} -X github.com/sartoopjj/thefeed/internal/version.Commit=${COMMIT} -X github.com/sartoopjj/thefeed/internal/version.Date=${DATE}"
           ext=""
           if [ "${{ matrix.goos }}" = "windows" ]; then ext=".exe"; fi
-          go build -trimpath -ldflags="${LDFLAGS}" -o build/thefeed-client-${{ matrix.goos }}-${{ matrix.goarch }}${ext} ./cmd/client
+          if [ "${{ matrix.android_arm }}" = "true" ]; then
+            out="build/thefeed-client-android-arm"
+          else
+            out="build/thefeed-client-${{ matrix.goos }}-${{ matrix.goarch }}${ext}"
+          fi
+          go build -trimpath -ldflags="${LDFLAGS}" -o "$out" ./cmd/client
 
       - name: Compress with UPX
         if: matrix.goos == 'linux' || matrix.goos == 'windows'
