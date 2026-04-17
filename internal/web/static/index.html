@@ -3204,7 +3204,7 @@
           html += '<div class="poll-option">' + esc(ln) + '</div>';
           hasContent = true;
         } else if (ln.trim()) {
-          html += '<div>' + linkify(esc(ln)) + '</div>';
+          html += '<div>' + linkify(ln) + '</div>';
           hasContent = true;
         }
       }
@@ -3255,7 +3255,7 @@
         var timeStr = ts.toLocaleTimeString(dateLocale, { hour: '2-digit', minute: '2-digit' });
         var text = msg.Text || msg.text || '';
         currentMsgTexts.push(text);
-        var mediaHtml = '', textHtml = linkify(esc(text)).replace(/\uD83C\uDDEE\uD83C\uDDF7/g, '<img src="/static/iran-lion-sun.svg" alt="\u{1F981}\u2600\uFE0F" style="height:1.1em;vertical-align:middle">');
+        var mediaHtml = '', textHtml = linkify(text).replace(/\uD83C\uDDEE\uD83C\uDDF7/g, '<img src="/static/iran-lion-sun.svg" alt="\u{1F981}\u2600\uFE0F" style="height:1.1em;vertical-align:middle">');
         // Check for [REPLY]:ID or [REPLY] format (backward compat: also [REPLY:ID])
         var replyMatch = text.match(/^\[REPLY\](?::(\d+))?/) || text.match(/^\[REPLY:(\d+)\]/);
         if (replyMatch) {
@@ -3269,7 +3269,7 @@
             textHtml = renderPollCard(rpPollBody);
             mediaHtml += '<div class="media-tag">[POLL]</div>';
           } else {
-            textHtml = linkify(esc(replyBody)).replace(/\uD83C\uDDEE\uD83C\uDDF7/g, '<img src="/static/iran-lion-sun.svg" alt="\u{1F981}\u2600\uFE0F" style="height:1.1em;vertical-align:middle">');
+            textHtml = linkify(replyBody).replace(/\uD83C\uDDEE\uD83C\uDDF7/g, '<img src="/static/iran-lion-sun.svg" alt="\u{1F981}\u2600\uFE0F" style="height:1.1em;vertical-align:middle">');
           }
           if (replyId > 0 && msgByID[replyId]) {
             var rpText = (msgByID[replyId].Text || msgByID[replyId].text || '').replace(/^\[(?:IMAGE|VIDEO|FILE|AUDIO|STICKER|GIF|POLL|CONTACT|LOCATION|REPLY)[^\]]*\](?::\d+)?\n?/, '');
@@ -3287,7 +3287,7 @@
           for (var m = 0; m < mediaTypes.length; m++) {
             if (text.indexOf(mediaTypes[m]) === 0) {
               mediaHtml = '<div class="media-tag">' + mediaTypes[m] + '</div>';
-              textHtml = linkify(esc(text.substring(mediaTypes[m].length).replace(/^\n/, ''))).replace(/\uD83C\uDDEE\uD83C\uDDF7/g, '<img src="/static/iran-lion-sun.svg" alt="\u{1F981}\u2600\uFE0F" style="height:1.1em;vertical-align:middle">'); break
+              textHtml = linkify(text.substring(mediaTypes[m].length).replace(/^\n/, '')).replace(/\uD83C\uDDEE\uD83C\uDDF7/g, '<img src="/static/iran-lion-sun.svg" alt="\u{1F981}\u2600\uFE0F" style="height:1.1em;vertical-align:middle">'); break
             }
           }
         }
@@ -3608,20 +3608,31 @@
     // ===== UTILITIES =====
     function esc(s) { var d = document.createElement('div'); d.appendChild(document.createTextNode(s)); return d.innerHTML }
     function escAttr(s) { return esc(s).replace(/"/g, '&quot;').replace(/'/g, '&#39;') }
-    function linkify(s) {
-      return s.replace(/(https?:\/\/[^\s<>&"']+)/g, function(url) {
-        var trail = '';
-        // Strip trailing punctuation that's not part of the URL
-        while (url.length > 1) {
-          var ch = url[url.length - 1];
-          if (ch === ')' && url.split('(').length <= url.split(')').length - 1) {
-            trail = ch + trail; url = url.slice(0, -1);
-          } else if (/[.,;:!?>\u200C\u200F]/.test(ch)) {
-            trail = ch + trail; url = url.slice(0, -1);
-          } else { break }
+    function linkify(raw) {
+      // Accepts raw (unescaped) text. Handles [label](url) markdown links and
+      // plain URLs. Escapes HTML in non-URL segments so & in URLs is preserved.
+      var result = '', last = 0, m;
+      var re = /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)|(https?:\/\/[^\s<>"']+)/g;
+      while ((m = re.exec(raw)) !== null) {
+        result += esc(raw.slice(last, m.index));
+        if (m[2]) {
+          result += '<a href="' + escAttr(m[2]) + '" target="_blank" rel="noopener" dir="ltr">' + esc(m[1]) + '</a>';
+        } else {
+          var url = m[3], trail = '';
+          while (url.length > 1) {
+            var ch = url[url.length - 1];
+            if (ch === ')' && url.split('(').length <= url.split(')').length - 1) {
+              trail = ch + trail; url = url.slice(0, -1);
+            } else if (/[.,;:!?>\u200C\u200F]/.test(ch)) {
+              trail = ch + trail; url = url.slice(0, -1);
+            } else { break; }
+          }
+          result += '<a href="' + escAttr(url) + '" target="_blank" rel="noopener" dir="ltr">' + esc(url) + '</a>' + esc(trail);
         }
-        return '<a href="' + escAttr(url) + '" target="_blank" rel="noopener" dir="ltr">' + url + '</a>' + trail;
-      });
+        last = m.index + m[0].length;
+      }
+      result += esc(raw.slice(last));
+      return result;
     }
     function scrollToMsg(id) {
       var els = document.querySelectorAll('.msg');
