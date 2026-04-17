@@ -455,7 +455,7 @@ func extractMessageText(n *html.Node) string {
 						b.WriteByte(' ')
 					}
 				}
-				b.WriteString(linkText + " (" + href + ")")
+				b.WriteString("[" + linkText + "](" + href + ")")
 				return // skip walking children, already consumed
 			} else if href != "" && (linkText == "" || linkText == href) {
 				if b.Len() > 0 {
