@@ -329,6 +329,19 @@
       text-overflow: ellipsis
     }
 
+    .ch-sub {
+      font-size: 11px;
+      color: var(--text-dim);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      opacity: .7
+    }
+
+    .ch-item.active .ch-sub {
+      color: rgba(255,255,255,.75)
+    }
+
     .ch-badge {
       background: #fff;
       color: var(--accent);
@@ -1453,6 +1466,42 @@
     }
 
     /* ===== MOBILE ===== */
+    .header-kebab {
+      position: relative;
+      display: none
+    }
+
+    .header-kebab-menu {
+      position: absolute;
+      right: 0;
+      top: calc(100% + 4px);
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      box-shadow: 0 4px 16px rgba(0,0,0,.2);
+      min-width: 150px;
+      z-index: 100;
+      display: none;
+      flex-direction: column;
+      overflow: hidden
+    }
+
+    .header-kebab-menu.open { display: flex }
+
+    .header-kebab-menu button {
+      width: 100%;
+      padding: 11px 16px;
+      background: none;
+      border: none;
+      color: var(--text);
+      font-size: 13px;
+      font-family: inherit;
+      cursor: pointer;
+      text-align: left
+    }
+
+    .header-kebab-menu button:hover { background: var(--hover) }
+
     @media(max-width:768px) {
       .app {
         position: relative;
@@ -1493,6 +1542,10 @@
       .back-btn {
         display: flex
       }
+
+      .header-search-btn, .header-export-btn { display: none }
+
+      .header-kebab { display: flex }
 
       .msg {
         max-width: 90%
@@ -1569,17 +1622,25 @@
         <button class="back-btn" onclick="openSidebar()">&#8592;</button>
         <div class="chat-header-info">
           <div class="chat-header-name" id="chatName">thefeed</div>
+          <div class="chat-header-sub" id="chatSub"></div>
         </div>
         <div class="chat-header-actions">
           <span class="next-fetch-label" id="nextFetchTimer"></span><span class="next-fetch-info" id="nextFetchInfoBtn"
             style="display:none" data-i18n-title="next_fetch_info" title="" onclick="showToast(t('next_fetch_info'))"
             tabindex="0">ⓘ</span>
-          <button class="icon-btn" onclick="toggleMsgSearch()" title="Search" data-i18n-title="search_messages"
+          <button class="icon-btn header-search-btn" onclick="toggleMsgSearch()" title="Search" data-i18n-title="search_messages"
             style="width:auto;height:30px;font-size:12px;padding:0 10px;border-radius:8px;border:1px solid var(--border);background:var(--surface)" data-i18n="search_messages">Search</button>
-          <button class="icon-btn" onclick="openExportModal()" title="Export" data-i18n-title="export_messages"
+          <button class="icon-btn header-export-btn" onclick="openExportModal()" title="Export" data-i18n-title="export_messages"
             style="width:auto;height:30px;font-size:12px;padding:0 10px;border-radius:8px;border:1px solid var(--border);background:var(--surface)" data-i18n="export_messages">Export</button>
           <button class="icon-btn" id="refreshBtn" onclick="doRefreshUI()" title="Refresh"
             style="width:40px;height:40px;font-size:20px">&#8635;</button>
+          <div class="header-kebab" id="headerKebab">
+            <button class="icon-btn" onclick="toggleKebabMenu(event)" title="More" style="width:40px;height:40px;font-size:20px">&#8942;</button>
+            <div class="header-kebab-menu" id="headerKebabMenu">
+              <button onclick="toggleMsgSearch();closeKebabMenu()" data-i18n="search_messages">Search</button>
+              <button onclick="openExportModal();closeKebabMenu()" data-i18n="export_messages">Export</button>
+            </div>
+          </div>
         </div>
       </div>
       <div class="msg-search-bar" id="msgSearchBar">
@@ -3085,7 +3146,8 @@
         var needsFullRebuild = false;
         for (var ci = 0; ci < channels.length; ci++) {
           var ch = channels[ci], nm = ch.Name || ch.name || 'Channel ' + (ci + 1);
-          if (existingItems[ci].dataset.name !== nm) { needsFullRebuild = true; break }
+          var lbl = ch.DisplayName || ch.displayName || nm;
+          if (existingItems[ci].dataset.name !== nm || existingItems[ci].dataset.label !== lbl) { needsFullRebuild = true; break }
         }
         if (!needsFullRebuild) {
           for (var ui = 0; ui < channels.length; ui++) {
@@ -3113,21 +3175,24 @@
         if (title) h += '<div class="channel-section-title">' + esc(title) + '</div>';
         for (var j = 0; j < items.length; j++) {
           var e = items[j], num2 = e.idx + 1;
-          var name = e.ch.Name || e.ch.name || 'Channel ' + num2;
+          var handle = e.ch.Name || e.ch.name || 'Channel ' + num2;
+          var label = e.ch.DisplayName || e.ch.displayName || handle;
           var ct2 = e.ch.ChatType || e.ch.chatType || 0;
           var isPriv = e.ch.ChatType === 1 || e.ch.chatType === 1;
           var isX = ct2 === 2;
-          var avatarName = name;
-          if (isX && avatarName.toLowerCase().indexOf('x/') === 0) avatarName = avatarName.substring(2);
+          var avatarName = label;
+          if (isX && handle.toLowerCase().indexOf('x/') === 0) avatarName = handle.substring(2);
           if (avatarName.charAt(0) === '@') avatarName = avatarName.substring(1);
           var avatarText = (avatarName || '?').charAt(0).toUpperCase();
           var active = num2 === selectedChannel ? ' active' : '';
           var lastID = e.ch.LastMsgID || e.ch.lastMsgID || 0;
           var chNm2 = e.ch.Name || e.ch.name || '';
           var badge = (previousMsgIDs[chNm2] > 0 && lastID > previousMsgIDs[chNm2] && num2 !== selectedChannel) ? '<span class="ch-badge">NEW</span>' : '';
-          h += '<div class="ch-item' + active + '" data-name="' + escAttr(name) + '" onclick="selectChannel(' + num2 + ')">';
+          h += '<div class="ch-item' + active + '" data-name="' + escAttr(handle) + '" data-label="' + escAttr(label) + '" onclick="selectChannel(' + num2 + ')">';
           h += '<div class="ch-avatar">' + esc(avatarText) + '</div>';
-          h += '<div class="ch-info"><div class="ch-name">' + esc(name) + (isPriv ? '<span class="ch-type-tag">' + t('private') + '</span>' : (isX ? '<span class="ch-type-tag x-tag">' + t('x_label') + '</span>' : '')) + '</div>';
+          var chSubText = !isX ? (handle.charAt(0) === '@' ? handle : '@' + handle) : '';
+          h += '<div class="ch-info"><div class="ch-name">' + esc(label) + (isPriv ? '<span class="ch-type-tag">' + t('private') + '</span>' : (isX ? '<span class="ch-type-tag x-tag">' + t('x_label') + '</span>' : '')) + '</div>';
+          if (chSubText) h += '<div class="ch-sub">' + esc(chSubText) + '</div>';
           h += '<div class="ch-preview">' + badge + '</div></div></div>';
         }
         return h;
@@ -3154,8 +3219,12 @@
       currentMaxTimestamp = 0;
       newMsgScrollDone = false;
       openChat();
-      var ch = channels[num - 1]; var name = (ch && (ch.Name || ch.name)) || 'Channel ' + num;
+      var ch = channels[num - 1]; var name = (ch && (ch.DisplayName || ch.displayName || ch.Name || ch.name)) || 'Channel ' + num;
       document.getElementById('chatName').textContent = name;
+      var chHandle = (ch && (ch.Name || ch.name)) || '';
+      var isXCh = ch && (ch.ChatType || ch.chatType) === 2;
+      var subHandle = (!isXCh && chHandle) ? (chHandle.charAt(0) === '@' ? chHandle : '@' + chHandle) : '';
+      document.getElementById('chatSub').textContent = subHandle;
       renderChannels(); updateSendPanel();
       document.getElementById('messages').innerHTML = '<div class="empty-state"><p>' + t('loading') + '</p></div>';
       document.getElementById('scrollDownBtn').classList.remove('visible');
@@ -3991,6 +4060,16 @@
         .replace(/[\u064B-\u065F\u0610-\u061A\u0670]/g, '') // strip tashkil/diacritics
         .replace(/[\u200C\u200D\u200E\u200F]/g, '') // strip ZWNJ, ZWJ, directional marks
     }
+    function toggleKebabMenu(e) {
+      e.stopPropagation();
+      document.getElementById('headerKebabMenu').classList.toggle('open');
+    }
+    function closeKebabMenu() {
+      var m = document.getElementById('headerKebabMenu');
+      if (m) m.classList.remove('open');
+    }
+    document.addEventListener('click', closeKebabMenu);
+
     function toggleMsgSearch() {
       var bar = document.getElementById('msgSearchBar');
       if (bar.classList.contains('active')) { closeMsgSearch(); return }

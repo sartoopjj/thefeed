@@ -14,6 +14,7 @@ type Feed struct {
 	mu               sync.RWMutex
 	marker           [protocol.MarkerSize]byte
 	channels         []string
+	displayNames     map[int]string
 	blocks           map[int][][]byte
 	lastIDs          map[int]uint32
 	contentHashes    map[int]uint32
@@ -21,6 +22,7 @@ type Feed struct {
 	canSend          map[int]bool
 	metaBlocks       [][]byte // metadata for all channels
 	versionBlocks    [][]byte // channel for latest server-known release version
+	titlesBlocks     [][]byte // channel for per-channel display names
 	updated          time.Time
 	telegramLoggedIn bool
 	nextFetch        uint32
@@ -31,6 +33,7 @@ type Feed struct {
 func NewFeed(channels []string) *Feed {
 	f := &Feed{
 		channels:      channels,
+		displayNames:  make(map[int]string),
 		blocks:        make(map[int][][]byte),
 		lastIDs:       make(map[int]uint32),
 		contentHashes: make(map[int]uint32),
@@ -40,6 +43,7 @@ func NewFeed(channels []string) *Feed {
 	f.rotateMarker()
 	f.rebuildMetaBlocks()
 	f.rebuildVersionBlocks()
+	f.rebuildTitlesBlocks()
 	return f
 }
 
@@ -80,6 +84,9 @@ func (f *Feed) GetBlock(channel, block int) ([]byte, error) {
 	}
 	if channel == int(protocol.VersionChannel) {
 		return f.getVersionBlock(block)
+	}
+	if channel == int(protocol.TitlesChannel) {
+		return f.getTitlesBlock(block)
 	}
 
 	ch, ok := f.blocks[channel]
@@ -146,6 +153,38 @@ func (f *Feed) rebuildMetaBlocks() {
 	f.metaBlocks = protocol.SplitIntoBlocks(protocol.SerializeMetadata(&meta))
 }
 
+func (f *Feed) getTitlesBlock(block int) ([]byte, error) {
+	blocks := f.titlesBlocks
+	if len(blocks) == 0 {
+		f.rebuildTitlesBlocks()
+		blocks = f.titlesBlocks
+	}
+	if block < 0 || block >= len(blocks) {
+		return nil, fmt.Errorf("titles block %d out of range (%d blocks)", block, len(blocks))
+	}
+	return blocks[block], nil
+}
+
+// rebuildTitlesBlocks re-serializes the display name map and splits it into blocks.
+// Block 0 is prefixed with a uint16 total-block count so the client can fetch all
+// remaining blocks in parallel after reading the first one.
+// Must be called with f.mu held.
+func (f *Feed) rebuildTitlesBlocks() {
+	titles := make(map[string]string, len(f.channels))
+	for i, name := range f.channels {
+		chNum := i + 1
+		if dn := f.displayNames[chNum]; dn != "" {
+			titles[name] = dn
+		}
+	}
+	blocks := protocol.SplitIntoBlocks(protocol.EncodeTitlesData(titles))
+	if len(blocks) > 0 {
+		prefix := []byte{byte(len(blocks) >> 8), byte(len(blocks))}
+		blocks[0] = append(prefix, blocks[0]...)
+	}
+	f.titlesBlocks = blocks
+}
+
 func (f *Feed) rebuildVersionBlocks() {
 	block, err := protocol.EncodeVersionData(f.latestVersion)
 	if err != nil {
@@ -209,4 +248,22 @@ func (f *Feed) SetChannels(channels []string) {
 	defer f.mu.Unlock()
 	f.channels = channels
 	f.rebuildMetaBlocks()
+}
+
+// SetChannelDisplayName stores a human-readable title for a channel (1-indexed).
+// It never mutates the handle in f.channels, which remains the stable identifier.
+func (f *Feed) SetChannelDisplayName(channelNum int, displayName string) {
+	if displayName == "" {
+		return
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if channelNum < 1 || channelNum > len(f.channels) {
+		return
+	}
+	if f.displayNames[channelNum] == displayName {
+		return
+	}
+	f.displayNames[channelNum] = displayName
+	f.rebuildTitlesBlocks()
 }

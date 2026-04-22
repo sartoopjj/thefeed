@@ -123,7 +123,7 @@ func (pr *PublicReader) fetchAll(ctx context.Context) {
 			continue
 		}
 
-		msgs, err := pr.fetchChannel(ctx, username)
+		msgs, title, err := pr.fetchChannel(ctx, username)
 		if err != nil {
 			log.Printf("[public] fetch %s: %v", username, err)
 			failed++
@@ -144,34 +144,52 @@ func (pr *PublicReader) fetchAll(ctx context.Context) {
 
 		pr.feed.UpdateChannel(chNum, msgs)
 		pr.feed.SetChatInfo(chNum, protocol.ChatTypeChannel, false)
+		pr.feed.SetChannelDisplayName(chNum, title)
 		fetched++
-		log.Printf("[public] updated %s: %d messages", username, len(msgs))
+		log.Printf("[public] updated %s (%s): %d messages", username, title, len(msgs))
 	}
 	log.Printf("[public] fetch cycle done in %s: %d fetched, %d failed, %d total", time.Since(start).Round(time.Millisecond), fetched, failed, len(pr.channels))
 }
 
-func (pr *PublicReader) fetchChannel(ctx context.Context, username string) ([]protocol.Message, error) {
+func (pr *PublicReader) fetchChannel(ctx context.Context, username string) ([]protocol.Message, string, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, pr.baseURL+"/"+url.PathEscape(username), nil)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	req.Header.Set("User-Agent", "Mozilla/5.0 (compatible; thefeed/1.0; +https://github.com/sartoopjj/thefeed)")
 
 	resp, err := pr.client.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("unexpected HTTP status: %s", resp.Status)
+		return nil, "", fmt.Errorf("unexpected HTTP status: %s", resp.Status)
 	}
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
-	return parsePublicMessages(body)
+	msgs, err := parsePublicMessages(body)
+	if err != nil {
+		return nil, "", err
+	}
+	return msgs, extractChannelTitle(body), nil
+}
+
+// extractChannelTitle parses the channel display name from the Telegram public page.
+func extractChannelTitle(body []byte) string {
+	doc, err := html.Parse(strings.NewReader(string(body)))
+	if err != nil {
+		return ""
+	}
+	titleNode := findFirstByClass(doc, "tgme_channel_info_header_title")
+	if titleNode == nil {
+		return ""
+	}
+	return strings.TrimSpace(extractInnerText(titleNode))
 }
 
 type publicMessage struct {

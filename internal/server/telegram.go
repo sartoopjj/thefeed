@@ -79,6 +79,7 @@ type resolvedPeer struct {
 	peer     tg.InputPeerClass
 	chatType protocol.ChatType
 	canSend  bool
+	title    string
 }
 
 type cachedMessages struct {
@@ -267,8 +268,9 @@ func (tr *TelegramReader) fetchAll(ctx context.Context, api *tg.Client) {
 		// Update feed with messages and chat type info
 		tr.feed.UpdateChannel(chNum, msgs)
 		tr.feed.SetChatInfo(chNum, rp.chatType, rp.canSend)
+		tr.feed.SetChannelDisplayName(chNum, rp.title)
 		fetched++
-		log.Printf("[telegram] updated %s: %d messages (type=%d, canSend=%v)", username, len(msgs), rp.chatType, rp.canSend)
+		log.Printf("[telegram] updated %s (%s): %d messages (type=%d, canSend=%v)", username, rp.title, len(msgs), rp.chatType, rp.canSend)
 	}
 	log.Printf("[telegram] fetch cycle done in %s: %d fetched, %d failed, %d total", time.Since(start).Round(time.Millisecond), fetched, failed, len(tr.channels))
 }
@@ -294,6 +296,7 @@ func (tr *TelegramReader) resolvePeer(ctx context.Context, api *tg.Client, usern
 				},
 				chatType: protocol.ChatTypeChannel,
 				canSend:  canSend,
+				title:    ch.Title,
 			}, nil
 		}
 	}
@@ -308,6 +311,7 @@ func (tr *TelegramReader) resolvePeer(ctx context.Context, api *tg.Client, usern
 				},
 				chatType: protocol.ChatTypePrivate,
 				canSend:  true,
+				title:    user.FirstName,
 			}, nil
 		}
 	}

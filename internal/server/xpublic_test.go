@@ -24,7 +24,7 @@ func TestParseXRSSMessages(t *testing.T) {
   </item>
 </channel></rss>`)
 
-	msgs, err := parseXRSSMessages(body, "test")
+	msgs, _, err := parseXRSSMessages(body, "test")
 	if err != nil {
 		t.Fatalf("parseXRSSMessages: %v", err)
 	}
@@ -51,7 +51,7 @@ func TestParseXRSSMessages_MediaOnlyFallback(t *testing.T) {
   </item>
 </channel></rss>`)
 
-	msgs, err := parseXRSSMessages(body, "test")
+	msgs, _, err := parseXRSSMessages(body, "test")
 	if err != nil {
 		t.Fatalf("parseXRSSMessages: %v", err)
 	}
@@ -75,7 +75,7 @@ func TestParseXRSSMessages_AlternateIDFormat(t *testing.T) {
   </item>
 </channel></rss>`)
 
-	msgs, err := parseXRSSMessages(body, "test")
+	msgs, _, err := parseXRSSMessages(body, "test")
 	if err != nil {
 		t.Fatalf("parseXRSSMessages: %v", err)
 	}
@@ -161,7 +161,7 @@ func TestParseXRSSMessages_Retweet(t *testing.T) {
   </item>
 </channel></rss>`)
 
-	msgs, err := parseXRSSMessages(body, "myaccount")
+	msgs, _, err := parseXRSSMessages(body, "myaccount")
 	if err != nil {
 		t.Fatalf("parseXRSSMessages: %v", err)
 	}
@@ -186,7 +186,7 @@ func TestParseXRSSMessages_RetweetByFormat(t *testing.T) {
   </item>
 </channel></rss>`)
 
-	msgs, err := parseXRSSMessages(body, "myaccount")
+	msgs, _, err := parseXRSSMessages(body, "myaccount")
 	if err != nil {
 		t.Fatalf("parseXRSSMessages: %v", err)
 	}
@@ -211,7 +211,7 @@ func TestParseXRSSMessages_QuoteTweet(t *testing.T) {
   </item>
 </channel></rss>`)
 
-	msgs, err := parseXRSSMessages(body, "account")
+	msgs, _, err := parseXRSSMessages(body, "account")
 	if err != nil {
 		t.Fatalf("parseXRSSMessages: %v", err)
 	}
@@ -241,7 +241,7 @@ func TestParseXRSSMessages_PureRetweet(t *testing.T) {
   </item>
 </channel></rss>`)
 
-	msgs, err := parseXRSSMessages(body, "RezaVaisi")
+	msgs, _, err := parseXRSSMessages(body, "RezaVaisi")
 	if err != nil {
 		t.Fatalf("parseXRSSMessages: %v", err)
 	}

@@ -54,8 +54,10 @@ type Cache struct {
 }
 
 type cachedChannel struct {
-	Messages  []protocol.Message `json:"messages"`
-	FetchedAt int64              `json:"fetched_at"`
+	Name        string             `json:"name,omitempty"`
+	Messages    []protocol.Message `json:"messages"`
+	FetchedAt   int64              `json:"fetched_at"`
+	DisplayName string             `json:"display_name,omitempty"`
 }
 
 type cachedMeta struct {
@@ -157,6 +159,55 @@ func (c *Cache) PutMetadata(meta *protocol.Metadata) error {
 		return err
 	}
 	return os.WriteFile(filepath.Join(c.dir, "metadata.json"), data, 0600)
+}
+
+// GetAllTitles reads the display name from every ch_*.json cache file and returns
+// a map of original channel name → display name. Files without a stored name or
+// display name are skipped silently.
+func (c *Cache) GetAllTitles() map[string]string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	entries, err := os.ReadDir(c.dir)
+	if err != nil {
+		return nil
+	}
+	titles := make(map[string]string)
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasPrefix(e.Name(), "ch_") || !strings.HasSuffix(e.Name(), ".json") {
+			continue
+		}
+		data, err := os.ReadFile(filepath.Join(c.dir, e.Name()))
+		if err != nil {
+			continue
+		}
+		var cc cachedChannel
+		if json.Unmarshal(data, &cc) != nil || cc.Name == "" || cc.DisplayName == "" {
+			continue
+		}
+		titles[cc.Name] = cc.DisplayName
+	}
+	return titles
+}
+
+// PutTitle persists a display name for a channel into its cache file.
+// If the file already exists it is updated in-place so that stored messages are preserved.
+func (c *Cache) PutTitle(channelName, title string) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	path := c.channelPath(channelName)
+	var cc cachedChannel
+	if data, err := os.ReadFile(path); err == nil {
+		_ = json.Unmarshal(data, &cc)
+	}
+	cc.Name = channelName
+	cc.DisplayName = title
+	data, err := json.Marshal(cc)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, data, 0600)
 }
 
 // Cleanup removes channel cache files (ch_*.json) not modified in 7 days.

@@ -130,6 +130,12 @@ type Server struct {
 	stopRefresh chan struct{}
 
 	scanner *client.ResolverScanner
+
+	// titlesMu guards the background title-fetch state.
+	// Only one goroutine fetches titles at a time; errors impose a 5-minute backoff.
+	titlesMu           sync.Mutex
+	titlesLoading      bool
+	titlesBackoffUntil time.Time
 }
 
 // New creates a new web server.
@@ -999,8 +1005,19 @@ func (s *Server) refreshMetadataOnly() {
 		return
 	}
 
+	channels := meta.Channels
+	if cache != nil {
+		if cached := cache.GetAllTitles(); len(cached) > 0 {
+			for i := range channels {
+				if t := cached[channels[i].Name]; t != "" {
+					channels[i].DisplayName = t
+				}
+			}
+		}
+	}
+
 	s.mu.Lock()
-	s.channels = meta.Channels
+	s.channels = channels
 	s.telegramLoggedIn = meta.TelegramLoggedIn
 	s.nextFetch = meta.NextFetch
 	s.metaFetchedAt = time.Now()
@@ -1011,6 +1028,82 @@ func (s *Server) refreshMetadataOnly() {
 	}
 
 	s.broadcast("event: update\ndata: \"channels\"\n\n")
+
+	needsFetch := false
+	for _, ch := range channels {
+		if ch.DisplayName == "" {
+			needsFetch = true
+			break
+		}
+	}
+	if needsFetch {
+		go s.ensureTitlesFetched(basectx)
+	}
+}
+
+// ensureTitlesFetched fetches channel display names from TitlesChannel in the background.
+// At most one fetch runs at a time; errors impose a 5-minute backoff so that an
+// outdated server does not cause endless retries.
+func (s *Server) ensureTitlesFetched(ctx context.Context) {
+	s.titlesMu.Lock()
+	if s.titlesLoading || time.Now().Before(s.titlesBackoffUntil) {
+		s.titlesMu.Unlock()
+		return
+	}
+	s.titlesLoading = true
+	s.titlesMu.Unlock()
+
+	defer func() {
+		s.titlesMu.Lock()
+		s.titlesLoading = false
+		s.titlesMu.Unlock()
+	}()
+
+	s.mu.RLock()
+	fetcher := s.fetcher
+	cache := s.cache
+	s.mu.RUnlock()
+
+	if fetcher == nil {
+		return
+	}
+
+	titles, err := fetcher.FetchTitles(ctx)
+	if err != nil && ctx.Err() == nil {
+		s.titlesMu.Lock()
+		s.titlesBackoffUntil = time.Now().Add(5 * time.Minute)
+		s.titlesMu.Unlock()
+		return
+	}
+	if len(titles) == 0 {
+		// Server doesn't support TitlesChannel or has no titles yet; back off.
+		s.titlesMu.Lock()
+		s.titlesBackoffUntil = time.Now().Add(5 * time.Minute)
+		s.titlesMu.Unlock()
+		return
+	}
+
+	if cache != nil {
+		for name, title := range titles {
+			_ = cache.PutTitle(name, title)
+		}
+	}
+
+	s.mu.Lock()
+	channels := s.channels
+	updated := false
+	for i := range channels {
+		if t, ok := titles[channels[i].Name]; ok && t != "" && channels[i].DisplayName != t {
+			channels[i].DisplayName = t
+			updated = true
+		}
+	}
+	s.channels = channels
+	s.mu.Unlock()
+
+	if updated {
+		s.broadcast("event: update\ndata: \"channels\"\n\n")
+	}
 }
 
 func (s *Server) refreshChannel(channelNum int) {
@@ -1088,8 +1181,19 @@ func (s *Server) refreshChannel(channelNum int) {
 			}
 			return
 		}
+		channels := meta.Channels
+		if cache != nil {
+			if cached := cache.GetAllTitles(); len(cached) > 0 {
+				for i := range channels {
+					if t := cached[channels[i].Name]; t != "" {
+						channels[i].DisplayName = t
+					}
+				}
+			}
+		}
+		meta.Channels = channels
 		s.mu.Lock()
-		s.channels = meta.Channels
+		s.channels = channels
 		s.telegramLoggedIn = meta.TelegramLoggedIn
 		s.nextFetch = meta.NextFetch
 		s.metaFetchedAt = time.Now()
@@ -1098,6 +1202,16 @@ func (s *Server) refreshChannel(channelNum int) {
 			_ = cache.PutMetadata(meta)
 		}
 		s.broadcast("event: update\ndata: \"channels\"\n\n")
+		needsFetch := false
+		for _, ch := range channels {
+			if ch.DisplayName == "" {
+				needsFetch = true
+				break
+			}
+		}
+		if needsFetch {
+			go s.ensureTitlesFetched(basectx)
+		}
 	}
 
 	channels := meta.Channels

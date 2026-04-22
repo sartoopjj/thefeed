@@ -184,11 +184,15 @@ func (xr *XPublicReader) fetchAll(ctx context.Context) {
 			continue
 		}
 
-		msgs, err := xr.fetchAccount(ctx, account)
+		msgs, title, err := xr.fetchAccount(ctx, account)
 		if err != nil {
 			log.Printf("[x] fetch @%s: all instances failed: %v", account, err)
 			failed++
 			continue
+		}
+
+		if title != "" {
+			xr.feed.SetChannelDisplayName(chNum, title)
 		}
 
 		if ok && len(cached.msgs) > 0 {
@@ -209,7 +213,7 @@ func (xr *XPublicReader) fetchAll(ctx context.Context) {
 	log.Printf("[x] fetch cycle done in %s: %d fetched, %d failed, %d total", time.Since(start).Round(time.Millisecond), fetched, failed, len(xr.accounts))
 }
 
-func (xr *XPublicReader) fetchAccount(ctx context.Context, username string) ([]protocol.Message, error) {
+func (xr *XPublicReader) fetchAccount(ctx context.Context, username string) ([]protocol.Message, string, error) {
 	var lastErr error
 	for _, instance := range xr.instances {
 		u := strings.TrimSuffix(instance, "/") + "/" + url.PathEscape(username) + "/rss"
@@ -243,7 +247,7 @@ func (xr *XPublicReader) fetchAccount(ctx context.Context, username string) ([]p
 			continue
 		}
 
-		msgs, err := parseXRSSMessages(body, username)
+		msgs, title, err := parseXRSSMessages(body, username)
 		if err != nil {
 			log.Printf("[x] @%s: instance %s: parse error: %v", username, instance, err)
 			lastErr = fmt.Errorf("%s: %w", instance, err)
@@ -262,16 +266,17 @@ func (xr *XPublicReader) fetchAccount(ctx context.Context, username string) ([]p
 			lastErr = fmt.Errorf("%s: all %d messages were garbled", instance, len(msgs))
 			continue
 		}
-		return cleaned, nil
+		return cleaned, title, nil
 	}
 	if lastErr == nil {
 		lastErr = fmt.Errorf("no Nitter instances configured")
 	}
-	return nil, lastErr
+	return nil, "", lastErr
 }
 
 type xRSS struct {
 	Channel struct {
+		Title string     `xml:"title"`
 		Items []xRSSItem `xml:"item"`
 	} `xml:"channel"`
 }
@@ -285,15 +290,17 @@ type xRSSItem struct {
 	PubDate     string `xml:"pubDate"`
 }
 
-func parseXRSSMessages(body []byte, feedUser string) ([]protocol.Message, error) {
+func parseXRSSMessages(body []byte, feedUser string) ([]protocol.Message, string, error) {
 	body = sanitizeUTF8(body)
 	var feed xRSS
 	if err := xml.Unmarshal(body, &feed); err != nil {
-		return nil, fmt.Errorf("parse rss: %w", err)
+		return nil, "", fmt.Errorf("parse rss: %w", err)
 	}
 	if len(feed.Channel.Items) == 0 {
-		return nil, fmt.Errorf("empty rss feed")
+		return nil, "", fmt.Errorf("empty rss feed")
 	}
+
+	title := strings.TrimSpace(feed.Channel.Title)
 
 	feedUserLower := strings.ToLower(strings.TrimPrefix(feedUser, "@"))
 	msgs := make([]protocol.Message, 0, len(feed.Channel.Items))
@@ -325,9 +332,9 @@ func parseXRSSMessages(body []byte, feedUser string) ([]protocol.Message, error)
 		msgs = append(msgs, protocol.Message{ID: id, Timestamp: ts, Text: text})
 	}
 	if len(msgs) == 0 {
-		return nil, fmt.Errorf("no parseable posts")
+		return nil, "", fmt.Errorf("no parseable posts")
 	}
-	return msgs, nil
+	return msgs, title, nil
 }
 
 // extractLinkUsername extracts the username from a Nitter/X status URL.

@@ -81,6 +81,7 @@ type Metadata struct {
 // ChannelInfo describes a single feed channel.
 type ChannelInfo struct {
 	Name        string
+	DisplayName string   // human-readable title; empty means fall back to Name
 	Blocks      uint16
 	LastMsgID   uint32
 	ContentHash uint32   // CRC32 of serialized message data; changes on edits
@@ -109,7 +110,7 @@ func SerializeMetadata(m *Metadata) []byte {
 	// 3 marker + 4 timestamp + 4 nextFetch + 1 flags + 2 channel count + per-channel data
 	size := MarkerSize + 4 + 4 + 1 + 2
 	for _, ch := range m.Channels {
-		size += 1 + len(ch.Name) + 2 + 4 + 4 + 1 + 1 // +4 for contentHash
+		size += 1 + len(ch.Name) + 2 + 4 + 4 + 1 + 1
 	}
 	buf := make([]byte, size)
 	off := 0
@@ -383,6 +384,79 @@ func CompressMessages(data []byte) []byte {
 	}
 
 	return append([]byte{compressionDeflate}, compressed...)
+}
+
+// EncodeTitlesData encodes a name→title map into bytes for TitlesChannel blocks.
+// Format: count(2) + [nameLen(1)+name+titleLen(1)+title]*count
+func EncodeTitlesData(titles map[string]string) []byte {
+	size := 2
+	for name, title := range titles {
+		n := name
+		if len(n) > 255 {
+			n = n[:255]
+		}
+		t := title
+		if len([]byte(t)) > 255 {
+			t = string([]byte(t)[:255])
+		}
+		size += 1 + len(n) + 1 + len([]byte(t))
+	}
+	buf := make([]byte, size)
+	binary.BigEndian.PutUint16(buf, uint16(len(titles)))
+	off := 2
+	for name, title := range titles {
+		nb := []byte(name)
+		if len(nb) > 255 {
+			nb = nb[:255]
+		}
+		tb := []byte(title)
+		if len(tb) > 255 {
+			tb = tb[:255]
+		}
+		buf[off] = byte(len(nb))
+		off++
+		copy(buf[off:], nb)
+		off += len(nb)
+		buf[off] = byte(len(tb))
+		off++
+		copy(buf[off:], tb)
+		off += len(tb)
+	}
+	return buf
+}
+
+// DecodeTitlesData decodes a name→title map from bytes produced by EncodeTitlesData.
+func DecodeTitlesData(data []byte) (map[string]string, error) {
+	if len(data) < 2 {
+		return nil, fmt.Errorf("titles data too short: %d bytes", len(data))
+	}
+	count := int(binary.BigEndian.Uint16(data))
+	titles := make(map[string]string, count)
+	off := 2
+	for i := 0; i < count; i++ {
+		if off >= len(data) {
+			return nil, fmt.Errorf("truncated titles data at entry %d", i)
+		}
+		nameLen := int(data[off])
+		off++
+		if off+nameLen > len(data) {
+			return nil, fmt.Errorf("truncated title name at entry %d", i)
+		}
+		name := string(data[off : off+nameLen])
+		off += nameLen
+		if off >= len(data) {
+			return nil, fmt.Errorf("truncated titles data at title %d", i)
+		}
+		titleLen := int(data[off])
+		off++
+		if off+titleLen > len(data) {
+			return nil, fmt.Errorf("truncated title value at entry %d", i)
+		}
+		title := string(data[off : off+titleLen])
+		off += titleLen
+		titles[name] = title
+	}
+	return titles, nil
 }
 
 // DecompressMessages decompresses data produced by CompressMessages.

@@ -32,6 +32,9 @@ const (
 	// VersionChannel serves latest release version with random suffix.
 	VersionChannel uint16 = 0xFFFA
 
+	// TitlesChannel serves per-channel human-readable display names.
+	TitlesChannel uint16 = 0xFFF9
+
 	// MaxUpstreamBlockPayload keeps uploaded query chunks comfortably below DNS
 	// name limits across typical domains and resolver paths.
 	MaxUpstreamBlockPayload = 8
