@@ -2397,13 +2397,18 @@
     var refreshingChannels = {}; // tracks channels with an in-flight refresh
 
     // ===== MOBILE NAV =====
+    var chatIsOpen = false;
     function openChat() {
+      chatIsOpen = true;
       if (window.innerWidth <= 768) {
         document.getElementById('app').classList.add('chat-open');
         history.pushState({ view: 'chat' }, '');
       }
     }
-    function openSidebar() { document.getElementById('app').classList.remove('chat-open') }
+    function openSidebar() {
+      chatIsOpen = false;
+      document.getElementById('app').classList.remove('chat-open');
+    }
     window.addEventListener('popstate', function () {
       if (window.innerWidth <= 768 && document.getElementById('app').classList.contains('chat-open')) {
         openSidebar();
@@ -4466,7 +4471,14 @@
       if (e.key === 'Enter' && document.activeElement === document.getElementById('msgSearchInput')) { e.preventDefault(); msgSearchNext() }
       if (e.key === 'Escape') { closeSettings(); closeProfiles(); closeProfileEditor(); closeScanner(); closeMsgSearch(); closeExportModal(); closeResolversModal() }
     });
-    window.addEventListener('resize', function () { if (window.innerWidth > 768) document.getElementById('app').classList.remove('chat-open') });
+    window.addEventListener('resize', function () {
+      var app = document.getElementById('app');
+      if (window.innerWidth > 768) {
+        app.classList.remove('chat-open');
+      } else if (chatIsOpen) {
+        app.classList.add('chat-open');
+      }
+    });
 
     // Handle thefeed:// URI hash import
     (function () { var h = location.hash; if (h && h.startsWith('#thefeed://')) { document.getElementById('importUriInput').value = decodeURIComponent(h.substring(1)); openProfiles(); doImportUri() } })();
