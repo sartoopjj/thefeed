@@ -13,7 +13,7 @@ DNS-based feed reader for Telegram channels and public X accounts. Designed for 
 └──────────────┘     Encrypted TXT       └──────────────┘                 └──────────┘
 ```
 
-**Server** (runs outside censored network):
+**Server** (runs outside ce nsored network):
 - Connects to Telegram, reads messages from configured channels
 - Fetches public X posts from configured usernames via RSS-compatible public mirrors (no login)
 - Serves feed data as encrypted DNS TXT responses
