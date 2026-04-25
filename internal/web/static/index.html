@@ -2397,10 +2397,11 @@
     var refreshingChannels = {}; // tracks channels with an in-flight refresh
 
     // ===== MOBILE NAV =====
+    var mobileQuery = window.matchMedia('(max-width: 768px)');
     var chatIsOpen = false;
     function openChat() {
       chatIsOpen = true;
-      if (window.innerWidth <= 768) {
+      if (mobileQuery.matches) {
         document.getElementById('app').classList.add('chat-open');
         history.pushState({ view: 'chat' }, '');
       }
@@ -2410,8 +2411,13 @@
       document.getElementById('app').classList.remove('chat-open');
     }
     window.addEventListener('popstate', function () {
-      if (window.innerWidth <= 768 && document.getElementById('app').classList.contains('chat-open')) {
+      if (mobileQuery.matches && document.getElementById('app').classList.contains('chat-open')) {
         openSidebar();
+      }
+    });
+    document.addEventListener('visibilitychange', function () {
+      if (!document.hidden && mobileQuery.matches && chatIsOpen) {
+        document.getElementById('app').classList.add('chat-open');
       }
     });
     function filterChannels() {
@@ -3593,7 +3599,7 @@
       document.getElementById('progressPanel').innerHTML = '';
       var p = document.getElementById('progressPanel');
       p.innerHTML = '<div class="progress-item" id="prog-init" data-last-update="' + Date.now() + '"><button class="progress-close" onclick="this.parentNode.remove()" title="Dismiss">&times;</button><div class="progress-label">' + t('loading') + '</div><div class="progress-bar"><div class="progress-fill" style="width:30%;animation:prog-pulse 1.5s ease-in-out infinite"></div></div></div>';
-      if (window.innerWidth <= 768) { openChat(); openLog(); }
+      if (mobileQuery.matches) { openChat(); openLog(); }
     }
     function startAutoRefresh() { if (autoRefreshTimer) return; autoRefreshTimer = setInterval(function () { if (selectedChannel > 0) doRefresh(true) }, 600000) }
     function updateNextFetchDisplay() {
@@ -4471,9 +4477,9 @@
       if (e.key === 'Enter' && document.activeElement === document.getElementById('msgSearchInput')) { e.preventDefault(); msgSearchNext() }
       if (e.key === 'Escape') { closeSettings(); closeProfiles(); closeProfileEditor(); closeScanner(); closeMsgSearch(); closeExportModal(); closeResolversModal() }
     });
-    window.addEventListener('resize', function () {
+    mobileQuery.addEventListener('change', function () {
       var app = document.getElementById('app');
-      if (window.innerWidth > 768) {
+      if (!mobileQuery.matches) {
         app.classList.remove('chat-open');
       } else if (chatIsOpen) {
         app.classList.add('chat-open');
