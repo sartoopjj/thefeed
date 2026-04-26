@@ -56,6 +56,18 @@ All communication is encrypted with AES-256 and transmitted via standard DNS TXT
 
 [Releases](https://github.com/sartoopjj/thefeed/releases)
 
+## Donate:
+
+To support me, you can send any amount you wish in USDT or USDC on the following networks:
+
+- Polygon
+- BNB Chain
+
+My wallet address:
+`0xe73f022f668c57cce79feccd875ac7332311013a`
+
+Thank you for your support ❤️
+
 ## Quick Install (Server)
 
 One-line install (downloads latest release from GitHub)
