@@ -18,7 +18,7 @@ import (
 func TestE2E_WebAPI_ConfigAndStatus(t *testing.T) {
 	dataDir := t.TempDir()
 	port := findFreePort(t, "tcp")
-	srv, err := web.New(dataDir, port, "")
+	srv, err := web.New(dataDir, port, "127.0.0.1", "")
 	if err != nil {
 		t.Fatalf("create web server: %v", err)
 	}
@@ -79,7 +79,7 @@ func TestE2E_WebAPI_ConfigAndStatus(t *testing.T) {
 func TestE2E_WebAPI_InvalidConfig(t *testing.T) {
 	dataDir := t.TempDir()
 	port := findFreePort(t, "tcp")
-	srv, err := web.New(dataDir, port, "")
+	srv, err := web.New(dataDir, port, "127.0.0.1", "")
 	if err != nil {
 		t.Fatalf("create web server: %v", err)
 	}
@@ -110,7 +110,7 @@ func TestE2E_WebAPI_InvalidConfig(t *testing.T) {
 func TestE2E_WebAPI_Channels(t *testing.T) {
 	dataDir := t.TempDir()
 	port := findFreePort(t, "tcp")
-	srv, err := web.New(dataDir, port, "")
+	srv, err := web.New(dataDir, port, "127.0.0.1", "")
 	if err != nil {
 		t.Fatalf("create web server: %v", err)
 	}
@@ -133,7 +133,7 @@ func TestE2E_WebAPI_Channels(t *testing.T) {
 func TestE2E_WebAPI_Messages(t *testing.T) {
 	dataDir := t.TempDir()
 	port := findFreePort(t, "tcp")
-	srv, err := web.New(dataDir, port, "")
+	srv, err := web.New(dataDir, port, "127.0.0.1", "")
 	if err != nil {
 		t.Fatalf("create web server: %v", err)
 	}
@@ -171,7 +171,7 @@ func TestE2E_WebAPI_Messages(t *testing.T) {
 func TestE2E_WebAPI_IndexPage(t *testing.T) {
 	dataDir := t.TempDir()
 	port := findFreePort(t, "tcp")
-	srv, err := web.New(dataDir, port, "")
+	srv, err := web.New(dataDir, port, "127.0.0.1", "")
 	if err != nil {
 		t.Fatalf("create web server: %v", err)
 	}
@@ -197,7 +197,7 @@ func TestE2E_WebAPI_IndexPage(t *testing.T) {
 func TestE2E_WebAPI_NotFound(t *testing.T) {
 	dataDir := t.TempDir()
 	port := findFreePort(t, "tcp")
-	srv, err := web.New(dataDir, port, "")
+	srv, err := web.New(dataDir, port, "127.0.0.1", "")
 	if err != nil {
 		t.Fatalf("create web server: %v", err)
 	}
@@ -219,7 +219,7 @@ func TestE2E_WebAPI_NotFound(t *testing.T) {
 func TestE2E_WebAPI_MethodNotAllowed(t *testing.T) {
 	dataDir := t.TempDir()
 	port := findFreePort(t, "tcp")
-	srv, err := web.New(dataDir, port, "")
+	srv, err := web.New(dataDir, port, "127.0.0.1", "")
 	if err != nil {
 		t.Fatalf("create web server: %v", err)
 	}
@@ -252,7 +252,7 @@ func TestE2E_WebAPI_ConfigPersistence(t *testing.T) {
 	dataDir := t.TempDir()
 
 	port1 := findFreePort(t, "tcp")
-	srv1, err := web.New(dataDir, port1, "")
+	srv1, err := web.New(dataDir, port1, "127.0.0.1", "")
 	if err != nil {
 		t.Fatalf("create web server: %v", err)
 	}
@@ -273,7 +273,7 @@ func TestE2E_WebAPI_ConfigPersistence(t *testing.T) {
 	}
 
 	port2 := findFreePort(t, "tcp")
-	srv2, err := web.New(dataDir, port2, "")
+	srv2, err := web.New(dataDir, port2, "127.0.0.1", "")
 	if err != nil {
 		t.Fatalf("create second web server: %v", err)
 	}
@@ -318,7 +318,7 @@ func TestE2E_FullRoundTrip(t *testing.T) {
 
 	dataDir := t.TempDir()
 	port := findFreePort(t, "tcp")
-	srv, err := web.New(dataDir, port, "")
+	srv, err := web.New(dataDir, port, "127.0.0.1", "")
 	if err != nil {
 		t.Fatalf("create web server: %v", err)
 	}
@@ -404,7 +404,7 @@ func TestE2E_WebAPI_GlobalAuth(t *testing.T) {
 	dataDir := t.TempDir()
 	port := findFreePort(t, "tcp")
 	password := "webpass123"
-	srv, err := web.New(dataDir, port, password)
+	srv, err := web.New(dataDir, port, "127.0.0.1", password)
 	if err != nil {
 		t.Fatalf("create web server: %v", err)
 	}

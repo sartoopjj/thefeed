@@ -97,7 +97,7 @@ func startWebServer(t *testing.T) (string, *web.Server) {
 	t.Helper()
 	dataDir := t.TempDir()
 	port := findFreePort(t, "tcp")
-	srv, err := web.New(dataDir, port, "")
+	srv, err := web.New(dataDir, port, "127.0.0.1", "")
 	if err != nil {
 		t.Fatalf("create web server: %v", err)
 	}

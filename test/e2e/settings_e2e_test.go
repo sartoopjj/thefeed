@@ -64,7 +64,7 @@ func TestE2E_Settings_Persistence(t *testing.T) {
 	dataDir := t.TempDir()
 
 	port1 := findFreePort(t, "tcp")
-	srv1, err := web.New(dataDir, port1, "")
+	srv1, err := web.New(dataDir, port1, "127.0.0.1", "")
 	if err != nil {
 		t.Fatalf("create server: %v", err)
 	}
@@ -79,7 +79,7 @@ func TestE2E_Settings_Persistence(t *testing.T) {
 	resp.Body.Close()
 
 	port2 := findFreePort(t, "tcp")
-	srv2, err := web.New(dataDir, port2, "")
+	srv2, err := web.New(dataDir, port2, "127.0.0.1", "")
 	if err != nil {
 		t.Fatalf("create second server: %v", err)
 	}
@@ -148,7 +148,7 @@ func TestE2E_VersionCheck_Success(t *testing.T) {
 
 	dataDir := t.TempDir()
 	port := findFreePort(t, "tcp")
-	srv, err := web.New(dataDir, port, "")
+	srv, err := web.New(dataDir, port, "127.0.0.1", "")
 	if err != nil {
 		t.Fatalf("create web server: %v", err)
 	}
