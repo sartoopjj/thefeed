@@ -87,6 +87,7 @@ type lastScanData struct {
 type Server struct {
 	dataDir  string
 	port     int
+	host     string
 	password string // admin password; empty means no auth
 
 	mu               sync.RWMutex
@@ -139,7 +140,7 @@ type Server struct {
 }
 
 // New creates a new web server.
-func New(dataDir string, port int, password string) (*Server, error) {
+func New(dataDir string, port int, host string, password string) (*Server, error) {
 	if err := os.MkdirAll(dataDir, 0700); err != nil {
 		return nil, fmt.Errorf("create data dir: %w", err)
 	}
@@ -156,6 +157,7 @@ func New(dataDir string, port int, password string) (*Server, error) {
 	s := &Server{
 		dataDir:        dataDir,
 		port:           port,
+		host:           host,
 		password:       password,
 		messages:       make(map[int][]protocol.Message),
 		clients:        make(map[chan string]struct{}),
@@ -230,9 +232,10 @@ func (s *Server) Run() error {
 	mux.HandleFunc("/api/scanner/presets", s.handleScannerPresets)
 	mux.HandleFunc("/", s.handleIndex)
 
-	addr := fmt.Sprintf("127.0.0.1:%d", s.port)
+	// Listen on the specified host (default 127.0.0.1)
+	addr := fmt.Sprintf("%s:%d", s.host, s.port)
 	log.Printf("thefeed client %s", version.Version)
-	fmt.Printf("\n  Open in browser: http://%s\n\n", addr)
+	fmt.Printf("\n  Open in browser: http://%s:%d\n\n", s.host, s.port)
 
 	if s.fetcher != nil {
 		if ls := s.loadLastScan(); ls != nil {
