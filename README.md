@@ -1,5 +1,5 @@
 # thefeed
-
+# Hormazd
 DNS-based feed reader for Telegram channels and public X accounts. Designed for environments where only DNS queries work.
 
 [English](README.md) | [فارسی](README-FA.md)
