@@ -8,42 +8,100 @@ import (
 	"strings"
 )
 
+// Relay indices: each MediaMeta.Relays[N] flags whether the file is
+// reachable via that relay. Order is fixed so the wire format is positional.
+// Future relays append to this list; older clients ignore unknown trailing
+// flags.
+const (
+	RelayDNS    = 0 // slow path — bytes assembled from DNS blocks
+	RelayGitHub = 1 // fast path — bytes pulled from a GitHub repo
+)
+
 // MediaMeta describes a downloadable media blob attached to a feed message.
 //
-// Wire format embedded in a message's text body (immediately after the media
-// tag, before any caption):
+// Wire format (immediately after the media tag, before any caption):
 //
-//	[IMAGE]<size>:<dl>:<ch>:<blk>:<crc32hex>[:<filename>]
-//	caption goes here on the next line(s)
+//	[IMAGE]<size>:<f0>,<f1>,...:<dnsCh>:<dnsBlk>:<crc32hex>[:<filename>]
 //
-// The filename field is optional; when present it carries an OS-friendly
-// suggested filename (server-sanitised: no newlines, no path separators, no
-// control characters, length-capped). Old clients that split on ':' and
-// only read parts[0..4] keep working — they just ignore the trailing field.
+// where each <fN> is "1" or "0" indicating availability via relay N.
+// <dnsCh>:<dnsBlk> are only meaningful when f0 (RelayDNS) is set.
 type MediaMeta struct {
-	Tag          string // e.g. MediaImage, MediaVideo, MediaFile
-	Size         int64
-	Downloadable bool
-	Channel      uint16
-	Blocks       uint16
-	CRC32        uint32
-	Filename     string
+	Tag      string // e.g. MediaImage, MediaVideo, MediaFile
+	Size     int64
+	Relays   []bool // index = relay constant, value = availability
+	Channel  uint16 // DNS channel (when Relays[RelayDNS])
+	Blocks   uint16 // DNS block count (when Relays[RelayDNS])
+	CRC32    uint32
+	Filename string
 }
 
-// String renders the metadata in the wire format documented above, including
-// the leading tag and trailing newline that separates the metadata row from
-// any caption.
+// HasRelay reports whether the relay at idx is available. Out-of-range and
+// nil-relay-list both return false.
+func (m MediaMeta) HasRelay(idx int) bool {
+	if idx < 0 || idx >= len(m.Relays) {
+		return false
+	}
+	return m.Relays[idx]
+}
+
+// HasAnyRelay reports whether at least one relay can serve this file.
+func (m MediaMeta) HasAnyRelay() bool {
+	for _, on := range m.Relays {
+		if on {
+			return true
+		}
+	}
+	return false
+}
+
+// String renders the metadata in the wire format documented above.
 func (m MediaMeta) String() string {
-	dl := 0
-	if m.Downloadable {
-		dl = 1
-	}
+	flags := encodeRelayFlags(m.Relays)
 	if fn := SanitiseMediaFilename(m.Filename); fn != "" {
-		return fmt.Sprintf("%s%d:%d:%d:%d:%08x:%s\n",
-			m.Tag, m.Size, dl, m.Channel, m.Blocks, m.CRC32, fn)
+		return fmt.Sprintf("%s%d:%s:%d:%d:%08x:%s\n",
+			m.Tag, m.Size, flags, m.Channel, m.Blocks, m.CRC32, fn)
 	}
-	return fmt.Sprintf("%s%d:%d:%d:%d:%08x\n",
-		m.Tag, m.Size, dl, m.Channel, m.Blocks, m.CRC32)
+	return fmt.Sprintf("%s%d:%s:%d:%d:%08x\n",
+		m.Tag, m.Size, flags, m.Channel, m.Blocks, m.CRC32)
+}
+
+// encodeRelayFlags serialises a relay list as "1,0,1". An empty list is
+// "0,0" (DNS off, GitHub off) so older clients always see at least the two
+// known relay slots.
+func encodeRelayFlags(relays []bool) string {
+	n := len(relays)
+	if n < 2 {
+		n = 2
+	}
+	parts := make([]string, n)
+	for i := 0; i < n; i++ {
+		on := i < len(relays) && relays[i]
+		if on {
+			parts[i] = "1"
+		} else {
+			parts[i] = "0"
+		}
+	}
+	return strings.Join(parts, ",")
+}
+
+// parseRelayFlags decodes "1,0,1" into a relay slice sized to the input.
+// Caller-side accessors guard against out-of-range reads, so future relays
+// can be added without breaking older clients.
+func parseRelayFlags(s string) ([]bool, bool) {
+	if s == "" {
+		return nil, false
+	}
+	parts := strings.Split(s, ",")
+	out := make([]bool, len(parts))
+	for i, p := range parts {
+		p = strings.TrimSpace(p)
+		if p != "0" && p != "1" {
+			return nil, false
+		}
+		out[i] = p == "1"
+	}
+	return out, true
 }
 
 // SanitiseMediaFilename returns a filename safe to embed in the wire
@@ -122,14 +180,8 @@ func EncodeMediaText(meta MediaMeta, caption string) string {
 }
 
 // ParseMediaText parses a message body that begins with a known media tag.
-// On success it returns the metadata and the remaining caption (which may be
-// empty). When the body uses the legacy "[TAG]\ncaption" form (no metadata
-// suffix), ParseMediaText returns ok=true with Downloadable=false and
-// Channel=0 — the caller can treat it as a non-downloadable placeholder
-// exactly like before.
-//
-// Unknown tags return ok=false. Malformed metadata for a known tag also
-// returns ok=false so the caller falls back to legacy display.
+// Returns metadata + remaining caption. Legacy "[TAG]\ncaption" bodies parse
+// with empty Relays (HasAnyRelay()==false). Unknown tags return ok=false.
 func ParseMediaText(body string) (meta MediaMeta, caption string, ok bool) {
 	tag, rest, found := splitKnownMediaTag(body)
 	if !found {
@@ -156,9 +208,6 @@ func ParseMediaText(body string) (meta MediaMeta, caption string, ok bool) {
 
 	parts := strings.Split(metaLine, ":")
 	if len(parts) < 5 {
-		// Looks like a caption line that happens to start with this tag (e.g.
-		// "[IMAGE]nice photo"). Don't claim a structured parse — return the
-		// whole `rest` as caption so the message still renders.
 		return MediaMeta{Tag: tag}, rest, true
 	}
 
@@ -166,8 +215,8 @@ func ParseMediaText(body string) (meta MediaMeta, caption string, ok bool) {
 	if err != nil || size < 0 {
 		return MediaMeta{Tag: tag}, rest, true
 	}
-	dl, err := strconv.Atoi(parts[1])
-	if err != nil || (dl != 0 && dl != 1) {
+	relays, ok := parseRelayFlags(parts[1])
+	if !ok {
 		return MediaMeta{Tag: tag}, rest, true
 	}
 	ch, err := strconv.ParseUint(parts[2], 10, 16)
@@ -182,24 +231,19 @@ func ParseMediaText(body string) (meta MediaMeta, caption string, ok bool) {
 	if err != nil {
 		return MediaMeta{Tag: tag}, rest, true
 	}
-	// Reject any channel claimed inside a parseable metadata line that falls
-	// outside the reserved media range — that can only be a malformed message
-	// or a tampering attempt; refuse to surface it as downloadable.
+	// Reject DNS availability if the channel/block range is malformed —
+	// other relays stay as-claimed.
 	channel := uint16(ch)
-	downloadable := dl == 1
-	if downloadable && (!IsMediaChannel(channel) || blk == 0) {
-		downloadable = false
+	if len(relays) > RelayDNS && relays[RelayDNS] && (!IsMediaChannel(channel) || blk == 0) {
+		relays[RelayDNS] = false
 	}
 
 	meta.Size = size
-	meta.Downloadable = downloadable
+	meta.Relays = relays
 	meta.Channel = channel
 	meta.Blocks = uint16(blk)
 	meta.CRC32 = uint32(crc)
 	if len(parts) >= 6 {
-		// SanitiseMediaFilename strips the field separator, so we can't
-		// reach this point with a colon inside the filename. Take parts[5]
-		// directly and re-sanitise defensively.
 		meta.Filename = SanitiseMediaFilename(parts[5])
 	}
 	return meta, caption, true

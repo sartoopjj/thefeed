@@ -1,8 +1,10 @@
 package server
 
 import (
+	"context"
 	"crypto/rand"
 	"fmt"
+	"log"
 	"sync"
 	"time"
 
@@ -34,6 +36,14 @@ type Feed struct {
 	// rejects queries to media channels with a not-found error, mirroring
 	// pre-feature behaviour.
 	media *MediaCache
+
+	// gitHubRelay (optional) lets clients fetch media bytes over plain
+	// HTTPS from a GitHub repo. nil when disabled.
+	gitHubRelay *GitHubRelay
+	// relayInfoBlocks serves the relay-discovery channel
+	// (RelayInfoChannel) — block 0 contains the GitHub "owner/repo"
+	// string, or an empty payload if the relay is off.
+	relayInfoBlocks [][]byte
 }
 
 // NewFeed creates a new Feed with the given channel names.
@@ -95,6 +105,9 @@ func (f *Feed) GetBlock(channel, block int) ([]byte, error) {
 	if channel == int(protocol.TitlesChannel) {
 		return f.getTitlesBlock(block)
 	}
+	if channel == int(protocol.RelayInfoChannel) {
+		return f.getRelayInfoBlock(block)
+	}
 	// Channel sits in the binary media range — delegate to MediaCache. We
 	// drop the read lock first because MediaCache uses its own lock and we
 	// don't want to hold f.mu across that path.
@@ -130,6 +143,65 @@ func (f *Feed) MediaCache() *MediaCache {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
 	return f.media
+}
+
+// SetGitHubRelay attaches the GitHub fast relay. Safe to call once at
+// startup. nil disables.
+func (f *Feed) SetGitHubRelay(r *GitHubRelay) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.gitHubRelay = r
+	f.rebuildRelayInfoBlocks()
+}
+
+// GitHubRelay returns the configured relay, or nil.
+func (f *Feed) GitHubRelay() *GitHubRelay {
+	f.mu.RLock()
+	defer f.mu.RUnlock()
+	return f.gitHubRelay
+}
+
+// AfterFetchCycle: touch live media → flush pending → prune stale.
+// Touch must come first so files referenced by skipped fetches don't age out.
+func (f *Feed) AfterFetchCycle(ctx context.Context) {
+	gh := f.GitHubRelay()
+	if gh == nil {
+		return
+	}
+	if mc := f.MediaCache(); mc != nil {
+		mc.TouchRelayEntries()
+	}
+	if err := gh.Flush(ctx); err != nil {
+		log.Printf("[gh-relay] flush after fetch: %v", err)
+	}
+	if ttl := gh.TTL(); ttl > 0 {
+		cutoff := time.Now().Add(-ttl)
+		if n, err := gh.PruneStale(ctx, cutoff); err != nil {
+			log.Printf("[gh-relay] prune after fetch: %v", err)
+		} else if n > 0 {
+			log.Printf("[gh-relay] pruned %d stale file(s) after fetch", n)
+		}
+	}
+}
+
+// rebuildRelayInfoBlocks builds the discovery payload served on
+// RelayInfoChannel. Format: "key=value\n" lines (UTF-8). Block 0 is
+// prefixed with a uint16 total-block count so the client can fetch the
+// rest in parallel.
+//
+// Keys are short (gh = github owner/repo) to keep packets small.
+func (f *Feed) rebuildRelayInfoBlocks() {
+	var payload []byte
+	if r := f.gitHubRelay; r != nil {
+		payload = []byte(fmt.Sprintf("gh=%s\n", r.Repo()))
+	}
+	blocks := protocol.SplitIntoBlocks(payload)
+	if len(blocks) == 0 {
+		blocks = [][]byte{nil}
+	}
+	prefix := []byte{byte(len(blocks) >> 8), byte(len(blocks))}
+	blocks[0] = append(prefix, blocks[0]...)
+	f.relayInfoBlocks = blocks
 }
 
 func (f *Feed) getVersionBlock(block int) ([]byte, error) {
@@ -194,6 +266,18 @@ func (f *Feed) getTitlesBlock(block int) ([]byte, error) {
 	}
 	if block < 0 || block >= len(blocks) {
 		return nil, fmt.Errorf("titles block %d out of range (%d blocks)", block, len(blocks))
+	}
+	return blocks[block], nil
+}
+
+func (f *Feed) getRelayInfoBlock(block int) ([]byte, error) {
+	blocks := f.relayInfoBlocks
+	if len(blocks) == 0 {
+		f.rebuildRelayInfoBlocks()
+		blocks = f.relayInfoBlocks
+	}
+	if block < 0 || block >= len(blocks) {
+		return nil, fmt.Errorf("relay-info block %d out of range (%d blocks)", block, len(blocks))
 	}
 	return blocks[block], nil
 }

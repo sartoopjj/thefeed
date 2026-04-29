@@ -12,7 +12,24 @@ import (
 )
 
 func newTestCache(maxBytes int64, ttl time.Duration) *MediaCache {
-	return NewMediaCache(MediaCacheConfig{MaxFileBytes: maxBytes, TTL: ttl})
+	return NewMediaCache(MediaCacheConfig{MaxFileBytes: maxBytes, TTL: ttl, DNSRelayEnabled: true})
+}
+
+// TestMediaCacheRelayFlags: with DNS off the wire flag stays clear, and
+// when a GitHub relay is attached the cache surfaces RelayGitHub.
+func TestMediaCacheRelayFlags(t *testing.T) {
+	cfg := MediaCacheConfig{MaxFileBytes: 1 << 20, TTL: time.Hour, DNSRelayEnabled: false}
+	cache := NewMediaCache(cfg)
+	meta, err := cache.Store("k", protocol.MediaImage, []byte("payload"), "image/jpeg", "")
+	if err != nil {
+		t.Fatalf("Store: %v", err)
+	}
+	if meta.HasRelay(protocol.RelayDNS) {
+		t.Errorf("DNS relay should be off when DNSRelayEnabled=false")
+	}
+	if meta.HasRelay(protocol.RelayGitHub) {
+		t.Errorf("GitHub relay should be off when no relay is attached")
+	}
 }
 
 func TestMediaCacheStoreAndGetBlock(t *testing.T) {
@@ -23,8 +40,8 @@ func TestMediaCacheStoreAndGetBlock(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Store: %v", err)
 	}
-	if !meta.Downloadable {
-		t.Fatalf("Downloadable = false, want true")
+	if !meta.HasRelay(protocol.RelayDNS) {
+		t.Fatalf("RelayDNS = false, want true")
 	}
 	if !protocol.IsMediaChannel(meta.Channel) {
 		t.Fatalf("Channel %d not in media range", meta.Channel)
@@ -72,9 +89,10 @@ func TestMediaCacheStoreAndGetBlock(t *testing.T) {
 // original.
 func TestMediaCacheStoreGzip(t *testing.T) {
 	cache := NewMediaCache(MediaCacheConfig{
-		MaxFileBytes: 1 << 20,
-		TTL:          time.Hour,
-		Compression:  protocol.MediaCompressionGzip,
+		MaxFileBytes:    1 << 20,
+		TTL:             time.Hour,
+		Compression:     protocol.MediaCompressionGzip,
+		DNSRelayEnabled: true,
 	})
 	content := bytes.Repeat([]byte("compress-me "), 200)
 

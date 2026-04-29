@@ -682,6 +682,81 @@ func (f *Fetcher) FetchLatestVersion(ctx context.Context) (string, error) {
 	return protocol.DecodeVersionData(data)
 }
 
+// RelayInfo carries the relay-discovery data the server publishes on
+// RelayInfoChannel. Empty fields mean "not configured".
+type RelayInfo struct {
+	GitHubRepo string // "owner/repo"
+}
+
+// FetchRelayInfo pulls the relay-info payload from RelayInfoChannel.
+// Block 0 carries a uint16 total-block count prefix; if more than one
+// block is needed the rest are fetched in parallel and concatenated. An
+// empty payload yields a zero-value RelayInfo.
+func (f *Fetcher) FetchRelayInfo(ctx context.Context) (RelayInfo, error) {
+	fetchCtx, cancel := context.WithTimeout(ctx, time.Minute)
+	defer cancel()
+
+	block0, err := f.FetchBlock(fetchCtx, protocol.RelayInfoChannel, 0)
+	if err != nil {
+		return RelayInfo{}, fmt.Errorf("fetch relay-info: %w", err)
+	}
+	if len(block0) < 2 {
+		return RelayInfo{}, nil
+	}
+	totalBlocks := int(binary.BigEndian.Uint16(block0))
+	payload0 := block0[2:]
+	if totalBlocks <= 1 {
+		return ParseRelayInfo(payload0), nil
+	}
+
+	type blockResult struct {
+		data []byte
+		err  error
+	}
+	results := make([]blockResult, totalBlocks)
+	results[0] = blockResult{data: payload0}
+
+	var wg sync.WaitGroup
+	for blk := 1; blk < totalBlocks; blk++ {
+		wg.Add(1)
+		go func(blk int) {
+			defer wg.Done()
+			data, fetchErr := f.FetchBlock(fetchCtx, protocol.RelayInfoChannel, uint16(blk))
+			results[blk] = blockResult{data: data, err: fetchErr}
+		}(blk)
+	}
+	wg.Wait()
+
+	var allData []byte
+	for _, r := range results {
+		if r.err != nil {
+			return RelayInfo{}, fmt.Errorf("fetch relay-info block: %w", r.err)
+		}
+		allData = append(allData, r.data...)
+	}
+	return ParseRelayInfo(allData), nil
+}
+
+// ParseRelayInfo decodes the relay-info payload (one "key=value" pair per
+// line). Unknown keys are ignored so future relays can be added without
+// breaking older clients.
+func ParseRelayInfo(data []byte) RelayInfo {
+	var info RelayInfo
+	for _, line := range strings.Split(string(data), "\n") {
+		eq := strings.IndexByte(line, '=')
+		if eq < 0 {
+			continue
+		}
+		k := strings.TrimSpace(line[:eq])
+		v := strings.TrimSpace(line[eq+1:])
+		switch k {
+		case "gh":
+			info.GitHubRepo = v
+		}
+	}
+	return info
+}
+
 // FetchTitles fetches and decodes the channel display name map from TitlesChannel.
 // Returns an empty map (not an error) when the server does not support TitlesChannel.
 // Block 0 carries a uint16 total-block count prefix; remaining blocks are fetched in

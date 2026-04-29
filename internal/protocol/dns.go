@@ -35,6 +35,10 @@ const (
 	// TitlesChannel serves per-channel human-readable display names.
 	TitlesChannel uint16 = 0xFFF9
 
+	// RelayInfoChannel serves the relay-discovery payload (GitHub
+	// owner/repo + domain segment). Block 0 carries it.
+	RelayInfoChannel uint16 = 0xFFF8
+
 	// MaxUpstreamBlockPayload keeps uploaded query chunks comfortably below DNS
 	// name limits across typical domains and resolver paths.
 	MaxUpstreamBlockPayload = 8

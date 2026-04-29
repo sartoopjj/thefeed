@@ -78,12 +78,13 @@ func (tr *TelegramReader) downloadTelegramPhoto(ctx context.Context, api *tg.Cli
 		return protocol.MediaMeta{}, false
 	}
 	// Honour the configured max-size early so we don't even open the RPC for
-	// objects we'll just throw away.
-	if maxBytes := cache.maxFileBytes; maxBytes > 0 && bestBytes > maxBytes {
+	// objects no enabled relay would accept. Files that fit GitHub but not
+	// DNS still get fetched.
+	if maxBytes := cache.MaxAcceptableBytes(); maxBytes > 0 && bestBytes > maxBytes {
 		return protocol.MediaMeta{
-			Tag:          protocol.MediaImage,
-			Size:         bestBytes,
-			Downloadable: false,
+			Tag:    protocol.MediaImage,
+			Size:   bestBytes,
+			Relays: nil,
 		}, true
 	}
 
@@ -128,11 +129,11 @@ func (tr *TelegramReader) downloadTelegramDocument(ctx context.Context, api *tg.
 		return protocol.MediaMeta{}, false
 	}
 
-	if maxBytes := cache.maxFileBytes; maxBytes > 0 && doc.Size > maxBytes {
+	if maxBytes := cache.MaxAcceptableBytes(); maxBytes > 0 && doc.Size > maxBytes {
 		return protocol.MediaMeta{
-			Tag:          tag,
-			Size:         doc.Size,
-			Downloadable: false,
+			Tag:    tag,
+			Size:   doc.Size,
+			Relays: nil,
 		}, true
 	}
 
@@ -170,7 +171,7 @@ func (tr *TelegramReader) downloadTelegramFile(ctx context.Context, api *tg.Clie
 	cache := tr.feed.MediaCache()
 	maxBytes := int64(0)
 	if cache != nil {
-		maxBytes = cache.maxFileBytes
+		maxBytes = cache.MaxAcceptableBytes()
 	}
 
 	var (

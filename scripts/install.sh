@@ -293,6 +293,89 @@ setup_config() {
         fi
     fi
 
+    # --- Media relays ---
+    # Each relay is independent: the same file can be served by DNS, GitHub,
+    # and any future relay simultaneously. Enabling a relay just gives
+    # clients another way to fetch the bytes.
+    echo ""
+    echo -e "${green}═══════════════════════════════════════${plain}"
+    echo -e "${green}  Media relays${plain}"
+    echo -e "${green}═══════════════════════════════════════${plain}"
+    local cur_dns_enabled cur_dns_size cur_dns_ttl cur_dns_comp
+    local cur_gh_enabled cur_gh_token cur_gh_repo cur_gh_size cur_gh_ttl
+    if $is_update; then
+        cur_dns_enabled=$(env_get THEFEED_DNS_MEDIA_ENABLED)
+        cur_dns_size=$(env_get THEFEED_DNS_MEDIA_MAX_SIZE_KB)
+        cur_dns_ttl=$(env_get THEFEED_DNS_MEDIA_CACHE_TTL_MIN)
+        cur_dns_comp=$(env_get THEFEED_DNS_MEDIA_COMPRESSION)
+        cur_gh_enabled=$(env_get THEFEED_GITHUB_RELAY_ENABLED)
+        cur_gh_token=$(env_get THEFEED_GITHUB_RELAY_TOKEN)
+        cur_gh_repo=$(env_get THEFEED_GITHUB_RELAY_REPO)
+        cur_gh_size=$(env_get THEFEED_GITHUB_RELAY_MAX_SIZE_KB)
+        cur_gh_ttl=$(env_get THEFEED_GITHUB_RELAY_TTL_MIN)
+    fi
+
+    # DNS relay (slow path, off by default).
+    echo ""
+    echo -e "${yellow}DNS relay${plain} — files served block-by-block over DNS. Slower, works"
+    echo -e "  in censored networks. Default 100 KB cap."
+    local dns_default="N" dns_prompt="[y/N]"
+    if [[ "$cur_dns_enabled" == "1" ]]; then dns_default="Y" dns_prompt="[Y/n]"; fi
+    local dns_enabled_in=""
+    read -rp "Enable DNS relay? $dns_prompt: " dns_enabled_in
+    if [[ -z "$dns_enabled_in" ]]; then dns_enabled_in="$dns_default"; fi
+    local dns_enabled="0"
+    if [[ "$dns_enabled_in" == "y" || "$dns_enabled_in" == "Y" ]]; then dns_enabled="1"; fi
+
+    local dns_max_size="${cur_dns_size:-100}"
+    local dns_ttl="${cur_dns_ttl:-600}"
+    local dns_comp="${cur_dns_comp:-gzip}"
+    if [[ "$dns_enabled" == "1" ]]; then
+        read -rp "DNS relay max file size in KB [${dns_max_size}]: " in
+        dns_max_size="${in:-$dns_max_size}"
+        read -rp "DNS relay TTL in minutes [${dns_ttl}]: " in
+        dns_ttl="${in:-$dns_ttl}"
+        read -rp "DNS relay compression (none|gzip|deflate) [${dns_comp}]: " in
+        dns_comp="${in:-$dns_comp}"
+    fi
+
+    # GitHub relay (fast path, default off — needs a token).
+    echo ""
+    echo -e "${yellow}GitHub relay${plain} — files uploaded to a repo and pulled by clients over"
+    echo -e "  plain HTTPS. Faster + bigger files; needs a personal access token."
+    local gh_default="N" gh_prompt="[y/N]"
+    if [[ "$cur_gh_enabled" == "1" ]]; then gh_default="Y"; gh_prompt="[Y/n]"; fi
+    local gh_enabled_in=""
+    read -rp "Enable GitHub relay? $gh_prompt: " gh_enabled_in
+    if [[ -z "$gh_enabled_in" ]]; then gh_enabled_in="$gh_default"; fi
+    local gh_enabled="0"
+    if [[ "$gh_enabled_in" == "y" || "$gh_enabled_in" == "Y" ]]; then gh_enabled="1"; fi
+
+    local gh_token="" gh_repo="" gh_max_size="${cur_gh_size:-15360}"
+    local gh_ttl="${cur_gh_ttl:-10080}"
+    if [[ "$gh_enabled" == "1" ]]; then
+        if [[ -n "$cur_gh_token" ]]; then
+            read -rp "GitHub token (PAT, contents:write) [keep current]: " gh_token
+            gh_token="${gh_token:-$cur_gh_token}"
+        else
+            read -rp "GitHub token (PAT, contents:write): " gh_token
+        fi
+        while true; do
+            if [[ -n "$cur_gh_repo" ]]; then
+                read -rp "GitHub repo (owner/repo) [${cur_gh_repo}]: " gh_repo
+                gh_repo="${gh_repo:-$cur_gh_repo}"
+            else
+                read -rp "GitHub repo (owner/repo): " gh_repo
+            fi
+            if [[ "$gh_repo" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]]; then break; fi
+            echo -e "${red}Invalid repo. Format: owner/repo${plain}"
+        done
+        read -rp "GitHub relay max file size in KB [${gh_max_size}]: " in
+        gh_max_size="${in:-$gh_max_size}"
+        read -rp "GitHub relay TTL in minutes [${gh_ttl}]: " in
+        gh_ttl="${in:-$gh_ttl}"
+    fi
+
     # --- Telegram mode ---
     local no_telegram=""
     echo ""
@@ -330,6 +413,15 @@ TELEGRAM_API_HASH=${api_hash}
 TELEGRAM_PHONE=${phone}
 THEFEED_LISTEN=${listen_addr}
 THEFEED_NO_TELEGRAM=1
+THEFEED_DNS_MEDIA_ENABLED=${dns_enabled}
+THEFEED_DNS_MEDIA_MAX_SIZE_KB=${dns_max_size}
+THEFEED_DNS_MEDIA_CACHE_TTL_MIN=${dns_ttl}
+THEFEED_DNS_MEDIA_COMPRESSION=${dns_comp}
+THEFEED_GITHUB_RELAY_ENABLED=${gh_enabled}
+THEFEED_GITHUB_RELAY_TOKEN=${gh_token}
+THEFEED_GITHUB_RELAY_REPO=${gh_repo}
+THEFEED_GITHUB_RELAY_MAX_SIZE_KB=${gh_max_size}
+THEFEED_GITHUB_RELAY_TTL_MIN=${gh_ttl}
 ENVEOF
         chmod 600 "$DATA_DIR/thefeed.env"
         echo -e "${green}Config saved to ${DATA_DIR}/thefeed.env${plain}"
@@ -390,6 +482,15 @@ TELEGRAM_API_ID=${api_id}
 TELEGRAM_API_HASH=${api_hash}
 TELEGRAM_PHONE=${phone}
 THEFEED_LISTEN=${listen_addr}
+THEFEED_DNS_MEDIA_ENABLED=${dns_enabled}
+THEFEED_DNS_MEDIA_MAX_SIZE_KB=${dns_max_size}
+THEFEED_DNS_MEDIA_CACHE_TTL_MIN=${dns_ttl}
+THEFEED_DNS_MEDIA_COMPRESSION=${dns_comp}
+THEFEED_GITHUB_RELAY_ENABLED=${gh_enabled}
+THEFEED_GITHUB_RELAY_TOKEN=${gh_token}
+THEFEED_GITHUB_RELAY_REPO=${gh_repo}
+THEFEED_GITHUB_RELAY_MAX_SIZE_KB=${gh_max_size}
+THEFEED_GITHUB_RELAY_TTL_MIN=${gh_ttl}
 ENVEOF
     chmod 600 "$DATA_DIR/thefeed.env"
     echo -e "${green}Config saved to ${DATA_DIR}/thefeed.env${plain}"
@@ -441,6 +542,8 @@ install_service() {
     if [[ "${THEFEED_ALLOW_MANAGE:-}" == "1" ]]; then
         extra_flags="${extra_flags} --allow-manage"
     fi
+    # All --dns-media-* and --github-relay-* settings come from THEFEED_*
+    # env vars, so the binary picks them up via EnvironmentFile alone.
 
     cat > "$SERVICE_FILE" <<SVCEOF
 [Unit]

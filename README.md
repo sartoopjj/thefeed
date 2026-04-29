@@ -7,35 +7,44 @@ DNS-based feed reader for Telegram channels and public X accounts. Designed for 
 ## How It Works
 
 ```
-┌──────────────┐     DNS TXT Query       ┌──────────────┐     MTProto     ┌──────────┐
-│    Client    │ ──────────────────────▸ │    Server    │ ──────────────▸ │ Telegram │
-│  (Web UI)    │ ◂────────────────────── │  (DNS auth)  │ ◂────────────── │   API    │
-└──────────────┘     Encrypted TXT       └──────────────┘                 └──────────┘
+                                  Encrypted DNS TXT
+   ┌──────────────┐  feed meta + small media   ┌──────────────────┐    MTProto      ┌──────────┐
+   │              │ ─────────────────────────▸ │      Server      │ ─────────────▸  │ Telegram │
+   │    Client    │ ◂───────────────────────── │  (DNS auth +     │ ◂─────────────  │   API    │
+   │  (Web UI)    │                            │   media relays)  │    RSS / HTTP   ┌──────────┐
+   │              │  large media (fast relay)  │                  │ ─────────────▸  │  Nitter  │
+   │              │ ◂───── api.github.com ◂──  │                  │ ◂─────────────  │ (X feed) │
+   └──────────────┘     (uploaded by server)   └──────────────────┘                 └──────────┘
 ```
 
 **Server** (runs outside censored network):
 - Connects to Telegram, reads messages from configured channels
-- Fetches public X posts from configured usernames via RSS-compatible public mirrors (no login)
-- Serves feed data as encrypted DNS TXT responses
-- Random padding on responses to vary size (anti-DPI)
+- Fetches public X posts via RSS-compatible mirrors (no login)
+- Serves feed metadata + small media as encrypted DNS TXT responses
+- **Media relays** — same file, multiple delivery paths:
+  - **DNS relay** (slow, censorship-resistant) splits bytes across DNS blocks
+  - **GitHub relay** (fast, default off) uploads bytes to a repo so clients pull via plain HTTPS; intended for files that are too big for DNS
+  - Future relays slot in alongside without breaking older clients
+- Random padding on responses (anti-DPI)
 - Session persistence — login once, run forever
-- No-Telegram mode (`--no-telegram`) — reads public channels without needing Telegram credentials
+- No-Telegram mode (`--no-telegram`) — reads public channels without credentials
 - All data stored in a single directory
 
 **Client** (runs inside censored network):
 - Browser-based web UI with RTL/Farsi support (VazirMatn font)
-- Sends encrypted DNS TXT queries via available resolvers
-- **Resolver Bank**: shared pool of DNS resolvers used across all profiles — no more per-profile resolver lists. Resolvers are added via scanner, import, or manual entry and scored automatically
-- **Resolver scoring**: tracks per-resolver success rate and latency with persistent scores; healthier resolvers are preferred automatically. Users can clean up low-scoring resolvers from the bank
-- **Scatter mode**: fans out the same DNS request to multiple resolvers simultaneously and uses the fastest response (default: 2 concurrent resolvers per request)
-- Send messages to channels and private chats (requires server `--allow-manage` and login to telegram)
+- Sends encrypted DNS TXT queries via the resolver bank
+- **Resolver Bank**: shared pool of DNS resolvers used across all profiles. Resolvers are added via scanner, import, or manual entry and scored automatically
+- **Resolver scoring**: per-resolver success-rate + latency scoreboard with persistent scores; healthier resolvers are preferred. Low-scoring entries can be pruned
+- **Scatter mode**: fans out the same DNS request to multiple resolvers and uses the fastest response (default: 2 concurrent)
+- **Relay-aware media downloads** — picks the fast relay when the manifest advertises one, retries on transient failure, asks before falling back to the slow DNS path. Hash + size verified on every download
+- Send messages to channels and private chats (requires server `--allow-manage` + Telegram login)
 - Channel management (add/remove channels remotely via admin commands when `--allow-manage` is enabled)
+- **Per-channel auto-update**: pin specific channels for periodic background refresh, persisted per profile
 - Message compression (deflate) for efficient transfer
 - Web UI password protection (`--password` on client)
-- New message indicators and next-fetch countdown timer
-- Channel type badges (Private/Public)
-- X channel badges (`x/username`) with separate color in the sidebar
-- Media type detection (`[IMAGE]`, `[VIDEO]`, etc.)
+- New-message indicators (channel-list NEW badge + in-chat separator), next-fetch countdown timer
+- Channel type badges (Private/Public/X) with separate colors
+- Media type detection (`[IMAGE]`, `[VIDEO]`, etc.) and inline rendering
 - Live DNS query log in the browser
 
 ## Anti-DPI Features
@@ -56,23 +65,42 @@ All communication is encrypted with AES-256 and transmitted via standard DNS TXT
 
 Messages with attached photos, files, GIFs, audio, and videos can be cached on the server and downloaded over the same encrypted DNS channel.
 
-The server downloads each attached media file (deduped by upstream id and content hash), assigns it a slot in a reserved channel range (`10000`–`60000`), and splits the bytes into the same-sized blocks used elsewhere. The message text gains a small metadata header:
+The server downloads each attached media file (deduped by upstream id and content hash), pushes the bytes to every enabled relay, and adds a small metadata header to the message text:
 
 ```
-[IMAGE]<size>:<dl>:<ch>:<blk>:<crc32>
+[IMAGE]<size>:<flags>:<dnsCh>:<dnsBlk>:<crc32>[:<filename>]
 optional caption
 ```
 
-`<dl>=0` means the file exceeded the server's size cap and isn't cached. Old clients render the header as a regular caption line.
+`<flags>` is a comma-separated list of per-relay availability bits (`1`=available, `0`=not). Slot 0 is DNS, slot 1 is the GitHub relay; future relays append. Older clients ignore slots they don't know.
 
-Block 0 of every cached file begins with a 16-byte protocol header — 4 bytes CRC32 of the (decompressed) content, 1 byte version, 1 byte compression, 10 bytes reserved for future fields. The client checks the CRC against the expected value from the message metadata before delivering any bytes, so a stale message pointing to a slot the server has since reused for a different file is rejected after a single block. The remaining bytes are decompressed per the compression byte. Downloads are cached on the client (IndexedDB, 7 days) and on the local thefeed-client server (`<dataDir>/media-cache/`, 7 days) so multiple devices behind one client share a single DNS-tunnelled fetch. Concurrent downloads are limited to one at a time; extra clicks are queued.
+Block 0 of every DNS-cached file begins with a 16-byte protocol header — 4 bytes CRC32 of the (decompressed) content, 1 byte version, 1 byte compression, 10 bytes reserved for future fields. The client checks the CRC against the expected value before delivering any bytes. The remaining bytes are decompressed per the compression byte. Downloads are cached on the client (IndexedDB, 7 days) and on the local thefeed-client server (`<dataDir>/media-cache/`, 7 days). Concurrent downloads are limited and extra clicks are queued.
 
-Server flags:
+### Media relays
 
-- `--no-media` — disable the feature.
-- `--media-max-size` (KB, default 100) — per-file size cap.
-- `--media-cache-ttl` (minutes, default 600) — entry lifetime.
-- `--media-compression` (default `gzip`) — `none`, `gzip`, or `deflate`. The compression byte is carried in the block-0 header so the client can decompress without prior knowledge.
+Each relay is independent — the same file can be served via DNS *and* GitHub *and* future relays at the same time. Clients pick whichever the message manifest advertises and prefer the fastest available; on failure they retry, then ask before falling back to a slower one. Hash + size are verified on every download.
+
+Two relays ship today:
+
+- **DNS relay** (slow, default on). Bytes are split into DNS blocks. Survives in censored networks. Default cap: 100 KB.
+- **GitHub relay** (fast, default off). Bytes are uploaded to a repo and pulled by clients over plain HTTPS. Needs a personal access token with `contents:write`. Files land at `<repo>/<sanitised-domain>/<size>_<crc32>` so multiple deployments can share one repo. Default cap: 25 MB.
+
+Block 0 of every DNS-cached file begins with a 16-byte protocol header — 4 bytes CRC32 of the (decompressed) content, 1 byte version, 1 byte compression, 10 bytes reserved. The remaining bytes are decompressed per the compression byte. Downloads are cached on the client (IndexedDB, 7 days) and on the local thefeed-client server (`<dataDir>/media-cache/`, 7 days). Concurrent downloads are limited and extra clicks are queued.
+
+Server flags / env vars:
+
+| Flag                          | Env                                  | Default     | Notes                              |
+|-------------------------------|--------------------------------------|-------------|------------------------------------|
+| `--dns-media-enabled`         | `THEFEED_DNS_MEDIA_ENABLED`          | `false`     | toggle DNS relay                   |
+| `--dns-media-max-size`        | `THEFEED_DNS_MEDIA_MAX_SIZE_KB`      | `100` (KB)  | per-file cap                       |
+| `--dns-media-cache-ttl`       | `THEFEED_DNS_MEDIA_CACHE_TTL_MIN`    | `600` (min) | TTL                                |
+| `--dns-media-compression`     | `THEFEED_DNS_MEDIA_COMPRESSION`      | `gzip`      | `none`, `gzip`, or `deflate`       |
+| `--github-relay-enabled`      | `THEFEED_GITHUB_RELAY_ENABLED`       | `false`     | toggle GitHub relay                |
+| `--github-relay-token`        | `THEFEED_GITHUB_RELAY_TOKEN`         | —           | PAT, `contents:write`              |
+| `--github-relay-repo`         | `THEFEED_GITHUB_RELAY_REPO`          | —           | `owner/repo`                       |
+| `--github-relay-branch`       | `THEFEED_GITHUB_RELAY_BRANCH`        | `main`      | branch to commit relay objects to  |
+| `--github-relay-max-size`     | `THEFEED_GITHUB_RELAY_MAX_SIZE_KB`   | `25600` (KB)| per-file cap                       |
+| `--github-relay-ttl`          | `THEFEED_GITHUB_RELAY_TTL_MIN`       | `600` (min) | orphans pruned next refresh cycle  |
 
 The hourly DNS report includes `totalMediaQueries` and a `mediaCache` block (entries, bytes, hits, misses, evictions).
 
@@ -328,7 +356,7 @@ make build-server
 
 All data files (session, channels, x accounts) are stored in the `--data-dir` directory (default: `./data`).
 
-Environment variables: `THEFEED_DOMAIN`, `THEFEED_KEY`, `THEFEED_MSG_LIMIT`, `THEFEED_ALLOW_MANAGE` (set to `0` to force-disable even if the flag is baked into the service), `THEFEED_X_RSS_INSTANCES`, `TELEGRAM_API_ID`, `TELEGRAM_API_HASH`, `TELEGRAM_PHONE`, `TELEGRAM_PASSWORD`
+Environment variables: `THEFEED_DOMAIN`, `THEFEED_KEY`, `THEFEED_MSG_LIMIT`, `THEFEED_FETCH_INTERVAL`, `THEFEED_ALLOW_MANAGE` (set to `0` to force-disable even if the flag is baked into the service), `THEFEED_X_RSS_INSTANCES`, `TELEGRAM_API_ID`, `TELEGRAM_API_HASH`, `TELEGRAM_PHONE`, `TELEGRAM_PASSWORD`
 
 #### Server Flags
 
@@ -349,11 +377,19 @@ Environment variables: `THEFEED_DOMAIN`, `THEFEED_KEY`, `THEFEED_MSG_LIMIT`, `TH
 | `--listen` | `:5300` | DNS listen address |
 | `--padding` | `32` | Max random padding bytes (0=disabled) |
 | `--msg-limit` | `15` | Maximum messages to fetch per Telegram channel |
+| `--fetch-interval` | `10` | Fetch cycle interval in minutes (min 3) |
 | `--allow-manage` | `false` | Allow remote send/channel management (default: disabled) |
-| `--no-media` | `false` | Disable downloading and serving image/file media |
-| `--media-max-size` | `100` | Per-file size cap for cached media in KB (0 = no cap) |
-| `--media-cache-ttl` | `600` | How long a cached media entry stays available, in minutes |
-| `--media-compression` | `gzip` | Compression for cached media: `none`, `gzip`, or `deflate` |
+| `--debug` | `false` | Log every decoded DNS query |
+| `--dns-media-enabled` | `false` | Serve media via DNS (slow relay) |
+| `--dns-media-max-size` | `100` | Per-file cap for the DNS relay in KB (0 = no cap) |
+| `--dns-media-cache-ttl` | `600` | DNS-relay TTL, in minutes |
+| `--dns-media-compression` | `gzip` | DNS-relay compression: `none`, `gzip`, or `deflate` |
+| `--github-relay-enabled` | `false` | Serve media via the GitHub fast relay |
+| `--github-relay-token` | | PAT with `contents:write` (or `THEFEED_GITHUB_RELAY_TOKEN`) |
+| `--github-relay-repo` | | `owner/repo` for the relay |
+| `--github-relay-branch` | `main` | Branch to commit relay objects to |
+| `--github-relay-max-size` | `25600` | Per-file cap for the GitHub relay in KB |
+| `--github-relay-ttl` | `600` | GitHub-relay TTL in minutes (orphans pruned next cycle) |
 | `--version` | | Show version and exit |
 
 ### Client
@@ -403,8 +439,6 @@ chmod +x thefeed-client
 #### Android (Native APK Wrapper)
 
 > download it from the latest release assets: `thefeed-android-arm64.apk`
-
-Also available: `thefeed-android-arm64-upx.apk` (UPX-compressed embedded client).
 
 The Android app automatically requests battery optimization exemption on first launch so the background service is not killed by the OS.
 

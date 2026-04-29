@@ -12,57 +12,61 @@ func TestEncodeMediaTextRoundTrip(t *testing.T) {
 		caption string
 	}{
 		{
-			name: "image with caption",
+			name: "dns only",
 			meta: MediaMeta{
-				Tag:          MediaImage,
-				Size:         123456,
-				Downloadable: true,
-				Channel:      12345,
-				Blocks:       42,
-				CRC32:        0xabcdef01,
+				Tag:     MediaImage,
+				Size:    123456,
+				Relays:  []bool{true, false},
+				Channel: 12345,
+				Blocks:  42,
+				CRC32:   0xabcdef01,
 			},
 			caption: "hello world\nmulti-line",
 		},
 		{
-			name: "file with filename",
+			name: "dns + github",
 			meta: MediaMeta{
-				Tag:          MediaFile,
-				Size:         800,
-				Downloadable: true,
-				Channel:      MediaChannelStart,
-				Blocks:       2,
-				CRC32:        0,
-				Filename:     "report.zip",
+				Tag:      MediaFile,
+				Size:     800,
+				Relays:   []bool{true, true},
+				Channel:  MediaChannelStart,
+				Blocks:   2,
+				CRC32:    0,
+				Filename: "report.zip",
 			},
 			caption: "",
 		},
 		{
-			name: "filename strips path traversal",
+			name: "github only",
 			meta: MediaMeta{
-				Tag:          MediaFile,
-				Size:         100,
-				Downloadable: true,
-				Channel:      MediaChannelStart + 1,
-				Blocks:       1,
-				CRC32:        0xdeadbeef,
-				// Server-side sanitisation strips dirs, control chars, and ":"
-				// before the metadata reaches the wire — so a parsed filename
-				// is never going to contain any of those.
-				Filename: "/tmp/../etc/passwd:bad\nname",
+				Tag:    MediaImage,
+				Size:   12_000_000,
+				Relays: []bool{false, true},
+				CRC32:  0xdeadbeef,
 			},
-			caption: "",
+			caption: "fast path",
 		},
 		{
-			name: "non-downloadable image",
+			name: "no relays available",
 			meta: MediaMeta{
-				Tag:          MediaImage,
-				Size:         50_000_000,
-				Downloadable: false,
-				Channel:      0,
-				Blocks:       0,
-				CRC32:        0xdeadbeef,
+				Tag:    MediaImage,
+				Size:   50_000_000,
+				Relays: []bool{false, false},
+				CRC32:  0xdeadbeef,
 			},
 			caption: "too big",
+		},
+		{
+			name: "future third relay flag survives roundtrip",
+			meta: MediaMeta{
+				Tag:     MediaFile,
+				Size:    1024,
+				Relays:  []bool{true, false, true},
+				Channel: MediaChannelStart + 5,
+				Blocks:  3,
+				CRC32:   0xcafebabe,
+			},
+			caption: "future relay",
 		},
 	}
 	for _, tc := range cases {
@@ -81,8 +85,11 @@ func TestEncodeMediaTextRoundTrip(t *testing.T) {
 			if meta.Size != tc.meta.Size {
 				t.Fatalf("Size = %d, want %d", meta.Size, tc.meta.Size)
 			}
-			if meta.Downloadable != tc.meta.Downloadable {
-				t.Fatalf("Downloadable = %v, want %v", meta.Downloadable, tc.meta.Downloadable)
+			// Relays roundtrip: every input slot must reflect on the wire.
+			for i, want := range tc.meta.Relays {
+				if got := meta.HasRelay(i); got != want {
+					t.Errorf("Relay %d = %v, want %v (body=%q)", i, got, want, body)
+				}
 			}
 			if meta.Channel != tc.meta.Channel {
 				t.Fatalf("Channel = %d, want %d", meta.Channel, tc.meta.Channel)
@@ -98,6 +105,28 @@ func TestEncodeMediaTextRoundTrip(t *testing.T) {
 				t.Fatalf("Filename = %q, want %q", meta.Filename, wantFilename)
 			}
 		})
+	}
+}
+
+// TestParseMediaTextUnknownRelaysIgnored is the forward-compat guarantee:
+// older clients reading a wire form with extra relay flags must not fail.
+func TestParseMediaTextUnknownRelaysIgnored(t *testing.T) {
+	body := "[FILE]200:0,1,1,0:0:0:deadbeef:f.bin\ncap"
+	meta, _, ok := ParseMediaText(body)
+	if !ok {
+		t.Fatalf("ok=false on multi-flag body")
+	}
+	if meta.HasRelay(RelayDNS) {
+		t.Fatalf("RelayDNS should be false")
+	}
+	if !meta.HasRelay(RelayGitHub) {
+		t.Fatalf("RelayGitHub should be true")
+	}
+	if !meta.HasRelay(2) {
+		t.Fatalf("relay 2 should be true")
+	}
+	if meta.HasRelay(99) {
+		t.Fatalf("unknown relay 99 must read as false, not panic")
 	}
 }
 
@@ -134,8 +163,6 @@ func TestSanitiseMediaFilenameLongName(t *testing.T) {
 	}
 }
 
-// Backward compat: legacy "[IMAGE]\ncaption" must still parse cleanly with
-// caption preserved and Downloadable=false.
 func TestParseMediaTextLegacy(t *testing.T) {
 	body := "[IMAGE]\nlook at this"
 	meta, caption, ok := ParseMediaText(body)
@@ -145,15 +172,14 @@ func TestParseMediaTextLegacy(t *testing.T) {
 	if meta.Tag != MediaImage {
 		t.Fatalf("Tag = %q, want %q", meta.Tag, MediaImage)
 	}
-	if meta.Downloadable {
-		t.Fatalf("Downloadable should be false on legacy body")
+	if meta.HasAnyRelay() {
+		t.Fatalf("legacy body should have no available relays")
 	}
 	if caption != "look at this" {
 		t.Fatalf("caption = %q, want %q", caption, "look at this")
 	}
 }
 
-// Backward compat: legacy [IMAGE] with no caption.
 func TestParseMediaTextLegacyNoCaption(t *testing.T) {
 	for _, body := range []string{"[IMAGE]", "[IMAGE]\n"} {
 		meta, caption, ok := ParseMediaText(body)
@@ -163,8 +189,8 @@ func TestParseMediaTextLegacyNoCaption(t *testing.T) {
 		if meta.Tag != MediaImage {
 			t.Fatalf("Tag = %q, want [IMAGE]", meta.Tag)
 		}
-		if meta.Downloadable {
-			t.Fatalf("legacy body should not be downloadable")
+		if meta.HasAnyRelay() {
+			t.Fatalf("legacy body should have no available relays")
 		}
 		if caption != "" {
 			t.Fatalf("caption = %q, want empty", caption)
@@ -172,16 +198,14 @@ func TestParseMediaTextLegacyNoCaption(t *testing.T) {
 	}
 }
 
-// A normal caption that happens to lead with a media tag should not be
-// misparsed as downloadable metadata.
 func TestParseMediaTextHumanCaption(t *testing.T) {
 	body := "[IMAGE]nice picture\nrest of post"
 	meta, caption, ok := ParseMediaText(body)
 	if !ok {
 		t.Fatalf("ok=false on caption-leading body")
 	}
-	if meta.Downloadable {
-		t.Fatalf("downloadable should be false for a human caption")
+	if meta.HasAnyRelay() {
+		t.Fatalf("human caption must not be flagged as downloadable")
 	}
 	if meta.Channel != 0 {
 		t.Fatalf("channel should be 0 for non-metadata body, got %d", meta.Channel)
@@ -201,15 +225,18 @@ func TestParseMediaTextUnknownTag(t *testing.T) {
 }
 
 // A metadata line that names a channel outside the media range must NOT be
-// surfaced as downloadable.
+// surfaced as DNS-downloadable; other relay flags stay as-claimed.
 func TestParseMediaTextRejectsOutOfRangeChannel(t *testing.T) {
-	body := "[IMAGE]100:1:5:200:00000000\ncaption"
+	body := "[IMAGE]100:1,1:5:200:00000000\ncaption"
 	meta, _, ok := ParseMediaText(body)
 	if !ok {
 		t.Fatalf("ok=false on otherwise-valid metadata")
 	}
-	if meta.Downloadable {
-		t.Fatalf("Downloadable should be false for channel %d outside media range", meta.Channel)
+	if meta.HasRelay(RelayDNS) {
+		t.Fatalf("RelayDNS should be false for channel %d outside media range", meta.Channel)
+	}
+	if !meta.HasRelay(RelayGitHub) {
+		t.Fatalf("RelayGitHub flag should survive even when DNS is rejected")
 	}
 }
 

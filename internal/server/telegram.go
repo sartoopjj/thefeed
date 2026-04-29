@@ -63,15 +63,27 @@ type TelegramReader struct {
 	msgLimit int // max messages to fetch per channel
 	baseCh   int
 
-	mu       sync.RWMutex
-	cache    map[string]cachedMessages
-	cacheTTL time.Duration
+	mu            sync.RWMutex
+	cache         map[string]cachedMessages
+	cacheTTL      time.Duration
+	fetchInterval time.Duration
 
 	// api is set once authenticated, used for sending messages.
 	apiMu sync.RWMutex
 	api   *tg.Client
 
 	refreshCh chan struct{} // signals Run() to re-fetch immediately
+}
+
+// SetFetchInterval overrides the default 10m fetch cadence.
+func (tr *TelegramReader) SetFetchInterval(d time.Duration) {
+	if d <= 0 {
+		return
+	}
+	tr.mu.Lock()
+	tr.fetchInterval = d
+	tr.cacheTTL = d
+	tr.mu.Unlock()
 }
 
 // resolvedPeer holds the resolved Telegram peer along with its chat type.
@@ -100,14 +112,15 @@ func NewTelegramReader(cfg TelegramConfig, channelUsernames []string, feed *Feed
 		baseCh = 1
 	}
 	return &TelegramReader{
-		cfg:       cfg,
-		channels:  cleaned,
-		feed:      feed,
-		msgLimit:  msgLimit,
-		baseCh:    baseCh,
-		cache:     make(map[string]cachedMessages),
-		cacheTTL:  10 * time.Minute,
-		refreshCh: make(chan struct{}, 1),
+		cfg:           cfg,
+		channels:      cleaned,
+		feed:          feed,
+		msgLimit:      msgLimit,
+		baseCh:        baseCh,
+		cache:         make(map[string]cachedMessages),
+		cacheTTL:      10 * time.Minute,
+		fetchInterval: 10 * time.Minute,
+		refreshCh:     make(chan struct{}, 1),
 	}
 }
 
@@ -146,11 +159,11 @@ func (tr *TelegramReader) Run(ctx context.Context) error {
 		// Initial fetch
 		tr.fetchAll(ctx, api)
 
-		// Periodic fetch loop
-		ticker := time.NewTicker(10 * time.Minute)
+		interval := tr.fetchInterval
+		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
 
-		tr.feed.SetNextFetch(uint32(time.Now().Add(10 * time.Minute).Unix()))
+		tr.feed.SetNextFetch(uint32(time.Now().Add(interval).Unix()))
 
 		for {
 			select {
@@ -158,15 +171,14 @@ func (tr *TelegramReader) Run(ctx context.Context) error {
 				return ctx.Err()
 			case <-ticker.C:
 				tr.fetchAll(ctx, api)
-				tr.feed.SetNextFetch(uint32(time.Now().Add(10 * time.Minute).Unix()))
+				tr.feed.SetNextFetch(uint32(time.Now().Add(interval).Unix()))
 			case <-tr.refreshCh:
-				// Invalidate cache so fetchAll re-fetches everything.
 				tr.mu.Lock()
 				tr.cache = make(map[string]cachedMessages)
 				tr.mu.Unlock()
 				tr.fetchAll(ctx, api)
-				ticker.Reset(10 * time.Minute)
-				tr.feed.SetNextFetch(uint32(time.Now().Add(10 * time.Minute).Unix()))
+				ticker.Reset(interval)
+				tr.feed.SetNextFetch(uint32(time.Now().Add(interval).Unix()))
 			}
 		}
 	})
@@ -222,15 +234,18 @@ func (tr *TelegramReader) authenticate(ctx context.Context, client *telegram.Cli
 func (tr *TelegramReader) fetchAll(ctx context.Context, api *tg.Client) {
 	log.Printf("[telegram] fetch cycle started for %d channels", len(tr.channels))
 	start := time.Now()
-	var fetched, failed int
+	var fetched, failed, skipped int
+	tr.mu.RLock()
+	cacheTTL := tr.cacheTTL
+	tr.mu.RUnlock()
 	for i, username := range tr.channels {
 		chNum := tr.baseCh + i
 
-		// Check cache
 		tr.mu.RLock()
 		cached, ok := tr.cache[username]
 		tr.mu.RUnlock()
-		if ok && time.Since(cached.fetched) < tr.cacheTTL {
+		if ok && time.Since(cached.fetched) < cacheTTL {
+			skipped++
 			continue
 		}
 
@@ -272,7 +287,9 @@ func (tr *TelegramReader) fetchAll(ctx context.Context, api *tg.Client) {
 		fetched++
 		log.Printf("[telegram] updated %s (%s): %d messages (type=%d, canSend=%v)", username, rp.title, len(msgs), rp.chatType, rp.canSend)
 	}
-	log.Printf("[telegram] fetch cycle done in %s: %d fetched, %d failed, %d total", time.Since(start).Round(time.Millisecond), fetched, failed, len(tr.channels))
+	log.Printf("[telegram] fetch cycle done in %s: %d fetched, %d failed, %d skipped, %d total",
+		time.Since(start).Round(time.Millisecond), fetched, failed, skipped, len(tr.channels))
+	tr.feed.AfterFetchCycle(ctx)
 }
 
 // resolvePeer resolves a Telegram username to an InputPeer, handling channels,

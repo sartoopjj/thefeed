@@ -32,11 +32,23 @@ type XPublicReader struct {
 	client    *http.Client
 	instances []string
 
-	mu       sync.RWMutex
-	cache    map[string]cachedMessages
-	cacheTTL time.Duration
+	mu            sync.RWMutex
+	cache         map[string]cachedMessages
+	cacheTTL      time.Duration
+	fetchInterval time.Duration
 
 	refreshCh chan struct{}
+}
+
+// SetFetchInterval overrides the default 10m fetch cadence.
+func (xr *XPublicReader) SetFetchInterval(d time.Duration) {
+	if d <= 0 {
+		return
+	}
+	xr.mu.Lock()
+	xr.fetchInterval = d
+	xr.cacheTTL = d
+	xr.mu.Unlock()
 }
 
 const maxXRSSBodyBytes int64 = 2 << 20 // 2 MiB
@@ -74,10 +86,11 @@ func NewXPublicReader(accounts []string, feed *Feed, msgLimit int, baseCh int, i
 				return http.ErrUseLastResponse
 			},
 		},
-		instances: instances,
-		cache:     make(map[string]cachedMessages),
-		cacheTTL:  10 * time.Minute,
-		refreshCh: make(chan struct{}, 1),
+		instances:     instances,
+		cache:         make(map[string]cachedMessages),
+		cacheTTL:      10 * time.Minute,
+		fetchInterval: 10 * time.Minute,
+		refreshCh:     make(chan struct{}, 1),
 	}
 }
 
@@ -124,7 +137,8 @@ func normalizeXRSSInstances(instancesCSV string) []string {
 func (xr *XPublicReader) Run(ctx context.Context) error {
 	xr.fetchAll(ctx)
 
-	ticker := time.NewTicker(10 * time.Minute)
+	interval := xr.fetchInterval
+	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
 	for {
@@ -138,7 +152,7 @@ func (xr *XPublicReader) Run(ctx context.Context) error {
 			xr.cache = make(map[string]cachedMessages)
 			xr.mu.Unlock()
 			xr.fetchAll(ctx)
-			ticker.Reset(10 * time.Minute)
+			ticker.Reset(interval)
 		}
 	}
 }
@@ -162,14 +176,13 @@ func (xr *XPublicReader) SetBaseCh(baseCh int) {
 func (xr *XPublicReader) fetchAll(ctx context.Context) {
 	log.Printf("[x] fetch cycle started for %d accounts (instances: %v)", len(xr.accounts), xr.instances)
 	start := time.Now()
-	var fetched, failed int
+	var fetched, failed, skipped int
 
 	xr.mu.RLock()
 	baseCh := xr.baseCh
+	cacheTTL := xr.cacheTTL
 	xr.mu.RUnlock()
 
-	// Always set ChatType for all X accounts upfront, so channels show the X flag
-	// even if the Nitter fetch fails or the cache is still valid.
 	for i := range xr.accounts {
 		xr.feed.SetChatInfo(baseCh+i, protocol.ChatTypeX, false)
 	}
@@ -180,7 +193,8 @@ func (xr *XPublicReader) fetchAll(ctx context.Context) {
 		xr.mu.RLock()
 		cached, ok := xr.cache[account]
 		xr.mu.RUnlock()
-		if ok && time.Since(cached.fetched) < xr.cacheTTL {
+		if ok && time.Since(cached.fetched) < cacheTTL {
+			skipped++
 			continue
 		}
 
@@ -210,7 +224,9 @@ func (xr *XPublicReader) fetchAll(ctx context.Context) {
 		fetched++
 		log.Printf("[x] updated @%s: %d posts", account, len(msgs))
 	}
-	log.Printf("[x] fetch cycle done in %s: %d fetched, %d failed, %d total", time.Since(start).Round(time.Millisecond), fetched, failed, len(xr.accounts))
+	log.Printf("[x] fetch cycle done in %s: %d fetched, %d failed, %d skipped, %d total",
+		time.Since(start).Round(time.Millisecond), fetched, failed, skipped, len(xr.accounts))
+	xr.feed.AfterFetchCycle(ctx)
 }
 
 func (xr *XPublicReader) fetchAccount(ctx context.Context, username string) ([]protocol.Message, string, error) {

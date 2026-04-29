@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"compress/flate"
 	"compress/gzip"
+	"context"
 	"errors"
 	"fmt"
 	"hash/crc32"
@@ -27,10 +28,11 @@ type MediaCache struct {
 	maxFileBytes int64
 	ttl          time.Duration
 	compression  protocol.MediaCompression
+	dnsEnabled   bool // when false, RelayDNS stays unset on the wire
 
-	// Logger receives an info line per cache event when set (Store hits/misses,
-	// evictions). The default is a silent no-op so tests don't print noise.
 	logf func(format string, args ...interface{})
+
+	gh *GitHubRelay
 
 	mu          sync.RWMutex
 	byKey       map[string]*mediaEntry // upstream key (file_id / URL) → entry
@@ -67,16 +69,11 @@ type mediaEntry struct {
 
 // MediaCacheConfig configures a new MediaCache.
 type MediaCacheConfig struct {
-	// MaxFileBytes is the largest individual file the cache will accept.
-	// Files larger than this are rejected by Store with ErrTooLarge.
-	MaxFileBytes int64
-	// TTL is how long an entry stays cached after its last refresh.
-	TTL time.Duration
-	// Compression is the wire-format compression used for media blocks.
-	// Defaults to MediaCompressionNone when zero.
-	Compression protocol.MediaCompression
-	// Logf receives info-level cache events. Optional.
-	Logf func(format string, args ...interface{})
+	MaxFileBytes    int64
+	TTL             time.Duration
+	Compression     protocol.MediaCompression
+	Logf            func(format string, args ...interface{})
+	DNSRelayEnabled bool // controls Relays[RelayDNS] on the wire
 }
 
 // ErrTooLarge is returned by Store when content exceeds MaxFileBytes.
@@ -99,6 +96,7 @@ func NewMediaCache(cfg MediaCacheConfig) *MediaCache {
 		maxFileBytes: cfg.MaxFileBytes,
 		ttl:          cfg.TTL,
 		compression:  cfg.Compression,
+		dnsEnabled:   cfg.DNSRelayEnabled,
 		logf:         logf,
 		byKey:        make(map[string]*mediaEntry),
 		byChannel:    make(map[uint16]*mediaEntry),
@@ -128,14 +126,18 @@ func (c *MediaCache) Store(cacheKey, tag string, content []byte, mimeType, filen
 		tag = protocol.MediaFile
 	}
 	size := int64(len(content))
-	if c.maxFileBytes > 0 && size > c.maxFileBytes {
+	// Reject only when no enabled relay could host this file. A file too big
+	// for DNS but small enough for GitHub still belongs in the cache —
+	// MaxAcceptableBytes() collapses both caps into a single ceiling.
+	if max := c.MaxAcceptableBytes(); max > 0 && size > max {
 		atomic.AddUint64(&c.storeRejected, 1)
 		return protocol.MediaMeta{
-			Tag:          tag,
-			Size:         size,
-			Downloadable: false,
+			Tag:    tag,
+			Size:   size,
+			Relays: nil,
 		}, ErrTooLarge
 	}
+	dnsFits := c.maxFileBytes == 0 || size <= c.maxFileBytes
 
 	now := time.Now()
 	hash := crc32.ChecksumIEEE(content)
@@ -144,18 +146,15 @@ func (c *MediaCache) Store(cacheKey, tag string, content []byte, mimeType, filen
 	defer c.mu.Unlock()
 
 	if existing, ok := c.byKey[cacheKey]; ok && existing.crc32 == hash {
-		// Same upstream id and same content — just refresh the TTL.
 		existing.expiresAt = c.expiry(now)
 		atomic.AddUint64(&c.storeHits, 1)
 		c.logf("media: refresh tag=%s key=%s ch=%d size=%d", tag, cacheKey, existing.channel, existing.size)
+		if c.gh != nil {
+			c.gh.Touch(existing.size, existing.crc32)
+		}
 		return c.metaForLocked(existing), nil
 	}
 
-	// Cross-key content match: a different upstream id pointed at exactly
-	// the same bytes. Bind the new cache key to the existing entry so any
-	// future Lookup under either key works, and refresh the TTL. This is
-	// the case the spec asks for: "same media → just reset TTL, don't take
-	// a new channel slot".
 	if existing, ok := c.byHash[hash]; ok {
 		existing.expiresAt = c.expiry(now)
 		if cacheKey != existing.cacheKey {
@@ -173,6 +172,9 @@ func (c *MediaCache) Store(cacheKey, tag string, content []byte, mimeType, filen
 		c.byKey[cacheKey] = existing
 		atomic.AddUint64(&c.storeHits, 1)
 		c.logf("media: dedup tag=%s key=%s ch=%d size=%d (hash match)", tag, cacheKey, existing.channel, existing.size)
+		if c.gh != nil {
+			c.gh.Touch(existing.size, existing.crc32)
+		}
 		return c.metaForLocked(existing), nil
 	}
 
@@ -190,29 +192,38 @@ func (c *MediaCache) Store(cacheKey, tag string, content []byte, mimeType, filen
 	// active entries; n is capped by the media-channel range.
 	c.sweepExpiredLocked(now)
 
-	channel, err := c.allocateChannelLocked(now)
-	if err != nil {
-		return protocol.MediaMeta{}, err
-	}
-
-	blocks, encErr := splitMediaBlocks(hash, content, c.compression)
-	if encErr != nil {
-		return protocol.MediaMeta{}, encErr
-	}
-	if size > 0 {
-		var compressedBody int
-		for _, b := range blocks {
-			compressedBody += len(b)
+	var (
+		channel uint16
+		blocks  [][]byte
+	)
+	if dnsFits {
+		var err error
+		channel, err = c.allocateChannelLocked(now)
+		if err != nil {
+			return protocol.MediaMeta{}, err
 		}
-		compressedBody -= protocol.MediaBlockHeaderLen
-		if compressedBody < 0 {
-			compressedBody = 0
+		var encErr error
+		blocks, encErr = splitMediaBlocks(hash, content, c.compression)
+		if encErr != nil {
+			return protocol.MediaMeta{}, encErr
 		}
-		var savedPct int
-		if c.compression != protocol.MediaCompressionNone && size > 0 {
-			savedPct = int((size - int64(compressedBody)) * 100 / size)
+		if size > 0 {
+			var compressedBody int
+			for _, b := range blocks {
+				compressedBody += len(b)
+			}
+			compressedBody -= protocol.MediaBlockHeaderLen
+			if compressedBody < 0 {
+				compressedBody = 0
+			}
+			var savedPct int
+			if c.compression != protocol.MediaCompressionNone && size > 0 {
+				savedPct = int((size - int64(compressedBody)) * 100 / size)
+			}
+			c.logf("media: compress=%s key=%s orig=%d body=%d saved=%d%%", c.compression, cacheKey, size, compressedBody, savedPct)
 		}
-		c.logf("media: compress=%s key=%s orig=%d body=%d saved=%d%%", c.compression, cacheKey, size, compressedBody, savedPct)
+	} else {
+		c.logf("media: store key=%s size=%d too big for DNS — relay only", cacheKey, size)
 	}
 	entry := &mediaEntry{
 		channel:   channel,
@@ -226,12 +237,28 @@ func (c *MediaCache) Store(cacheKey, tag string, content []byte, mimeType, filen
 		expiresAt: c.expiry(now),
 	}
 	c.byKey[cacheKey] = entry
-	c.byChannel[channel] = entry
+	if dnsFits {
+		c.byChannel[channel] = entry
+	}
 	c.byHash[hash] = entry
 	atomic.AddUint64(&c.storeMisses, 1)
 	atomic.AddInt64(&c.currentEntries, 1)
 	atomic.AddInt64(&c.currentBytes, size)
 	c.logf("media: store tag=%s key=%s ch=%d size=%d blocks=%d", tag, cacheKey, channel, size, len(blocks))
+
+	// Best-effort relay upload — copy of `content` because the caller may
+	// reuse the slice. Failures are logged but never block the DNS path.
+	if c.gh != nil {
+		gh := c.gh
+		body := append([]byte(nil), content...)
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+			defer cancel()
+			if err := gh.Upload(ctx, body); err != nil {
+				c.logf("media: gh-relay upload failed: %v", err)
+			}
+		}()
+	}
 
 	return c.metaForLocked(entry), nil
 }
@@ -439,15 +466,93 @@ func (c *MediaCache) expiry(now time.Time) time.Time {
 }
 
 func (c *MediaCache) metaForLocked(entry *mediaEntry) protocol.MediaMeta {
-	return protocol.MediaMeta{
-		Tag:          entry.tag,
-		Size:         entry.size,
-		Downloadable: true,
-		Channel:      entry.channel,
-		Blocks:       uint16(len(entry.blocks)),
-		CRC32:        entry.crc32,
-		Filename:     entry.filename,
+	// DNS bit only when DNS is enabled AND we actually computed blocks for
+	// this entry. Files larger than the DNS cap have len(blocks)==0.
+	dnsOK := c.dnsEnabled && len(entry.blocks) > 0
+	// GitHub bit reflects "the relay would serve this file": relay enabled
+	// and the file fits its cap. We don't require the upload to have
+	// finished — small files in particular would otherwise miss the bit on
+	// first render because the upload runs asynchronously. The web layer
+	// retries transient 404s while the upload is still in flight.
+	ghOK := false
+	if c.gh != nil {
+		ghMax := c.gh.MaxBytes()
+		ghOK = ghMax == 0 || entry.size <= ghMax
 	}
+	relays := []bool{dnsOK, ghOK}
+	meta := protocol.MediaMeta{
+		Tag:      entry.tag,
+		Size:     entry.size,
+		Relays:   relays,
+		CRC32:    entry.crc32,
+		Filename: entry.filename,
+	}
+	if dnsOK {
+		meta.Channel = entry.channel
+		meta.Blocks = uint16(len(entry.blocks))
+	}
+	return meta
+}
+
+// SetGitHubRelay attaches the GitHub fast relay. Store calls (and Lookup
+// hits) will then surface RelayGitHub when the relay has the bytes.
+func (c *MediaCache) SetGitHubRelay(g *GitHubRelay) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.gh = g
+}
+
+// TouchRelayEntries refreshes relay lastSeen for every cached file so
+// files referenced by skipped-fetch cycles aren't pruned.
+func (c *MediaCache) TouchRelayEntries() {
+	if c == nil {
+		return
+	}
+	c.mu.RLock()
+	gh := c.gh
+	if gh == nil {
+		c.mu.RUnlock()
+		return
+	}
+	pairs := make([][2]uint64, 0, len(c.byHash))
+	for _, e := range c.byHash {
+		pairs = append(pairs, [2]uint64{uint64(e.size), uint64(e.crc32)})
+	}
+	c.mu.RUnlock()
+	for _, p := range pairs {
+		gh.Touch(int64(p[0]), uint32(p[1]))
+	}
+}
+
+// MaxAcceptableBytes returns the largest file size any enabled relay would
+// accept. Callers use it as the "should we even fetch this?" gate so that
+// files which fit GitHub but not DNS still get pulled. 0 means "no cap".
+func (c *MediaCache) MaxAcceptableBytes() int64 {
+	if c == nil {
+		return 0
+	}
+	c.mu.RLock()
+	gh := c.gh
+	c.mu.RUnlock()
+	dns := c.maxFileBytes
+	var ghMax int64
+	if gh != nil {
+		ghMax = gh.MaxBytes()
+	}
+	// 0 from any enabled relay means "no cap" — propagate.
+	if (dns == 0 && c.dnsEnabled) || (gh != nil && ghMax == 0) {
+		return 0
+	}
+	if !c.dnsEnabled {
+		return ghMax
+	}
+	if gh == nil {
+		return dns
+	}
+	if ghMax > dns {
+		return ghMax
+	}
+	return dns
 }
 
 // splitMediaBlocks compresses the content (when compression != none),

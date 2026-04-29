@@ -163,6 +163,10 @@ type Server struct {
 	dlMu       sync.Mutex
 	dlProgress map[string]*mediaDLProgress
 
+	// relayInfo caches the latest answer from RelayInfoChannel so the fast
+	// media path doesn't pay a DNS round trip per file.
+	relayInfo *relayCache
+
 	// mediaCache is a disk-backed store for downloaded media bytes so that
 	// multiple devices on the same network share a single DNS-tunnelled
 	// fetch. Entries expire after 7 days.
@@ -202,6 +206,7 @@ func New(dataDir string, port int, host string, password string) (*Server, error
 		scanner:        scanner,
 		mediaCache:     mediaCache,
 		dlProgress:     make(map[string]*mediaDLProgress),
+		relayInfo:      newRelayCache(),
 	}
 
 	if mediaCache != nil {
@@ -2265,6 +2270,9 @@ func (s *Server) handleProfileSwitch(w http.ResponseWriter, r *http.Request) {
 	s.config = &found.Config
 	s.channels = nil
 	s.messages = make(map[int][]protocol.Message)
+	if s.relayInfo != nil {
+		s.relayInfo.invalidate()
+	}
 	s.lastMsgIDs = make(map[int]uint32)
 	s.lastHashes = make(map[int]uint32)
 	s.mu.Unlock()
@@ -2601,6 +2609,14 @@ func (s *Server) handleClearCache(w http.ResponseWriter, r *http.Request) {
 	if s.mediaCache != nil {
 		mediaDeleted = s.mediaCache.Clear()
 	}
+	// Reset in-memory message state too so refreshChannel's "no changes"
+	// guard doesn't skip the next fetch (prev IDs match what's on the
+	// server, but our cache is gone).
+	s.mu.Lock()
+	s.messages = make(map[int][]protocol.Message)
+	s.lastMsgIDs = make(map[int]uint32)
+	s.lastHashes = make(map[int]uint32)
+	s.mu.Unlock()
 	s.addLog(fmt.Sprintf("Cache cleared: %d message files, %d media files", deleted, mediaDeleted))
 	writeJSON(w, map[string]any{"ok": true, "deleted": deleted, "mediaDeleted": mediaDeleted})
 }

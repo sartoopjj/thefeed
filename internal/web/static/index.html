@@ -2591,6 +2591,9 @@
         auto_update_toggle: 'به‌روزرسانی خودکار این کانال',
         auto_update_on: 'به‌روزرسانی خودکار برای @{name} روشن شد',
         auto_update_off: 'به‌روزرسانی خودکار برای @{name} خاموش شد',
+        media_relay_fallback: 'دانلود از مسیر سریع نشد. از مسیر کند (DNS) امتحان کنیم؟ توجه: ممکن است خیلی کند باشد.',
+        media_slow_only: 'رله گیتهاب در دسترس نیست. دانلود از مسیر DNS خیلی کند است. ادامه می‌دهی؟',
+        media_size_mismatch: 'سایز فایل با چیزی که سرور گفته بود نمی‌خونه',
         clear_cache: 'پاک کردن کش', clear_cache_btn: '🗑 پاک کردن کش', cache_cleared: 'کش پاک شد!',
         saved_resolvers_title: 'شروع سریع',
         saved_resolvers_msg: 'آخرین اسکن ({t}) نتیجه داد: {n} سرور DNS سالم پیدا شد. همین‌ها را استفاده کنیم یا دوباره اسکن کنیم؟',
@@ -2755,6 +2758,9 @@
         auto_update_toggle: 'Auto-update this channel',
         auto_update_on: 'Auto-update is now ON for @{name}',
         auto_update_off: 'Auto-update is now OFF for @{name}',
+        media_relay_fallback: 'Fast relay failed. Try the slow DNS path? Note: this can be very slow.',
+        media_slow_only: 'GitHub relay is unavailable for this file. The DNS path is very slow. Download anyway?',
+        media_size_mismatch: 'Downloaded size doesn\'t match the manifest',
         clear_cache: 'Clear Cache', clear_cache_btn: '🗑 Clear Cache', cache_cleared: 'Cache cleared!',
         saved_resolvers_title: 'Quick Start',
         saved_resolvers_msg: 'Last scan ({t}) found {n} healthy DNS servers. Use them now (no scan needed), or scan again to re-verify.',
@@ -3262,13 +3268,30 @@
     }
     async function clearCache() {
       try { await mediaWipeIDB(); } catch (e) { }
-      // Drop in-memory blobs too so the next render forces a fresh fetch.
       Object.keys(mediaBlobURLs).forEach(function (k) {
         try { URL.revokeObjectURL(mediaBlobURLs[k]); } catch (e) { }
       });
       mediaBlobURLs = {};
       mediaBlobs = {};
+      // Clear last-seen tracking. Keep thefeed_lang / thefeed_theme /
+      // version-update flags. Profiles live server-side, untouched.
+      try {
+        localStorage.removeItem('thefeed_seen_ids');
+        localStorage.removeItem('thefeed_seen_hashes');
+        var toRemove = [];
+        for (var i = 0; i < localStorage.length; i++) {
+          var k = localStorage.key(i);
+          if (k && k.indexOf('thefeed_seen_ts_') === 0) toRemove.push(k);
+        }
+        toRemove.forEach(function (k) { localStorage.removeItem(k); });
+      } catch (e) { }
+      previousMsgIDs = {};
+      previousContentHashes = {};
+      autoFetchedChannels = {};
       try { var r = await fetch('/api/cache/clear', { method: 'POST' }); var j = await r.json(); if (j.ok) { alert(t('cache_cleared')) } } catch (e) { }
+      // Server cache was just wiped; force a fresh DNS-backed refresh of the
+      // selected channel. Other channels auto-refresh on first open.
+      try { await doRefresh(false); } catch (e) { }
     }
 
     async function mediaWipeIDB() {
@@ -3942,11 +3965,34 @@
     }
 
     // ===== MESSAGES =====
+    // Tracks channels we've already auto-fetched on first open so we don't
+    // re-trigger a refresh for genuinely empty channels.
+    var autoFetchedChannels = {};
     async function loadMessages(chNum) {
       try {
         var r = await fetch('/api/messages/' + chNum); if (chNum !== selectedChannel) return;
         var data = await r.json(); if (chNum !== selectedChannel) return;
         renderMessages(data.messages || [], data.gaps || []);
+        // If the server has nothing cached for this channel and we haven't
+        // already kicked off a fetch this session, trigger one. Covers the
+        // post-clear / fresh-restart case where the on-disk cache is empty.
+        if ((!data.messages || data.messages.length === 0) && !autoFetchedChannels[chNum] && !refreshingChannels[chNum]) {
+          autoFetchedChannels[chNum] = true;
+          refreshingChannels[chNum] = true;
+          var ch = channels[chNum - 1];
+          if (ch) showChannelFetchProgress(chNum, ch.Name || ch.name || '');
+          try { await fetch('/api/refresh?channel=' + chNum, { method: 'POST' }); } catch (e) { }
+          // Fail-safe: if SSE never delivers the 'channels' update (server
+          // refresh failed silently, transport dropped, etc.), clear the
+          // flag after 60s so the user can manually retry.
+          setTimeout(function () {
+            if (refreshingChannels[chNum]) {
+              delete refreshingChannels[chNum];
+              var fb = document.getElementById('prog-fetch-ch-' + chNum);
+              if (fb) fb.remove();
+            }
+          }, 60000);
+        }
         if (!refreshingChannels[chNum]) {
           var fetchBar = document.getElementById('prog-fetch-ch-' + chNum); if (fetchBar) fetchBar.remove();
         }
@@ -4114,16 +4160,11 @@
         var card = cards[i];
         var msgID = card.getAttribute('data-msg');
         if (!msgID) continue;
-        var ch = parseInt(card.getAttribute('data-ch'), 10);
-        if (!ch || ch < 10000 || ch > 60000) continue;
         var entry = mediaBlobs[msgID];
         if (entry) {
           mediaShowBlob(card, entry.url);
           continue;
         }
-        // A download from before the re-render is still running; rebuild the
-        // progress overlay so the user keeps seeing the bar instead of an
-        // already-clicked-but-now-empty action chip.
         if (mediaInflight[msgID]) {
           mediaShowProgress(card);
           continue;
@@ -4132,9 +4173,18 @@
           mediaShowQueued(card);
           continue;
         }
-        mediaRestoreFromCache(msgID);
+        // Disk-cache restore only makes sense for DNS-channel media because
+        // the cache is keyed off the DNS channel number; GH-only files are
+        // re-fetched on demand.
+        var ch = parseInt(card.getAttribute('data-ch'), 10);
+        if (ch >= 10000 && ch <= 60000) {
+          mediaRestoreFromCache(msgID);
+        }
       }
     }
+
+    // Relay slot indices — match protocol/media.go.
+    var RELAY_DNS = 0, RELAY_GITHUB = 1;
 
     function parseDownloadableMedia(text, tag) {
       var rest = text.substring(tag.length);
@@ -4142,24 +4192,42 @@
       var head = nl >= 0 ? rest.substring(0, nl) : rest;
       var caption = nl >= 0 ? rest.substring(nl + 1) : '';
       head = head.trim();
-      if (!head) {
-        return { downloadable: false, size: 0, channel: 0, blocks: 0, crc: '', caption: caption };
-      }
+      var empty = { downloadable: false, dnsAvailable: false, githubAvailable: false, relays: [], size: 0, channel: 0, blocks: 0, crc: '', filename: '', caption: caption };
+      if (!head) return empty;
       var parts = head.split(':');
       if (parts.length < 5) {
-        return { downloadable: false, size: 0, channel: 0, blocks: 0, crc: '', caption: rest.replace(/^\n/, '') };
+        empty.caption = rest.replace(/^\n/, '');
+        return empty;
       }
       var size = parseInt(parts[0], 10);
-      var dl = parseInt(parts[1], 10);
+      // parts[1] is a comma-separated relay flag list, e.g. "1,0".
+      var flagParts = parts[1].split(',');
+      var relays = [];
+      var flagsOK = true;
+      for (var fi = 0; fi < flagParts.length; fi++) {
+        var f = flagParts[fi].trim();
+        if (f !== '0' && f !== '1') { flagsOK = false; break; }
+        relays.push(f === '1');
+      }
+      if (!flagsOK) {
+        empty.caption = rest.replace(/^\n/, '');
+        return empty;
+      }
       var ch = parseInt(parts[2], 10);
       var blk = parseInt(parts[3], 10);
       var crc = parts[4].toLowerCase();
-      if (isNaN(size) || isNaN(dl) || isNaN(ch) || isNaN(blk) || !/^[0-9a-f]+$/.test(crc)) {
-        return { downloadable: false, size: 0, channel: 0, blocks: 0, crc: '', filename: '', caption: rest.replace(/^\n/, '') };
+      if (isNaN(size) || isNaN(ch) || isNaN(blk) || !/^[0-9a-f]+$/.test(crc)) {
+        empty.caption = rest.replace(/^\n/, '');
+        return empty;
       }
       var filename = parts.length >= 6 ? parts.slice(5).join(':') : '';
+      var dnsOK = !!relays[RELAY_DNS] && ch >= 10000 && ch <= 60000 && blk > 0;
+      var ghOK = !!relays[RELAY_GITHUB];
       return {
-        downloadable: dl === 1 && ch >= 10000 && ch <= 60000 && blk > 0,
+        downloadable: dnsOK || ghOK,
+        dnsAvailable: dnsOK,
+        githubAvailable: ghOK,
+        relays: relays,
         size: size,
         channel: ch,
         blocks: blk,
@@ -4223,7 +4291,9 @@
       var dataAttrs = 'id="' + domID + '" data-tag="' + escAttr(tag)
         + '" data-ch="' + parsed.channel + '" data-blk="' + parsed.blocks
         + '" data-size="' + parsed.size + '" data-crc="' + parsed.crc
-        + '" data-fname="' + escAttr(parsed.filename || '') + '" data-msg="' + msgID + '"';
+        + '" data-dns="' + (parsed.dnsAvailable ? '1' : '0') + '"'
+        + ' data-gh="' + (parsed.githubAvailable ? '1' : '0') + '"'
+        + ' data-fname="' + escAttr(parsed.filename || '') + '" data-msg="' + msgID + '"';
 
       if (mediaIsImageTag(tag)) {
         var imageInner;
@@ -4350,7 +4420,12 @@
       }
     }
 
-    function mediaRunDownload(domID) {
+    // GH_MAX_RETRIES + GH_RETRY_DELAY_MS govern the fast-path retry budget
+    // before we ask the user whether to fall back to slow DNS.
+    var GH_MAX_RETRIES = 3, GH_RETRY_DELAY_MS = 800;
+
+    async function mediaRunDownload(domID, opts) {
+      opts = opts || {};
       var card = document.getElementById(domID);
       if (!card) { mediaPumpQueue(); return; }
       var msgID = card.getAttribute('data-msg');
@@ -4359,12 +4434,43 @@
       var size = card.getAttribute('data-size');
       var crc = card.getAttribute('data-crc');
       var fname = card.getAttribute('data-fname') || '';
-      var url = '/api/media/get?ch=' + encodeURIComponent(ch)
+      var ghAvail = card.getAttribute('data-gh') === '1';
+      var dnsAvail = card.getAttribute('data-dns') === '1';
+      // forceSource is set when restartWith() retries after a fallback prompt
+      // — in that case the user has already consented and we skip the
+      // slow-only confirmation.
+      var source = opts.forceSource || (ghAvail ? 'fast' : 'slow');
+      if (!opts.forceSource && source === 'slow' && dnsAvail) {
+        var ok = await showConfirmDialog(
+          t('media_slow_only') || 'GitHub relay is unavailable for this file. The DNS path is very slow. Download anyway?',
+          t('yes') || 'Yes', t('no') || 'No');
+        if (!ok) {
+          mediaPumpQueue();
+          return;
+        }
+      }
+      var baseUrl = '/api/media/get?ch=' + encodeURIComponent(ch)
         + '&blk=' + encodeURIComponent(blk)
         + '&size=' + encodeURIComponent(size)
         + '&crc=' + encodeURIComponent(crc)
         + (fname ? '&name=' + encodeURIComponent(fname) : '');
+      var url = baseUrl + '&source=' + source;
       mediaActiveCount++;
+      var attempt = 0;
+      debugLog('media: download msg=' + msgID + ' source=' + source + ' size=' + size);
+
+      // restartWith re-runs the download with a forced source. Pass it
+      // through so the prompt isn't shown again — user consent already
+      // happened in the fallback dialog.
+      function restartWith(newSource) {
+        try { stopPoll(); } catch (e) { }
+        try { xhr.abort(); } catch (e) { }
+        delete mediaInflight[msgID];
+        mediaActiveCount = Math.max(0, mediaActiveCount - 1);
+        delete mediaProgressState[msgID];
+        mediaRunDownload(domID, { forceSource: newSource });
+      }
+
       var xhr = new XMLHttpRequest();
       xhr.responseType = 'blob';
       xhr.open('GET', url);
@@ -4378,11 +4484,20 @@
       async function deliverBlob() {
         if (xhr.status >= 200 && xhr.status < 300) {
           var expectedCRC = parseInt(crc, 16);
+          var expectedSize = parseInt(size, 10);
+          // Hash + size verification — required by spec for any relay.
+          if (xhr.response && !isNaN(expectedSize) && expectedSize > 0 && xhr.response.size !== expectedSize) {
+            await mediaForgetCache(card);
+            if (source === 'fast') { handleFastFailure(t('media_size_mismatch') || 'Size mismatch'); return; }
+            mediaShowError(card, t('media_size_mismatch') || 'Size mismatch');
+            return;
+          }
           if (!isNaN(expectedCRC) && expectedCRC > 0) {
             try {
               var got = await blobCRC32(xhr.response);
               if (got !== expectedCRC) {
                 await mediaForgetCache(card);
+                if (source === 'fast') { handleFastFailure(t('media_hash_mismatch') || 'Content hash mismatch'); return; }
                 mediaShowError(card, t('media_hash_mismatch') || 'Content hash mismatch');
                 return;
               }
@@ -4394,6 +4509,7 @@
           mediaShowBlob(card, blobURL);
           mediaPersistBlob(msgID, card, xhr.response, mediaBlobs[msgID].mime);
         } else {
+          if (source === 'fast') { handleFastFailure(xhr.statusText || ('HTTP ' + xhr.status)); return; }
           mediaShowError(card, xhr.statusText || ('HTTP ' + xhr.status));
         }
       }
@@ -4407,6 +4523,7 @@
           var totalSize = (xhr.response && xhr.response.size) ? xhr.response.size
             : (parseInt(card.getAttribute('data-size'), 10) || 0);
           if (totalSize > 0) mediaUpdateProgress(card, totalSize, totalSize);
+          debugLog('media: ok msg=' + msgID + ' source=' + source + ' served-by=' + (xhr.getResponseHeader('X-Cache') || '?'));
         }
         var elapsed = Date.now() - progressShownAt;
         if (progressShownAt > 0 && elapsed < MIN_PROGRESS_VISIBLE_MS) {
@@ -4415,8 +4532,40 @@
           deliverBlob().finally(finishSlot);
         }
       };
+      async function handleFastFailure(reason) {
+        attempt++;
+        if (attempt < GH_MAX_RETRIES) {
+          // Quiet retry — leave the bar alone.
+          await new Promise(function (r) { setTimeout(r, GH_RETRY_DELAY_MS); });
+          var retry = new XMLHttpRequest();
+          retry.responseType = 'blob';
+          retry.open('GET', url);
+          // Reuse the same handlers by swapping the underlying xhr.
+          retry.onprogress = xhr.onprogress;
+          retry.onload = xhr.onload;
+          retry.onerror = xhr.onerror;
+          retry.onabort = xhr.onabort;
+          xhr = retry;
+          mediaInflight[msgID] = { xhr: xhr };
+          xhr.send();
+          return;
+        }
+        // Out of retries — ask the user before going to the slow path.
+        if (source === 'fast' && dnsAvail) {
+          var ok = await showConfirmDialog(
+            t('media_relay_fallback') || "Fast relay failed. Try the slow DNS path? Note: this can be very slow.",
+            t('yes') || 'Yes', t('no') || 'No');
+          if (ok) {
+            restartWith('slow');
+            return;
+          }
+        }
+        mediaShowError(card, reason || (t('media_failed') || 'Download failed'));
+        finishSlot();
+      }
       xhr.onerror = function () {
         delete mediaInflight[msgID];
+        if (source === 'fast') { handleFastFailure('network error'); return; }
         mediaShowError(card, 'network error');
         finishSlot();
       };
@@ -4426,7 +4575,14 @@
       };
       // Reset progress state for this download — both byte and block
       // counters live in mediaProgressState[msgID] and only ever go up.
-      mediaProgressState[msgID] = { loaded: 0, total: parseInt(size, 10) || 0, completed: 0, blocks: parseInt(blk, 10) || 0 };
+      // For the fast (relay) path the block counter is meaningless, so
+      // blocks=0 and the text omits the K/N suffix.
+      mediaProgressState[msgID] = {
+        loaded: 0,
+        total: parseInt(size, 10) || 0,
+        completed: 0,
+        blocks: source === 'slow' ? (parseInt(blk, 10) || 0) : 0
+      };
 
       // Poll the server's per-download block counter so the user sees real
       // block-level progress (the Go side fetches one DNS block at a time
@@ -4484,6 +4640,8 @@
             + '<button class="media-cancel-btn" onclick="mediaStart(\'' + domID + '\')" type="button" title="' + esc(t('cancel') || 'Cancel') + '">&times;</button>'
             + '</div>';
         }
+        var msgIDImg = card.getAttribute('data-msg');
+        if (msgIDImg && mediaProgressState[msgIDImg]) mediaRenderProgressState(card);
         return;
       }
       // File row: rebuild the info column from scratch so the fill always
@@ -4501,6 +4659,8 @@
         + '<button class="media-file-btn media-file-btn-cancel" onclick="mediaStart(\'' + domID + '\')" type="button" title="' + esc(t('cancel') || 'Cancel') + '">&times;</button>'
         + '</div>';
       card.innerHTML = newInner;
+      var msgID = card.getAttribute('data-msg');
+      if (msgID && mediaProgressState[msgID]) mediaRenderProgressState(card);
     }
 
     // Byte-level update from xhr.onprogress.
@@ -4947,6 +5107,10 @@
     }
 
     // ===== LOG =====
+    function debugLog(line) {
+      var el = document.getElementById('cfgDebug');
+      if (el && el.checked) addLogLine(line);
+    }
     function addLogLine(line) {
       var el = document.getElementById('logPanel');
       var div = document.createElement('div');
@@ -5142,12 +5306,10 @@
       var info = document.getElementById('nextFetchInfoBtn');
       if (!serverNextFetch) { el.textContent = ''; if (info) info.style.display = 'none'; return }
       if (info) { info.style.display = ''; info.title = t('next_fetch_info') }
-      var autoRefreshed = false;
       function tick() {
         var now = Math.floor(Date.now() / 1000), d = serverNextFetch - now;
         if (d <= 0) {
           el.textContent = '';
-          if (!autoRefreshed) { autoRefreshed = true; setTimeout(function () { doAutoRefreshAfterCountdown() }, 3000) }
           return
         }
         var m = Math.floor(d / 60), s = d % 60; el.textContent = m + ':' + (s < 10 ? '0' : '') + s
@@ -5174,27 +5336,6 @@
         if (quiet) url += (url.includes('?') ? '&' : '?') + 'quiet=1';
         await fetch(url, { method: 'POST' });
         if (!quiet && selectedChannel > 0) setTimeout(function () { loadChannels(); loadMessages(selectedChannel) }, 3000);
-      } catch (e) { }
-    }
-
-    async function doAutoRefreshAfterCountdown() {
-      // Auto-triggered when server fetch countdown reaches 0
-      // Clear metadata cache so we get fresh data
-      try { localStorage.removeItem(cacheKey()) } catch (e) { }
-      try {
-        // Reload channels (this also fetches /api/status and updates the timer)
-        await loadChannels();
-        // If we have a selected channel, reload its messages too
-        if (selectedChannel > 0) await loadMessages(selectedChannel);
-        // If the timer still didn't show (server may not have refreshed yet), retry after a delay
-        if (!serverNextFetch || serverNextFetch <= Math.floor(Date.now() / 1000)) {
-          setTimeout(async function () {
-            try {
-              var sr = await fetch('/api/status'); var st = await sr.json();
-              if (st.nextFetch && st.nextFetch > Math.floor(Date.now() / 1000)) { serverNextFetch = st.nextFetch; updateNextFetchDisplay() }
-            } catch (e) { }
-          }, 15000);
-        }
       } catch (e) { }
     }
 

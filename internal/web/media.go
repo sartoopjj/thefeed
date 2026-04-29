@@ -68,22 +68,10 @@ func (s *Server) handleMediaGet(w http.ResponseWriter, r *http.Request) {
 	}
 
 	q := r.URL.Query()
-	ch64, err := strconv.ParseUint(q.Get("ch"), 10, 16)
-	if err != nil {
-		http.Error(w, "bad ch", http.StatusBadRequest)
-		return
+	source := strings.ToLower(strings.TrimSpace(q.Get("source")))
+	if source == "" {
+		source = "slow"
 	}
-	channel := uint16(ch64)
-	if !protocol.IsMediaChannel(channel) {
-		http.Error(w, "ch out of media range", http.StatusBadRequest)
-		return
-	}
-	blk64, err := strconv.ParseUint(q.Get("blk"), 10, 16)
-	if err != nil || blk64 == 0 {
-		http.Error(w, "bad blk", http.StatusBadRequest)
-		return
-	}
-	blockCount := uint16(blk64)
 
 	const maxClaimedSize = 100 * 1024 * 1024
 	expectedSize, _ := strconv.ParseInt(q.Get("size"), 10, 64)
@@ -101,6 +89,35 @@ func (s *Server) handleMediaGet(w http.ResponseWriter, r *http.Request) {
 		}
 		expectedCRC = uint32(c)
 	}
+
+	// Fast path: stream straight from the GitHub relay (or its server-side
+	// disk cache). On failure we return 502 instead of silently falling
+	// through to DNS — the client can then prompt the user before
+	// retrying with source=slow.
+	if source == "fast" {
+		if served := s.serveFromGitHubRelay(w, r, expectedSize, expectedCRC, q.Get("name"), q.Get("type")); served {
+			return
+		}
+		http.Error(w, "fast relay unavailable", http.StatusBadGateway)
+		return
+	}
+
+	ch64, err := strconv.ParseUint(q.Get("ch"), 10, 16)
+	if err != nil {
+		http.Error(w, "bad ch", http.StatusBadRequest)
+		return
+	}
+	channel := uint16(ch64)
+	if !protocol.IsMediaChannel(channel) {
+		http.Error(w, "ch out of media range", http.StatusBadRequest)
+		return
+	}
+	blk64, err := strconv.ParseUint(q.Get("blk"), 10, 16)
+	if err != nil || blk64 == 0 {
+		http.Error(w, "bad blk", http.StatusBadRequest)
+		return
+	}
+	blockCount := uint16(blk64)
 
 	s.mu.RLock()
 	fetcher := s.fetcher

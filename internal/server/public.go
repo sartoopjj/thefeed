@@ -28,11 +28,24 @@ type PublicReader struct {
 	client  *http.Client
 	baseURL string
 
-	mu       sync.RWMutex
-	cache    map[string]cachedMessages
-	cacheTTL time.Duration
+	mu            sync.RWMutex
+	cache         map[string]cachedMessages
+	cacheTTL      time.Duration
+	fetchInterval time.Duration
 
 	refreshCh chan struct{}
+}
+
+// SetFetchInterval overrides the default 10m fetch cadence. Caller must
+// invoke before Run starts.
+func (pr *PublicReader) SetFetchInterval(d time.Duration) {
+	if d <= 0 {
+		return
+	}
+	pr.mu.Lock()
+	pr.fetchInterval = d
+	pr.cacheTTL = d
+	pr.mu.Unlock()
 }
 
 // NewPublicReader creates a reader for public channels without Telegram login.
@@ -56,9 +69,10 @@ func NewPublicReader(channelUsernames []string, feed *Feed, msgLimit int, baseCh
 			Timeout: 30 * time.Second,
 		},
 		baseURL:   "https://t.me/s",
-		cache:     make(map[string]cachedMessages),
-		cacheTTL:  10 * time.Minute,
-		refreshCh: make(chan struct{}, 1),
+		cache:         make(map[string]cachedMessages),
+		cacheTTL:      10 * time.Minute,
+		fetchInterval: 10 * time.Minute,
+		refreshCh:     make(chan struct{}, 1),
 	}
 }
 
@@ -67,9 +81,10 @@ func (pr *PublicReader) Run(ctx context.Context) error {
 	pr.feed.SetTelegramLoggedIn(false)
 	pr.fetchAll(ctx)
 
-	ticker := time.NewTicker(10 * time.Minute)
+	interval := pr.fetchInterval
+	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
-	pr.feed.SetNextFetch(uint32(time.Now().Add(10 * time.Minute).Unix()))
+	pr.feed.SetNextFetch(uint32(time.Now().Add(interval).Unix()))
 
 	for {
 		select {
@@ -77,14 +92,14 @@ func (pr *PublicReader) Run(ctx context.Context) error {
 			return ctx.Err()
 		case <-ticker.C:
 			pr.fetchAll(ctx)
-			pr.feed.SetNextFetch(uint32(time.Now().Add(10 * time.Minute).Unix()))
+			pr.feed.SetNextFetch(uint32(time.Now().Add(interval).Unix()))
 		case <-pr.refreshCh:
 			pr.mu.Lock()
 			pr.cache = make(map[string]cachedMessages)
 			pr.mu.Unlock()
 			pr.fetchAll(ctx)
-			ticker.Reset(10 * time.Minute)
-			pr.feed.SetNextFetch(uint32(time.Now().Add(10 * time.Minute).Unix()))
+			ticker.Reset(interval)
+			pr.feed.SetNextFetch(uint32(time.Now().Add(interval).Unix()))
 		}
 	}
 }
@@ -112,14 +127,18 @@ func (pr *PublicReader) UpdateChannels(channels []string) {
 func (pr *PublicReader) fetchAll(ctx context.Context) {
 	log.Printf("[public] fetch cycle started for %d channels", len(pr.channels))
 	start := time.Now()
-	var fetched, failed int
+	var fetched, failed, skipped int
+	pr.mu.RLock()
+	cacheTTL := pr.cacheTTL
+	pr.mu.RUnlock()
 	for i, username := range pr.channels {
 		chNum := pr.baseCh + i
 
 		pr.mu.RLock()
 		cached, ok := pr.cache[username]
 		pr.mu.RUnlock()
-		if ok && time.Since(cached.fetched) < pr.cacheTTL {
+		if ok && time.Since(cached.fetched) < cacheTTL {
+			skipped++
 			continue
 		}
 
@@ -148,7 +167,9 @@ func (pr *PublicReader) fetchAll(ctx context.Context) {
 		fetched++
 		log.Printf("[public] updated %s (%s): %d messages", username, title, len(msgs))
 	}
-	log.Printf("[public] fetch cycle done in %s: %d fetched, %d failed, %d total", time.Since(start).Round(time.Millisecond), fetched, failed, len(pr.channels))
+	log.Printf("[public] fetch cycle done in %s: %d fetched, %d failed, %d skipped, %d total",
+		time.Since(start).Round(time.Millisecond), fetched, failed, skipped, len(pr.channels))
+	pr.feed.AfterFetchCycle(ctx)
 }
 
 func (pr *PublicReader) fetchChannel(ctx context.Context, username string) ([]protocol.Message, string, error) {

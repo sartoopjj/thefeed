@@ -25,21 +25,32 @@ type Config struct {
 	NoTelegram    bool // if true, fetch public channels without Telegram login
 	AllowManage   bool // if true, remote channel management and sending via DNS is allowed
 	Debug         bool // if true, log every decoded DNS query
-	// NoMedia disables downloading and serving image/file media. When set, the
-	// server emits the legacy [TAG]\ncaption form for media messages so old
-	// clients keep working unchanged.
-	NoMedia bool
-	// MediaMaxSize is the per-file cap in bytes for cached media. 0 means no
-	// cap (not recommended in production).
-	MediaMaxSize int64
-	// MediaCacheTTL is the cache lifetime in minutes for a single entry. The
-	// effective TTL is reset whenever the same upstream id is fetched again.
-	MediaCacheTTL int
-	// MediaCompression names the compression applied to cached media bytes
-	// before they're split into DNS blocks. One of "none", "gzip",
-	// "deflate". Empty defaults to "gzip".
-	MediaCompression string
-	Telegram         TelegramConfig
+	// DNSMediaEnabled toggles the slow DNS-relay path. When false the
+	// server still ingests media bytes (so other relays can serve them)
+	// but the wire-format DNS flag is unset for clients.
+	DNSMediaEnabled     bool
+	DNSMediaMaxSize     int64  // per-file cap for the DNS relay (0 = no cap)
+	DNSMediaCacheTTL    int    // DNS-relay TTL in minutes
+	DNSMediaCompression string // DNS-relay compression: none|gzip|deflate
+	FetchInterval       time.Duration // 0 = default 10m; floor enforced by main
+	GitHubRelay         GitHubRelayConfig
+	Telegram            TelegramConfig
+}
+
+// GitHubRelayConfig configures the GitHub fast relay. Active() requires
+// Enabled + Token + Repo.
+type GitHubRelayConfig struct {
+	Enabled    bool
+	Token      string
+	Repo       string
+	Branch     string // default branch to commit to; "" → "main"
+	StatePath  string // file used to persist lastSeen across restarts
+	MaxBytes   int64
+	TTLMinutes int
+}
+
+func (g GitHubRelayConfig) Active() bool {
+	return g.Enabled && g.Token != "" && g.Repo != ""
 }
 
 // Server orchestrates the DNS server and Telegram reader.
@@ -81,35 +92,52 @@ func (s *Server) Run(ctx context.Context) error {
 
 	SetMediaDebugLogs(s.cfg.Debug)
 
-	// Configure media cache before any reader starts so the very first fetch
-	// cycle can populate it. When --no-media is set we leave Feed.media as
-	// nil; the readers fall through to the legacy [TAG]\ncaption form, and
-	// Feed.GetBlock rejects media-channel queries with not-found.
-	if !s.cfg.NoMedia {
-		ttlMin := s.cfg.MediaCacheTTL
+	// Spin up the media cache when at least one relay is enabled. The cache
+	// owns the byte pipeline; whether DNS or GitHub serves bytes to clients
+	// is controlled by per-relay flags on each MediaMeta.
+	anyRelay := s.cfg.DNSMediaEnabled || s.cfg.GitHubRelay.Active()
+	if anyRelay {
+		ttlMin := s.cfg.DNSMediaCacheTTL
 		if ttlMin <= 0 {
 			ttlMin = 600
 		}
 		ttl := time.Duration(ttlMin) * time.Minute
-		compName := s.cfg.MediaCompression
+		compName := s.cfg.DNSMediaCompression
 		if compName == "" {
 			compName = "gzip"
 		}
 		compression, err := protocol.ParseMediaCompressionName(compName)
 		if err != nil {
-			return fmt.Errorf("--media-compression: %w", err)
+			return fmt.Errorf("--dns-media-compression: %w", err)
 		}
 		mediaCache := NewMediaCache(MediaCacheConfig{
-			MaxFileBytes: s.cfg.MediaMaxSize,
-			TTL:          ttl,
-			Compression:  compression,
-			Logf:         logfMedia,
+			MaxFileBytes:    s.cfg.DNSMediaMaxSize,
+			TTL:             ttl,
+			Compression:     compression,
+			Logf:            logfMedia,
+			DNSRelayEnabled: s.cfg.DNSMediaEnabled,
 		})
 		s.feed.SetMediaCache(mediaCache)
-		log.Printf("[server] media cache enabled: max-size=%d bytes, ttl=%s, compression=%s", s.cfg.MediaMaxSize, ttl, compression)
+		log.Printf("[server] media: dns=%v max=%d ttl=%s compression=%s",
+			s.cfg.DNSMediaEnabled, s.cfg.DNSMediaMaxSize, ttl, compression)
 		go s.runMediaSweep(ctx, mediaCache, ttl)
+
+		if s.cfg.GitHubRelay.Active() {
+			gh := NewGitHubRelay(s.cfg.GitHubRelay, s.cfg.Domain, s.cfg.Passphrase)
+			if gh != nil {
+				mediaCache.SetGitHubRelay(gh)
+				s.feed.SetGitHubRelay(gh)
+				go gh.Run(ctx)
+				branch := s.cfg.GitHubRelay.Branch
+				if branch == "" {
+					branch = "main"
+				}
+				log.Printf("[server] github relay: repo=%s branch=%s max=%d ttl=%dm",
+					gh.Repo(), branch, gh.MaxBytes(), s.cfg.GitHubRelay.TTLMinutes)
+			}
+		}
 	} else {
-		log.Println("[server] media cache disabled (--no-media)")
+		log.Println("[server] media disabled (no relays enabled)")
 	}
 
 	go startLatestVersionTracker(ctx, s.feed)
@@ -129,6 +157,7 @@ func (s *Server) Run(ctx context.Context) error {
 		}
 		if len(s.telegramChannels) > 0 {
 			reader := NewTelegramReader(s.cfg.Telegram, s.telegramChannels, s.feed, msgLimit, 1)
+			reader.SetFetchInterval(s.cfg.FetchInterval)
 			s.reader = reader
 			channelCtl = reader
 			go func() {
@@ -148,6 +177,7 @@ func (s *Server) Run(ctx context.Context) error {
 			msgLimit = 15
 		}
 		publicReader := NewPublicReader(s.telegramChannels, s.feed, msgLimit, 1)
+		publicReader.SetFetchInterval(s.cfg.FetchInterval)
 		channelCtl = publicReader
 		go func() {
 			log.Println("[public] reader goroutine started")
@@ -167,6 +197,7 @@ func (s *Server) Run(ctx context.Context) error {
 			msgLimit = 15
 		}
 		xReader = NewXPublicReader(s.xAccounts, s.feed, msgLimit, len(s.telegramChannels)+1, s.cfg.XRSSInstances)
+		xReader.SetFetchInterval(s.cfg.FetchInterval)
 		go func() {
 			log.Println("[x] reader goroutine started")
 			if err := xReader.Run(ctx); err != nil && ctx.Err() == nil {

@@ -27,7 +27,7 @@ func TestApplyHTTPMediaSourcesEndToEnd(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	cache := NewMediaCache(MediaCacheConfig{MaxFileBytes: 1 << 20, TTL: time.Hour})
+	cache := NewMediaCache(MediaCacheConfig{MaxFileBytes: 1 << 20, TTL: time.Hour, DNSRelayEnabled: true})
 
 	msgs := []protocol.Message{
 		{ID: 100, Timestamp: 1, Text: protocol.MediaImage + "\nhello"},
@@ -42,7 +42,7 @@ func TestApplyHTTPMediaSourcesEndToEnd(t *testing.T) {
 	if !ok {
 		t.Fatalf("ParseMediaText ok=false on rewritten message: %q", msgs[0].Text)
 	}
-	if !meta.Downloadable {
+	if !meta.HasRelay(protocol.RelayDNS) {
 		t.Fatalf("expected downloadable meta, got %+v (text=%q)", meta, msgs[0].Text)
 	}
 	if meta.Tag != protocol.MediaImage {
@@ -80,7 +80,7 @@ func TestApplyHTTPMediaSourcesEndToEnd(t *testing.T) {
 	}
 }
 
-// TestApplyHTTPMediaSourcesGzipRoundTrip: with --media-compression=gzip,
+// TestApplyHTTPMediaSourcesGzipRoundTrip: with --dns-media-compression=gzip,
 // a successful upstream fetch lands compressed blocks in the cache. A
 // client decompressing the assembled blocks recovers the original bytes
 // verbatim and the embedded CRC32 matches.
@@ -94,9 +94,10 @@ func TestApplyHTTPMediaSourcesGzipRoundTrip(t *testing.T) {
 	defer srv.Close()
 
 	cache := NewMediaCache(MediaCacheConfig{
-		MaxFileBytes: 1 << 20,
-		TTL:          time.Hour,
-		Compression:  protocol.MediaCompressionGzip,
+		MaxFileBytes:    1 << 20,
+		TTL:             time.Hour,
+		Compression:     protocol.MediaCompressionGzip,
+		DNSRelayEnabled: true,
 	})
 	msgs := []protocol.Message{{ID: 100, Timestamp: 1, Text: protocol.MediaImage + "\n"}}
 	sources := []mediaSource{{tag: protocol.MediaImage, url: srv.URL + "/big.png"}}
@@ -106,7 +107,7 @@ func TestApplyHTTPMediaSourcesGzipRoundTrip(t *testing.T) {
 	applyHTTPMediaSources(ctx, cache, msgs, sources)
 
 	meta, _, ok := protocol.ParseMediaText(msgs[0].Text)
-	if !ok || !meta.Downloadable {
+	if !ok || !meta.HasRelay(protocol.RelayDNS) {
 		t.Fatalf("expected downloadable meta, got %+v", meta)
 	}
 
@@ -169,7 +170,7 @@ func TestApplyHTTPMediaSourcesAlbum(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	cache := NewMediaCache(MediaCacheConfig{MaxFileBytes: 1 << 20, TTL: time.Hour})
+	cache := NewMediaCache(MediaCacheConfig{MaxFileBytes: 1 << 20, TTL: time.Hour, DNSRelayEnabled: true})
 
 	// Mirror what parsePublicMessagesWithMedia produces for a 3-image album:
 	// stacked [IMAGE] headers + caption, plus an extraURLs slice on the source.
@@ -207,7 +208,7 @@ func TestApplyHTTPMediaSourcesAlbum(t *testing.T) {
 		if !ok {
 			t.Fatalf("ParseMediaText #%d ok=false on %q", i, rest)
 		}
-		if !meta.Downloadable {
+		if !meta.HasRelay(protocol.RelayDNS) {
 			t.Errorf("header #%d not downloadable: %+v", i, meta)
 		}
 		if int(meta.Size) != len(images[i]) {
@@ -236,7 +237,7 @@ func TestApplyHTTPMediaSourcesAlbumPartialFailure(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	cache := NewMediaCache(MediaCacheConfig{MaxFileBytes: 1 << 20, TTL: time.Hour})
+	cache := NewMediaCache(MediaCacheConfig{MaxFileBytes: 1 << 20, TTL: time.Hour, DNSRelayEnabled: true})
 
 	body := protocol.MediaImage + "\n" + protocol.MediaImage + "\ncap"
 	msgs := []protocol.Message{{ID: 5, Timestamp: 1, Text: body}}
@@ -273,7 +274,7 @@ func TestApplyHTTPMediaSourcesRejectsOversize(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	cache := NewMediaCache(MediaCacheConfig{MaxFileBytes: 100, TTL: time.Hour})
+	cache := NewMediaCache(MediaCacheConfig{MaxFileBytes: 100, TTL: time.Hour, DNSRelayEnabled: true})
 	msgs := []protocol.Message{{ID: 1, Timestamp: 1, Text: protocol.MediaImage + "\ncap"}}
 	sources := []mediaSource{{tag: protocol.MediaImage, url: srv.URL + "/big.jpg"}}
 
@@ -285,7 +286,7 @@ func TestApplyHTTPMediaSourcesRejectsOversize(t *testing.T) {
 	if !ok {
 		t.Fatalf("ParseMediaText ok=false")
 	}
-	if meta.Downloadable {
+	if meta.HasRelay(protocol.RelayDNS) {
 		t.Fatalf("oversized file should not be downloadable; got meta=%+v", meta)
 	}
 	if meta.Size != int64(len(bigBody)) {
