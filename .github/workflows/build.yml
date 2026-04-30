@@ -42,10 +42,9 @@ jobs:
             goarch: amd64
           - goos: android
             goarch: arm64
-          - goos: linux
+          - goos: android
             goarch: arm
             goarm: '7'
-            android_arm: true
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -53,11 +52,11 @@ jobs:
           go-version: '1.26'
 
       - name: Install UPX
-        if: (matrix.goos == 'linux' || matrix.goos == 'windows') && !matrix.android_arm
+        if: matrix.goos == 'linux' || matrix.goos == 'windows'
         run: sudo apt-get update && sudo apt-get install -y upx-ucl
 
       - name: Build Server
-        if: matrix.goos != 'android' && !matrix.android_arm
+        if: matrix.goos != 'android'
         env:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
@@ -89,12 +88,12 @@ jobs:
           # and several heuristic AV engines (Kaspersky Boogr.gsh,
           # several VT vendors) flag non-PIE bundled binaries as suspicious.
           # Force PIE for the binaries that ship inside the APK.
-          if [ "${{ matrix.goos }}" = "android" ] || [ "${{ matrix.android_arm }}" = "true" ]; then
+          if [ "${{ matrix.goos }}" = "android" ]; then
             BUILD_MODE="-buildmode=pie"
           fi
           if [ "${{ matrix.goos }}" = "android" ] && [ "${{ matrix.goarch }}" = "arm64" ]; then
             out="build/thefeed-client-android-arm64"
-          elif [ "${{ matrix.android_arm }}" = "true" ]; then
+          elif [ "${{ matrix.goos }}" = "android" ] && [ "${{ matrix.goarch }}" = "arm" ]; then
             out="build/thefeed-client-android-arm"
           else
             out="build/thefeed-client-${VERSION}-${{ matrix.goos }}-${{ matrix.goarch }}${ext}"
@@ -102,7 +101,7 @@ jobs:
           go build -trimpath -buildvcs=false $BUILD_MODE -ldflags="${LDFLAGS}" -o "$out" ./cmd/client
 
       - name: Compress with UPX
-        if: (matrix.goos == 'linux' || matrix.goos == 'windows') && !matrix.android_arm
+        if: matrix.goos == 'linux' || matrix.goos == 'windows'
         run: |
           for f in build/*; do
             if [ -f "$f" ]; then
