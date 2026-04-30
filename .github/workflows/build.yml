@@ -91,6 +91,14 @@ jobs:
           if [ "${{ matrix.goos }}" = "android" ]; then
             BUILD_MODE="-buildmode=pie"
           fi
+          # Go's internal linker can do PIE for android/arm64 with CGO=0,
+          # but android/arm (32-bit) needs an external linker via cgo.
+          # Wire the NDK clang for the v7 build; arm64 stays CGO-less.
+          if [ "${{ matrix.goos }}" = "android" ] && [ "${{ matrix.goarch }}" = "arm" ]; then
+            export CGO_ENABLED=1
+            export CC="$ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi26-clang"
+            test -x "$CC" || { echo "NDK clang not found at $CC"; exit 1; }
+          fi
           if [ "${{ matrix.goos }}" = "android" ] && [ "${{ matrix.goarch }}" = "arm64" ]; then
             out="build/thefeed-client-android-arm64"
           elif [ "${{ matrix.goos }}" = "android" ] && [ "${{ matrix.goarch }}" = "arm" ]; then
