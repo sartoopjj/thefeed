@@ -74,7 +74,9 @@ class ThefeedService : Service() {
                 val dataDir = File(filesDir, "thefeeddata")
                 if (!dataDir.exists()) dataDir.mkdirs()
 
-                val selectedPort = findFreePort()
+                // Reuse the last port so the WebView origin stays
+                // stable — keeps localStorage state across launches.
+                val selectedPort = pickPort()
                 currentPort = selectedPort
                 savePort(selectedPort)
 
@@ -138,6 +140,20 @@ class ThefeedService : Service() {
             socket.reuseAddress = true
             return socket.localPort
         }
+    }
+
+    // Try the last port first; fall back to a new free one if it's
+    // taken. Keeps localStorage origin stable across launches.
+    private fun pickPort(): Int {
+        val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val last = prefs.getInt(PREF_PORT, -1)
+        if (last in 1024..65535) {
+            try {
+                ServerSocket(last).use { it.reuseAddress = true }
+                return last
+            } catch (_: Exception) { }
+        }
+        return findFreePort()
     }
 
     private fun savePort(port: Int) {

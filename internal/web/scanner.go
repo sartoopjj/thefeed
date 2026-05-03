@@ -315,12 +315,18 @@ func (s *Server) handleScannerApply(w http.ResponseWriter, r *http.Request) {
 		ctx := s.fetcherCtx
 		s.mu.RUnlock()
 		if fetcher != nil {
-			// Pin pool to the list, active to the just-scanned set
-			// (already verified by the scanner — no re-probe needed).
+			// Pool AND active are the full saved list, not just the
+			// freshly-scanned subset — append mode merges the new
+			// resolvers into pre-existing list entries, and the user
+			// expects all of them live (otherwise the Active panel
+			// shows N while the tab badge shows N+M, which looks
+			// like the apply lost the old ones).
 			if target != nil && len(target.Resolvers) > 0 {
 				fetcher.UpdateResolverPool(target.Resolvers)
+				fetcher.SetActiveResolvers(target.Resolvers)
+			} else {
+				fetcher.SetActiveResolvers(resolvers)
 			}
-			fetcher.SetActiveResolvers(resolvers)
 			s.saveLastScan(resolvers)
 		}
 		if checker != nil && ctx != nil {

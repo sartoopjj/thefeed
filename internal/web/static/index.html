@@ -3637,6 +3637,12 @@
     // ===== MOBILE NAV =====
     var mobileQuery = window.matchMedia('(max-width: 768px)');
     var chatIsOpen = false;
+    // Desktop: chat is always laid out alongside the sidebar.
+    // Mobile: chat is only visible when .chat-open is set.
+    function _chatPanelVisible() {
+      return !mobileQuery.matches || document.getElementById('app').classList.contains('chat-open');
+    }
+
     function openChat() {
       chatIsOpen = true;
       if (mobileQuery.matches) {
@@ -3713,6 +3719,15 @@
           applyLang();
         }
         if (s.version) { appVersion = s.version; renderAppVersion(s.version, s.commit); }
+        // Sync the server-persisted "don't show scan prompt" flag
+        // into localStorage. Android picks a new 127.0.0.1 port on
+        // each launch, so localStorage alone wouldn't survive
+        // restart — the server-side flag is the source of truth.
+        if (s.scanPromptOff === true) {
+          localStorage.setItem('thefeed_scan_prompt_off', '1');
+        } else if (s.scanPromptOff === false) {
+          localStorage.removeItem('thefeed_scan_prompt_off');
+        }
         renderLatestVersion();
       } catch (e) { }
     }
@@ -3901,19 +3916,27 @@
       if (promptEl) promptEl.checked = localStorage.getItem('thefeed_scan_prompt_off') !== '1';
     }
 
-    // Toggle the localStorage flag that controls whether the startup
-    // scan prompt is shown. Cleared when the box is checked, set to
-    // "1" when unchecked.
+    // Toggle the "show startup scan prompt" preference. Persists
+    // both client-side (localStorage for fast boot) and server-side
+    // (so Android keeps it across launches even when the WebView
+    // origin port changes).
     function setShowScanPrompt(enabled) {
       if (enabled) {
         localStorage.removeItem('thefeed_scan_prompt_off');
-        // Also clear the per-session "already shown" flag so the
-        // prompt appears next time the user reloads — without this
-        // re-enabling does nothing until they restart the browser.
+        // Clear the per-session "already shown" flag so the prompt
+        // re-appears on the next reload — without this, re-enabling
+        // does nothing until the browser tab is closed.
         sessionStorage.removeItem('thefeed_scan_prompt_shown');
       } else {
         localStorage.setItem('thefeed_scan_prompt_off', '1');
       }
+      try {
+        fetch('/api/settings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ scanPromptOff: !enabled })
+        });
+      } catch (e) { }
     }
     function closeSettings() { a11yModalClose(); document.getElementById('settingsModal').classList.remove('active') }
     async function saveSettings() {
@@ -4586,9 +4609,18 @@
       sessionStorage.setItem('thefeed_scan_prompt_shown', '1');
     }
     function savedResolversNever() {
-      // "Don't show again" — persist across sessions. The user can
-      // un-tick it from Settings → Show startup scan prompt.
+      // "Don't show again" — persist across sessions. localStorage
+      // for fast access, /api/settings for survival across Android
+      // restarts (the WebView origin port changes each launch, so
+      // localStorage alone gets reset).
       localStorage.setItem('thefeed_scan_prompt_off', '1');
+      try {
+        fetch('/api/settings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ scanPromptOff: true })
+        });
+      } catch (e) { }
       savedResolversSkip();
       showToast(t('startup_scan_off') || 'Startup scan prompt disabled');
     }
@@ -4644,9 +4676,12 @@
         } else if (data && typeof data === 'object' && data.channel) {
           delete refreshingChannels[data.channel]; var fb2 = document.getElementById('prog-fetch-ch-' + data.channel); if (fb2) fb2.remove();
           if (data.channel === manualRefreshChannel) manualRefreshChannel = 0;
-          // Only re-render if the user is STILL on that channel right now —
-          // selectedChannel may have changed during the awaited loadChannels.
-          if (data.channel === selectedChannel) await loadMessages(data.channel)
+          // Re-render only when the chat panel is actually visible.
+          // On mobile the panel slides on/off via a CSS transform; if
+          // the user backs out while a fetch is in flight, rendering
+          // mid-transition stalls the slide and the layout sticks at
+          // ~90% chat / 10% sidebar (back button looks frozen).
+          if (data.channel === selectedChannel && _chatPanelVisible()) await loadMessages(data.channel)
         } else if (snapChannel > 0 && snapChannel === selectedChannel) {
           delete refreshingChannels[snapChannel]; var fb3 = document.getElementById('prog-fetch-ch-' + snapChannel); if (fb3) fb3.remove();
           await loadMessages(snapChannel)
@@ -5745,7 +5780,11 @@
         var ok = await showConfirmDialog(t('cancel_media_msg') || 'Cancel this download?', t('yes') || 'Yes', t('no') || 'No');
         if (!ok) return;
         if (!mediaInflight[msgID]) return;
-        try { mediaInflight[msgID].xhr.abort(); } catch (e) { }
+        try {
+          var inf = mediaInflight[msgID];
+          if (inf.ctrl) inf.ctrl.abort();
+          else if (inf.xhr) inf.xhr.abort();
+        } catch (e) { }
         delete mediaInflight[msgID];
         mediaResetCard(card);
         return;
@@ -5817,18 +5856,12 @@
       var fname = card.getAttribute('data-fname') || '';
       var ghAvail = card.getAttribute('data-gh') === '1';
       var dnsAvail = card.getAttribute('data-dns') === '1';
-      // forceSource is set when restartWith() retries after a fallback prompt
-      // — in that case the user has already consented and we skip the
-      // slow-only confirmation.
       var source = opts.forceSource || (ghAvail ? 'fast' : 'slow');
       if (!opts.forceSource && source === 'slow' && dnsAvail) {
         var ok = await showConfirmDialog(
           t('media_slow_only') || 'GitHub relay is unavailable for this file. The DNS path is very slow. Download anyway?',
           t('yes') || 'Yes', t('no') || 'No');
-        if (!ok) {
-          mediaPumpQueue();
-          return;
-        }
+        if (!ok) { mediaPumpQueue(); return; }
       }
       var baseUrl = '/api/media/get?ch=' + encodeURIComponent(ch)
         + '&blk=' + encodeURIComponent(blk)
@@ -5840,121 +5873,37 @@
       var attempt = 0;
       debugLog('media: download msg=' + msgID + ' source=' + source + ' size=' + size);
 
-      // restartWith re-runs the download with a forced source. Pass it
-      // through so the prompt isn't shown again — user consent already
-      // happened in the fallback dialog.
+      var ctrl = new AbortController();
+      var pollTimer = null;
+      var progressShownAt = 0;
+      var MIN_PROGRESS_VISIBLE_MS = 350;
+
+      function stopPoll() { if (pollTimer) { clearInterval(pollTimer); pollTimer = null; } }
+      function finishSlot() {
+        mediaActiveCount = Math.max(0, mediaActiveCount - 1);
+        mediaPumpQueue();
+      }
       function restartWith(newSource) {
-        try { stopPoll(); } catch (e) { }
-        try { xhr.abort(); } catch (e) { }
+        stopPoll();
+        try { ctrl.abort(); } catch (e) { }
         delete mediaInflight[msgID];
         mediaActiveCount = Math.max(0, mediaActiveCount - 1);
         delete mediaProgressState[msgID];
         mediaRunDownload(domID, { forceSource: newSource });
       }
-
-      var xhr = new XMLHttpRequest();
-      xhr.responseType = 'blob';
-      xhr.open('GET', url);
-      xhr.onprogress = function (ev) {
-        var total = ev.total || parseInt(size, 10) || 0;
-        var loaded = ev.loaded || 0;
-        mediaUpdateProgress(card, loaded, total);
-      };
-      var progressShownAt = 0;
-      var MIN_PROGRESS_VISIBLE_MS = 350;
-      async function deliverBlob() {
-        if (xhr.status >= 200 && xhr.status < 300) {
-          var expectedCRC = parseInt(crc, 16);
-          var expectedSize = parseInt(size, 10);
-          // Hash + size verification — required by spec for any relay.
-          if (xhr.response && !isNaN(expectedSize) && expectedSize > 0 && xhr.response.size !== expectedSize) {
-            await mediaForgetCache(card);
-            if (source === 'fast') { handleFastFailure(t('media_size_mismatch') || 'Size mismatch'); return; }
-            mediaShowError(card, t('media_size_mismatch') || 'Size mismatch');
-            return;
-          }
-          if (!isNaN(expectedCRC) && expectedCRC > 0) {
-            try {
-              var got = await blobCRC32(xhr.response);
-              if (got !== expectedCRC) {
-                await mediaForgetCache(card);
-                if (source === 'fast') { handleFastFailure(t('media_hash_mismatch') || 'Content hash mismatch'); return; }
-                mediaShowError(card, t('media_hash_mismatch') || 'Content hash mismatch');
-                return;
-              }
-            } catch (e) { }
-          }
-          var blobURL = URL.createObjectURL(xhr.response);
-          mediaBlobURLs[msgID] = blobURL;
-          mediaBlobs[msgID] = { blob: xhr.response, url: blobURL, mime: xhr.getResponseHeader('Content-Type') || '' };
-          mediaShowBlob(card, blobURL);
-          mediaPersistBlob(msgID, card, xhr.response, mediaBlobs[msgID].mime);
-        } else {
-          // GitHub rate limit gets its own popup with the reset time so
-          // the user knows it's temporary and how long to wait.
-          if (source === 'fast' && xhr.status === 429) {
-            var resetMin = parseInt(xhr.getResponseHeader('X-Relay-Reset-Min') || '0', 10);
-            await handleRateLimit(resetMin);
-            return;
-          }
-          if (source === 'fast') { handleFastFailure(xhr.statusText || ('HTTP ' + xhr.status), xhr.status); return; }
-          mediaShowError(card, xhr.statusText || ('HTTP ' + xhr.status));
-        }
-      }
       async function handleRateLimit(resetMin) {
         var minutes = (resetMin && resetMin > 0) ? resetMin : '?';
-        var msg = (t('media_rate_limited') || 'GitHub rate limit hit. Reset in {n} min — using slow path.').replace('{n}', minutes);
-        showToast(msg);
-        // Always try DNS as the fallback — even if the manifest
-        // didn't advertise it (the file might still be reachable
-        // via DNS even when the flag says no). If DNS truly can't
-        // serve it, the slow path will surface its own error.
+        showToast((t('media_rate_limited') || 'GitHub rate limit hit. Reset in {n} min — using slow path.').replace('{n}', minutes));
         restartWith('slow');
       }
-      function finishSlot() {
-        mediaActiveCount = Math.max(0, mediaActiveCount - 1);
-        mediaPumpQueue();
-      }
-      xhr.onload = function () {
-        delete mediaInflight[msgID];
-        if (xhr.status >= 200 && xhr.status < 300) {
-          var totalSize = (xhr.response && xhr.response.size) ? xhr.response.size
-            : (parseInt(card.getAttribute('data-size'), 10) || 0);
-          if (totalSize > 0) mediaUpdateProgress(card, totalSize, totalSize);
-          debugLog('media: ok msg=' + msgID + ' source=' + source + ' served-by=' + (xhr.getResponseHeader('X-Cache') || '?'));
-        }
-        var elapsed = Date.now() - progressShownAt;
-        if (progressShownAt > 0 && elapsed < MIN_PROGRESS_VISIBLE_MS) {
-          setTimeout(function () { deliverBlob().finally(finishSlot); }, MIN_PROGRESS_VISIBLE_MS - elapsed);
-        } else {
-          deliverBlob().finally(finishSlot);
-        }
-      };
       async function handleFastFailure(reason, status) {
         attempt++;
-        // 404 = not in repo, 429 = rate-limited. Both are terminal
-        // for the fast path — retrying GitHub won't help, and we
-        // don't want to burn the 60/h API budget. Skip retries and
-        // fall straight through to the DNS path if available.
         var skipRetry = (status === 404 || status === 429);
         if (!skipRetry && attempt < GH_MAX_RETRIES) {
           await new Promise(function (r) { setTimeout(r, GH_RETRY_DELAY_MS); });
-          var retry = new XMLHttpRequest();
-          retry.responseType = 'blob';
-          retry.open('GET', url);
-          retry.onprogress = xhr.onprogress;
-          retry.onload = xhr.onload;
-          retry.onerror = xhr.onerror;
-          retry.onabort = xhr.onabort;
-          xhr = retry;
-          mediaInflight[msgID] = { xhr: xhr };
-          xhr.send();
+          runOnce();
           return;
         }
-        // 404 / 429: auto-fallback to DNS without a prompt — the
-        // fast path is terminal here, asking "do you want slow?"
-        // adds friction. Try DNS regardless of dnsAvail flag, since
-        // the file might still come through that path.
         if (skipRetry && source === 'fast') {
           var note = (status === 404)
             ? (t('media_relay_404_fallback') || 'Not in fast relay yet — switching to DNS')
@@ -5963,33 +5912,109 @@
           restartWith('slow');
           return;
         }
-        // Other failures — ask the user before going to the slow path.
         if (source === 'fast' && dnsAvail) {
-          var ok = await showConfirmDialog(
+          var ok2 = await showConfirmDialog(
             t('media_relay_fallback') || "Fast relay failed. Try the slow DNS path? Note: this can be very slow.",
             t('yes') || 'Yes', t('no') || 'No');
-          if (ok) {
-            restartWith('slow');
-            return;
-          }
+          if (ok2) { restartWith('slow'); return; }
         }
         mediaShowError(card, reason || (t('media_failed') || 'Download failed'));
         finishSlot();
       }
-      xhr.onerror = function () {
-        delete mediaInflight[msgID];
-        if (source === 'fast') { handleFastFailure('network error'); return; }
-        mediaShowError(card, 'network error');
-        finishSlot();
-      };
-      xhr.onabort = function () {
-        delete mediaInflight[msgID];
-        finishSlot();
-      };
-      // Reset progress state for this download — both byte and block
-      // counters live in mediaProgressState[msgID] and only ever go up.
-      // For the fast (relay) path the block counter is meaningless, so
-      // blocks=0 and the text omits the K/N suffix.
+
+      async function deliverBlob(blob, headers) {
+        var expectedCRC = parseInt(crc, 16);
+        var expectedSize = parseInt(size, 10);
+        if (blob && !isNaN(expectedSize) && expectedSize > 0 && blob.size !== expectedSize) {
+          await mediaForgetCache(card);
+          if (source === 'fast') { handleFastFailure(t('media_size_mismatch') || 'Size mismatch'); return; }
+          mediaShowError(card, t('media_size_mismatch') || 'Size mismatch');
+          return;
+        }
+        if (!isNaN(expectedCRC) && expectedCRC > 0) {
+          try {
+            var got = await blobCRC32(blob);
+            if (got !== expectedCRC) {
+              await mediaForgetCache(card);
+              if (source === 'fast') { handleFastFailure(t('media_hash_mismatch') || 'Content hash mismatch'); return; }
+              mediaShowError(card, t('media_hash_mismatch') || 'Content hash mismatch');
+              return;
+            }
+          } catch (e) { }
+        }
+        var mime = (headers && headers.get('Content-Type')) || '';
+        var blobURL = URL.createObjectURL(blob);
+        mediaBlobURLs[msgID] = blobURL;
+        mediaBlobs[msgID] = { blob: blob, url: blobURL, mime: mime };
+        mediaShowBlob(card, blobURL);
+        mediaPersistBlob(msgID, card, blob, mime);
+      }
+
+      // fetch + manual reader so we can finalise the moment we have
+      // Content-Length bytes — some censoring proxies hold the
+      // connection open after sending the body, which makes XHR /
+      // resp.blob() hang at 100 %. Cancelling the reader breaks us
+      // out of that wait.
+      async function runOnce() {
+        try {
+          var resp = await fetch(url, { signal: ctrl.signal, cache: 'no-store' });
+          if (!resp.ok) {
+            stopPoll();
+            delete mediaInflight[msgID];
+            if (source === 'fast' && resp.status === 429) {
+              var resetMin = parseInt(resp.headers.get('X-Relay-Reset-Min') || '0', 10);
+              await handleRateLimit(resetMin);
+              return;
+            }
+            if (source === 'fast') { handleFastFailure(resp.statusText || ('HTTP ' + resp.status), resp.status); return; }
+            mediaShowError(card, resp.statusText || ('HTTP ' + resp.status));
+            finishSlot();
+            return;
+          }
+          var total = parseInt(resp.headers.get('Content-Length') || '0', 10) || (parseInt(size, 10) || 0);
+          var blob;
+          if (!resp.body || !resp.body.getReader) {
+            // Old WebView fallback — accept the original hang risk.
+            blob = await resp.blob();
+          } else {
+            var reader = resp.body.getReader();
+            var chunks = [];
+            var received = 0;
+            while (true) {
+              var step = await reader.read();
+              if (step.done) break;
+              chunks.push(step.value);
+              received += step.value.byteLength;
+              mediaUpdateProgress(card, received, total);
+              if (total > 0 && received >= total) {
+                try { await reader.cancel(); } catch (e) { }
+                break;
+              }
+            }
+            blob = new Blob(chunks, { type: resp.headers.get('Content-Type') || 'application/octet-stream' });
+          }
+          stopPoll();
+          delete mediaInflight[msgID];
+          var totalSize = blob.size || (parseInt(card.getAttribute('data-size'), 10) || 0);
+          if (totalSize > 0) mediaUpdateProgress(card, totalSize, totalSize);
+          debugLog('media: ok msg=' + msgID + ' source=' + source + ' served-by=' + (resp.headers.get('X-Cache') || '?'));
+          var elapsed = Date.now() - progressShownAt;
+          var run = function () { deliverBlob(blob, resp.headers).finally(finishSlot); };
+          if (progressShownAt > 0 && elapsed < MIN_PROGRESS_VISIBLE_MS) {
+            setTimeout(run, MIN_PROGRESS_VISIBLE_MS - elapsed);
+          } else {
+            run();
+          }
+        } catch (e) {
+          stopPoll();
+          delete mediaInflight[msgID];
+          if (e && e.name === 'AbortError') { finishSlot(); return; }
+          if (source === 'fast') { handleFastFailure((e && e.message) || 'network error'); return; }
+          mediaShowError(card, (e && e.message) || 'network error');
+          finishSlot();
+        }
+      }
+
       mediaProgressState[msgID] = {
         loaded: 0,
         total: parseInt(size, 10) || 0,
@@ -5997,35 +6022,23 @@
         blocks: source === 'slow' ? (parseInt(blk, 10) || 0) : 0
       };
 
-      // Poll the server's per-download block counter so the user sees real
-      // block-level progress (the Go side fetches one DNS block at a time
-      // but io.Copy buffers those into bigger HTTP chunks, hence the
-      // "static then jumps" feel without polling).
       var pollUrl = '/api/media/progress?ch=' + encodeURIComponent(ch)
         + '&blk=' + encodeURIComponent(blk)
         + '&crc=' + encodeURIComponent(crc);
-      var pollTimer = setInterval(async function () {
+      pollTimer = setInterval(async function () {
         try {
           var pr = await fetch(pollUrl);
           if (!pr.ok) return;
           var pj = await pr.json();
-          // Ignore inactive/zero responses — happens before the server
-          // registers the download or after it finishes. Don't let those
-          // overwrite the live counter and cause the UI to bounce back.
           if (pj.active === false) return;
           mediaApplyBlockProgress(card, pj.completed | 0, pj.total | 0);
         } catch (e) { }
       }, 500);
-      function stopPoll() { if (pollTimer) { clearInterval(pollTimer); pollTimer = null; } }
-      var origOnload = xhr.onload, origOnerror = xhr.onerror, origOnabort = xhr.onabort;
-      xhr.onload = function () { stopPoll(); origOnload && origOnload.apply(this, arguments); };
-      xhr.onerror = function () { stopPoll(); origOnerror && origOnerror.apply(this, arguments); };
-      xhr.onabort = function () { stopPoll(); origOnabort && origOnabort.apply(this, arguments); };
 
-      mediaInflight[msgID] = { xhr: xhr };
+      mediaInflight[msgID] = { ctrl: ctrl };
       mediaShowProgress(card);
       progressShownAt = Date.now();
-      requestAnimationFrame(function () { xhr.send(); });
+      runOnce();
     }
 
     // mediaProgressState is the per-download counter. Both xhr.onprogress

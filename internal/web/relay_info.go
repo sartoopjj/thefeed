@@ -270,6 +270,22 @@ func fetchGitHubRaw(ctx context.Context, hc *http.Client, url string, expectedSi
 	if limit <= 0 {
 		limit = 100 * 1024 * 1024 // 100 MiB ceiling
 	}
+	// Prefer Content-Length, fall back to the caller's expectedSize
+	// (the encrypted-blob byte count). ReadFull stops the moment we
+	// have that many bytes — no waiting for FIN, so a censoring
+	// proxy that holds the socket open after delivering the body
+	// can't wedge us at 100 %.
+	target := resp.ContentLength
+	if target <= 0 && expectedSize > 0 {
+		target = expectedSize
+	}
+	if target > 0 && target <= limit+1 {
+		body := make([]byte, target)
+		if _, err := io.ReadFull(resp.Body, body); err != nil {
+			return nil, "", err
+		}
+		return body, resp.Header.Get("Content-Type"), nil
+	}
 	body, err := io.ReadAll(io.LimitReader(resp.Body, limit+1))
 	if err != nil {
 		return nil, "", err

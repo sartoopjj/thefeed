@@ -15,10 +15,18 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: '1.26'
-      - name: Test
-        run: go test -race -count=1 ./...
-      - name: Vet
-        run: go vet ./...
+          cache: true
+      - name: Cache Go build
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/go-build
+          key: gobuild-test-${{ runner.os }}-${{ hashFiles('**/go.sum') }}
+          restore-keys: gobuild-test-${{ runner.os }}-
+      - name: Test + vet
+        run: |
+          go vet ./... &
+          go test -race -count=1 ./...
+          wait
 
   build:
     needs: test
@@ -50,10 +58,17 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: '1.26'
+          cache: true
+      - name: Cache Go build
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/go-build
+          key: gobuild-${{ matrix.goos }}-${{ matrix.goarch }}-${{ hashFiles('**/go.sum') }}
+          restore-keys: gobuild-${{ matrix.goos }}-${{ matrix.goarch }}-
 
       - name: Install UPX
         if: matrix.goos == 'linux' || matrix.goos == 'windows'
-        run: sudo apt-get update && sudo apt-get install -y upx-ucl
+        run: sudo apt-get install -y upx-ucl
 
       - name: Build Server
         if: matrix.goos != 'android'
@@ -128,11 +143,10 @@ jobs:
       - name: Compress with UPX
         if: matrix.goos == 'linux' || matrix.goos == 'windows'
         run: |
-          for f in build/*; do
-            if [ -f "$f" ]; then
-              upx --best --lzma "$f" || true
-            fi
-          done
+          # Keep best/lzma for small binaries; xargs -P does them
+          # in parallel across CPUs so wall time stays low.
+          find build -maxdepth 1 -type f -print0 \
+            | xargs -0 -n1 -P "$(nproc)" -I{} sh -c 'upx --best --lzma "$1" || true' _ {}
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -189,10 +203,12 @@ jobs:
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
           VERSION=${GITHUB_REF_NAME:-dev}
-          gradle wrapper --gradle-version 8.10.2
+          if [ ! -x ./gradlew ]; then gradle wrapper --gradle-version 8.10.2; fi
           if [ -f app/keystore.jks ]; then BT=release; TASK=assembleRelease; else BT=debug; TASK=assembleDebug; fi
 
-          ./gradlew --no-daemon clean $TASK
+          # No `clean` — fresh checkout is already clean and the
+          # Gradle build cache can reuse work between runs.
+          ./gradlew --no-daemon --build-cache $TASK
 
           APK_DIR=app/build/outputs/apk/$BT
           cp "$APK_DIR"/app-arm64-v8a-${BT}.apk    ../artifacts/thefeed-android-${VERSION}-arm64-v8a.apk

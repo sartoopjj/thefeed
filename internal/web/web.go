@@ -115,6 +115,11 @@ type ProfileList struct {
 	// single list named "Default".
 	ActiveLists  []ActiveList `json:"activeLists,omitempty"`
 	SelectedList string       `json:"selectedList,omitempty"`
+	// ScanPromptOff suppresses the startup "scan resolvers?" prompt.
+	// Persisted server-side so it survives Android's per-launch port
+	// changes (each launch picks a fresh port → different localStorage
+	// origin → flag was lost on every restart).
+	ScanPromptOff bool `json:"scanPromptOff,omitempty"`
 }
 
 // lastScanData is the on-disk structure for last_scan.json.
@@ -1740,22 +1745,28 @@ func (s *Server) handleRemoveResolver(w http.ResponseWriter, r *http.Request) {
 	// re-applies the on-disk list verbatim. Scope is intentionally narrow:
 	// only the active list is touched — the bank and other named lists
 	// keep the resolver until the user removes it from the bank.
+	listChanged := false
 	if pl, err := s.loadProfiles(); err == nil && pl != nil {
 		if list := findList(pl, pl.SelectedList); list != nil {
 			out := list.Resolvers[:0]
-			changed := false
 			for _, r := range list.Resolvers {
 				if r == req.Addr {
-					changed = true
+					listChanged = true
 					continue
 				}
 				out = append(out, r)
 			}
-			if changed {
+			if listChanged {
 				list.Resolvers = out
 				_ = s.saveProfiles(pl)
 			}
 		}
+	}
+	if listChanged {
+		// Push tab counts to any open Resolver Bank modal — without
+		// this, the badge stays at the old count until the user
+		// switches lists.
+		s.broadcast("event: update\ndata: \"resolver-lists\"\n\n")
 	}
 	writeJSON(w, map[string]any{"ok": true})
 }
@@ -1931,6 +1942,7 @@ func (s *Server) handleResolverBank(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 		}
+		s.broadcast("event: update\ndata: \"resolver-lists\"\n\n")
 		writeJSON(w, map[string]any{"ok": true, "removed": removed, "remaining": len(pl.ResolverBank)})
 
 	default:
@@ -2054,6 +2066,7 @@ func (s *Server) handleResolverBankCleanup(w http.ResponseWriter, r *http.Reques
 			}
 		}
 	}
+	s.broadcast("event: update\ndata: \"resolver-lists\"\n\n")
 	writeJSON(w, map[string]any{"ok": true, "removed": removed, "remaining": len(filtered)})
 }
 
@@ -2573,14 +2586,15 @@ func (s *Server) handleSettings(w http.ResponseWriter, r *http.Request) {
 		if pl == nil {
 			pl = &ProfileList{}
 		}
-		writeJSON(w, map[string]any{"fontSize": pl.FontSize, "debug": pl.Debug, "theme": pl.Theme, "lang": pl.Lang, "version": version.Version, "commit": version.Commit})
+		writeJSON(w, map[string]any{"fontSize": pl.FontSize, "debug": pl.Debug, "theme": pl.Theme, "lang": pl.Lang, "scanPromptOff": pl.ScanPromptOff, "version": version.Version, "commit": version.Commit})
 
 	case http.MethodPost:
 		var req struct {
-			FontSize int    `json:"fontSize"`
-			Debug    bool   `json:"debug"`
-			Theme    string `json:"theme"`
-			Lang     string `json:"lang"`
+			FontSize      int    `json:"fontSize"`
+			Debug         bool   `json:"debug"`
+			Theme         string `json:"theme"`
+			Lang          string `json:"lang"`
+			ScanPromptOff *bool  `json:"scanPromptOff"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			http.Error(w, "invalid JSON", 400)
@@ -2603,6 +2617,9 @@ func (s *Server) handleSettings(w http.ResponseWriter, r *http.Request) {
 		}
 		if req.Lang == "fa" || req.Lang == "en" {
 			pl.Lang = req.Lang
+		}
+		if req.ScanPromptOff != nil {
+			pl.ScanPromptOff = *req.ScanPromptOff
 		}
 		if err := s.saveProfiles(pl); err != nil {
 			http.Error(w, fmt.Sprintf("save: %v", err), 500)
