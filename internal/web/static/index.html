@@ -43,6 +43,7 @@
       --safe-bottom: env(safe-area-inset-bottom);
       --safe-left: env(safe-area-inset-left);
     }
+
     /* Android WebView lays the page out below the system bars and reports
        phantom safe-area insets — zero them out so we don't double-pad. */
     html.is-android-app {
@@ -247,6 +248,7 @@
       padding: 4px 12px 6px;
       flex-wrap: wrap
     }
+
     .sidebar-toolbar .stb {
       flex: 1 1 auto;
       padding: 5px 8px;
@@ -261,14 +263,17 @@
       white-space: nowrap;
       transition: background .15s, color .15s
     }
+
     .sidebar-toolbar .stb:hover {
       background: var(--hover);
       color: var(--text)
     }
+
     .sidebar-toolbar .stb.scanning {
       color: var(--accent);
       border-color: var(--accent)
     }
+
     .sidebar-toolbar .stb .stb-badge {
       font-size: 10px;
       font-weight: 700;
@@ -364,7 +369,7 @@
     }
 
     .ch-item.active .ch-sub {
-      color: rgba(255,255,255,.75)
+      color: rgba(255, 255, 255, .75)
     }
 
     /* Auto-update toggle on each channel row. */
@@ -386,19 +391,23 @@
       transition: background .15s, color .15s, border-color .15s;
       opacity: .55;
     }
+
     .ch-item:hover .ch-autoupdate {
       opacity: 1;
     }
+
     .ch-autoupdate.on {
       background: var(--accent);
       color: #fff;
       border-color: var(--accent);
       opacity: 1;
     }
+
     .ch-item.active .ch-autoupdate {
       color: rgba(255, 255, 255, .9);
       border-color: rgba(255, 255, 255, .35);
     }
+
     .ch-item.active .ch-autoupdate.on {
       background: #fff;
       color: var(--accent);
@@ -542,7 +551,11 @@
       gap: 8px;
       align-items: center
     }
-    .msg-search-bar.active { display: flex }
+
+    .msg-search-bar.active {
+      display: flex
+    }
+
     .msg-search-bar input {
       flex: 1;
       padding: 6px 10px;
@@ -553,16 +566,59 @@
       font-size: 13px;
       outline: none
     }
-    .msg-search-bar input:focus { border-color: var(--accent) }
-    .msg-search-bar .search-nav { display: flex; gap: 4px; align-items: center; font-size: 12px; color: var(--text-dim) }
-    .msg-search-bar button { background: none; border: none; color: var(--text-dim); font-size: 16px; cursor: pointer; padding: 4px }
-    .msg-search-bar button:hover { color: var(--text) }
-    .msg .search-highlight { background: rgba(255,200,0,.35); border-radius: 2px; padding: 0 1px }
-    .msg .search-highlight.current { background: rgba(255,200,0,.7) }
+
+    .msg-search-bar input:focus {
+      border-color: var(--accent)
+    }
+
+    .msg-search-bar .search-nav {
+      display: flex;
+      gap: 4px;
+      align-items: center;
+      font-size: 12px;
+      color: var(--text-dim)
+    }
+
+    .msg-search-bar button {
+      background: none;
+      border: none;
+      color: var(--text-dim);
+      font-size: 16px;
+      cursor: pointer;
+      padding: 4px
+    }
+
+    .msg-search-bar button:hover {
+      color: var(--text)
+    }
+
+    .msg .search-highlight {
+      background: rgba(255, 200, 0, .35);
+      border-radius: 2px;
+      padding: 0 1px
+    }
+
+    .msg .search-highlight.current {
+      background: rgba(255, 200, 0, .7)
+    }
 
     /* ===== EXPORT MODAL ===== */
-    .export-row { display: flex; gap: 8px; align-items: center; margin-bottom: 12px }
-    .export-row input[type=number] { width: 80px; padding: 6px 8px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); color: var(--text); font-size: 13px }
+    .export-row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      margin-bottom: 12px
+    }
+
+    .export-row input[type=number] {
+      width: 80px;
+      padding: 6px 8px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--bg);
+      color: var(--text);
+      font-size: 13px
+    }
 
     /* ===== MESSAGES ===== */
     .messages {
@@ -811,15 +867,14 @@
     .media-card.downloading .media-progress-bar {
       position: relative;
       overflow: hidden;
-      background-image: linear-gradient(
-        45deg,
-        rgba(0, 0, 0, .12) 25%, transparent 25%,
-        transparent 50%, rgba(0, 0, 0, .12) 50%,
-        rgba(0, 0, 0, .12) 75%, transparent 75%, transparent
-      );
+      background-image: linear-gradient(45deg,
+          rgba(0, 0, 0, .12) 25%, transparent 25%,
+          transparent 50%, rgba(0, 0, 0, .12) 50%,
+          rgba(0, 0, 0, .12) 75%, transparent 75%, transparent);
       background-size: 16px 16px;
       animation: media-prog-stripes 0.8s linear infinite;
     }
+
     .media-card.downloading .media-progress-bar-thin {
       height: 8px;
       margin-top: 6px;
@@ -827,8 +882,13 @@
     }
 
     @keyframes media-prog-stripes {
-      0%   { background-position: 0 0 }
-      100% { background-position: 16px 0 }
+      0% {
+        background-position: 0 0
+      }
+
+      100% {
+        background-position: 16px 0
+      }
     }
 
     .media-file-actions {
@@ -1108,7 +1168,7 @@
     .poll-option {
       padding: 6px 10px;
       margin: 4px 0;
-      background: rgba(255,255,255,.06);
+      background: rgba(255, 255, 255, .06);
       border-radius: 6px;
       font-size: 13px
     }
@@ -2293,7 +2353,7 @@
       background: var(--surface);
       border: 1px solid var(--border);
       border-radius: 8px;
-      box-shadow: 0 4px 16px rgba(0,0,0,.2);
+      box-shadow: 0 4px 16px rgba(0, 0, 0, .2);
       min-width: 150px;
       z-index: 100;
       display: none;
@@ -2301,7 +2361,9 @@
       overflow: hidden
     }
 
-    .header-kebab-menu.open { display: flex }
+    .header-kebab-menu.open {
+      display: flex
+    }
 
     .header-kebab-menu button {
       width: 100%;
@@ -2315,9 +2377,12 @@
       text-align: left
     }
 
-    .header-kebab-menu button:hover { background: var(--hover) }
+    .header-kebab-menu button:hover {
+      background: var(--hover)
+    }
 
     @media(max-width:768px) {
+
       /* On mobile, the body's safe-area padding covers iOS notch/home bar.
          Inside, the app fills the remaining space. */
       .app {
@@ -2361,9 +2426,14 @@
         display: flex
       }
 
-      .header-search-btn, .header-export-btn { display: none }
+      .header-search-btn,
+      .header-export-btn {
+        display: none
+      }
 
-      .header-kebab { display: flex }
+      .header-kebab {
+        display: flex
+      }
 
       .msg {
         max-width: 90%
@@ -2404,7 +2474,11 @@
     /* When the on-screen keyboard or browser nav bars pop up on mobile, the
        visual viewport may shrink. Force the app shell to follow it. */
     @supports (height: 100dvh) {
-      html, body { height: 100dvh }
+
+      html,
+      body {
+        height: 100dvh
+      }
     }
 
     ::-webkit-scrollbar {
@@ -2423,10 +2497,15 @@
 </head>
 
 <body>
+  <a href="#messages" class="skip-link" style="position:absolute;top:-40px;left:0;background:var(--accent);color:#fff;
+          padding:8px 16px;text-decoration:none;font-size:13px;z-index:9999;
+          border-radius:0 0 8px 0;transition:top .15s" onfocus="this.style.top='0'" onblur="this.style.top='-40px'">
+    Skip to messages
+  </a>
   <div class="app" id="app">
 
     <!-- SIDEBAR -->
-    <div class="sidebar" id="sidebar">
+    <nav class="sidebar" id="sidebar" aria-label="Channels">
       <div class="sidebar-header">
         <div class="sidebar-header-top">
           <button class="profile-btn" id="profileBtn" onclick="openProfiles()">
@@ -2434,13 +2513,20 @@
             <span class="profile-btn-name" id="profileBtnName" data-i18n="set_up">Set Up</span>
             <span class="profile-btn-arrow"><span class="plus">+</span>&#9660;</span>
           </button>
-          <button class="icon-btn" onclick="openSettings()" title="Settings" data-i18n-title="settings">&#9881;</button>
-          <button class="icon-btn" onclick="jumpToLog()" title="Log" data-i18n-title="sidebar_log" style="font-size:16px">&#128220;</button>
+          <button class="icon-btn" onclick="openSettings()" title="Settings" data-i18n-title="settings"
+            aria-label="Settings"><span aria-hidden="true">&#9881;</span></button>
+          <button class="icon-btn" onclick="jumpToLog()" title="Log" data-i18n-title="sidebar_log"
+            style="font-size:16px" aria-label="Open log"><span aria-hidden="true">&#128220;</span></button>
         </div>
         <div class="sidebar-toolbar">
-          <button class="stb" id="scannerIconBtn" onclick="openScanner()" data-i18n="scanner_find_resolvers">Find Resolvers</button>
-          <button class="stb" id="resolversSidebarBtn" onclick="openResolversModal()"><span data-i18n="sidebar_resolvers">Resolvers</span> <span class="stb-badge" id="resolversBadge" style="color:var(--error)">0</span></button>
+          <button class="stb" id="scannerIconBtn" onclick="openScanner()" data-i18n="scanner_find_resolvers">Find
+            Resolvers</button>
+          <button class="stb" id="resolversSidebarBtn" onclick="openResolversModal()"><span
+              data-i18n="sidebar_resolvers">Resolvers</span> <span class="stb-badge" id="resolversBadge"
+              style="color:var(--error)">0</span></button>
         </div>
+        <label for="channelSearch"
+          style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)">Search channels</label>
         <input class="sidebar-search" id="channelSearch" type="text" data-i18n-ph="search" placeholder="Search..."
           oninput="filterChannels()">
       </div>
@@ -2453,12 +2539,13 @@
         &middot;
         <a href="https://github.com/sartoopjj/thefeed" target="_blank">GitHub</a>
       </div>
-    </div>
+    </nav>
 
     <!-- CHAT AREA -->
-    <div class="chat-area">
+    <main class="chat-area" aria-label="Chat">
       <div class="chat-header">
-        <button class="back-btn" onclick="openSidebar()">&#8592;</button>
+        <button class="back-btn" onclick="openSidebar()" aria-label="Back to channel list"><span
+            aria-hidden="true">&#8592;</span></button>
         <div class="chat-header-info">
           <div class="chat-header-name" id="chatName">thefeed</div>
           <div class="chat-header-sub" id="chatSub"></div>
@@ -2467,14 +2554,19 @@
           <span class="next-fetch-label" id="nextFetchTimer"></span><span class="next-fetch-info" id="nextFetchInfoBtn"
             style="display:none" data-i18n-title="next_fetch_info" title="" onclick="showToast(t('next_fetch_info'))"
             tabindex="0">ⓘ</span>
-          <button class="icon-btn header-search-btn" onclick="toggleMsgSearch()" title="Search" data-i18n-title="search_messages"
-            style="width:auto;height:30px;font-size:12px;padding:0 10px;border-radius:8px;border:1px solid var(--border);background:var(--surface)" data-i18n="search_messages">Search</button>
-          <button class="icon-btn header-export-btn" onclick="openExportModal()" title="Export" data-i18n-title="export_messages"
-            style="width:auto;height:30px;font-size:12px;padding:0 10px;border-radius:8px;border:1px solid var(--border);background:var(--surface)" data-i18n="export_messages">Export</button>
-          <button class="icon-btn" id="refreshBtn" onclick="doRefreshUI()" title="Refresh"
-            style="width:40px;height:40px;font-size:20px">&#8635;</button>
+          <button class="icon-btn header-search-btn" onclick="toggleMsgSearch()" title="Search"
+            data-i18n-title="search_messages"
+            style="width:auto;height:30px;font-size:12px;padding:0 10px;border-radius:8px;border:1px solid var(--border);background:var(--surface)"
+            data-i18n="search_messages">Search</button>
+          <button class="icon-btn header-export-btn" onclick="openExportModal()" title="Export"
+            data-i18n-title="export_messages"
+            style="width:auto;height:30px;font-size:12px;padding:0 10px;border-radius:8px;border:1px solid var(--border);background:var(--surface)"
+            data-i18n="export_messages">Export</button>
+          <button class="icon-btn" id="refreshBtn" onclick="doRefreshUI()" title="Refresh" aria-label="Refresh messages"
+            style="width:40px;height:40px;font-size:20px"><span aria-hidden="true">&#8635;</span></button>
           <div class="header-kebab" id="headerKebab">
-            <button class="icon-btn" onclick="toggleKebabMenu(event)" title="More" style="width:40px;height:40px;font-size:20px">&#8942;</button>
+            <button class="icon-btn" onclick="toggleKebabMenu(event)" title="More"
+              style="width:40px;height:40px;font-size:20px">&#8942;</button>
             <div class="header-kebab-menu" id="headerKebabMenu">
               <button onclick="toggleMsgSearch();closeKebabMenu()" data-i18n="search_messages">Search</button>
               <button onclick="openExportModal();closeKebabMenu()" data-i18n="export_messages">Export</button>
@@ -2483,7 +2575,8 @@
         </div>
       </div>
       <div class="msg-search-bar" id="msgSearchBar">
-        <input type="text" id="msgSearchInput" data-i18n-ph="search_messages" placeholder="Search messages..." oninput="doMsgSearch()">
+        <input type="text" id="msgSearchInput" data-i18n-ph="search_messages" placeholder="Search messages..."
+          oninput="doMsgSearch()">
         <div class="search-nav">
           <span id="msgSearchCount"></span>
           <button onclick="msgSearchPrev()" title="Previous">&#9650;</button>
@@ -2491,7 +2584,8 @@
           <button onclick="closeMsgSearch()" title="Close">&times;</button>
         </div>
       </div>
-      <div class="messages" id="messages">
+      <div class="messages" id="messages" role="log" aria-live="polite" aria-atomic="false" aria-label="Messages"
+        tabindex="0">
         <div class="empty-state">
           <div class="big-icon">&#128225;</div>
           <p data-i18n="configure_server">Configure a server to start reading</p>
@@ -2499,16 +2593,21 @@
         </div>
       </div>
       <div class="send-panel" id="sendPanel">
+        <label for="sendInput" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)">Write a
+          message</label>
         <input class="send-input" id="sendInput" data-i18n-ph="write_message" placeholder="Write a message..."
           maxlength="4000">
-        <button class="send-btn" onclick="sendMessage()">&#10148;</button>
+        <button class="send-btn" onclick="sendMessage()" aria-label="Send message"><span
+            aria-hidden="true">&#10148;</span></button>
       </div>
-      <button class="scroll-down-btn" id="scrollDownBtn" onclick="scrollToBottom()" title="Jump to latest">&#8595;<span
-          class="scroll-down-badge" id="scrollDownBadge"></span></button>
+      <button class="scroll-down-btn" id="scrollDownBtn" onclick="scrollToBottom()" title="Jump to latest"
+        aria-label="Jump to latest messages"><span aria-hidden="true">&#8595;</span><span class="scroll-down-badge"
+          id="scrollDownBadge"></span></button>
+
       <div class="progress-panel" id="progressPanel"></div>
       <div class="log-toggle" onclick="toggleLog()"><span>LOG</span><span id="logToggleIcon">&#9654;</span></div>
       <div class="log-panel hidden" id="logPanel"></div>
-    </div>
+    </main>
   </div>
 
   <!-- TOAST -->
@@ -2525,13 +2624,16 @@
            from Settings → Show startup scan prompt. -->
       <div style="display:flex;justify-content:flex-end;margin-bottom:10px">
         <button class="btn btn-flat" id="savedResolversNever" onclick="savedResolversNever()"
-          data-i18n="dont_show_again" style="font-size:11px;padding:4px 10px;color:var(--text-dim)">Don't show again</button>
+          data-i18n="dont_show_again" style="font-size:11px;padding:4px 10px;color:var(--text-dim)">Don't show
+          again</button>
       </div>
       <div class="modal-actions">
         <button class="btn btn-flat" onclick="savedResolversSkip()" data-i18n="saved_resolvers_skip">Skip</button>
-        <button class="btn btn-outline" id="savedResolversRescanBtn" onclick="savedResolversRescan()" data-i18n="saved_resolvers_rescan">Scan
+        <button class="btn btn-outline" id="savedResolversRescanBtn" onclick="savedResolversRescan()"
+          data-i18n="saved_resolvers_rescan">Scan
           Again</button>
-        <button class="btn btn-primary" id="savedResolversUseBtn" onclick="savedResolversUseNow()" data-i18n="saved_resolvers_use">Use
+        <button class="btn btn-primary" id="savedResolversUseBtn" onclick="savedResolversUseNow()"
+          data-i18n="saved_resolvers_use">Use
           Now</button>
       </div>
     </div>
@@ -2592,30 +2694,31 @@
             data-i18n="check_github" style="flex:1">Check on GitHub</button>
         </div>
         <div class="settings-info-row">
-          <button class="btn btn-flat btn-sm" onclick="clearCache()"
-            style="color:var(--danger,#e74c3c);width:100%" data-i18n="clear_cache_btn">Clear Cache</button>
+          <button class="btn btn-flat btn-sm" onclick="clearCache()" style="color:var(--danger,#e74c3c);width:100%"
+            data-i18n="clear_cache_btn">Clear Cache</button>
         </div>
       </div>
       <div class="form-group" style="margin-top:12px">
         <label data-i18n="bg_image">Background Image</label>
         <div style="display:flex;gap:6px;align-items:center">
-          <input type="file" id="bgImageInput" accept="image/*" style="flex:1;font-size:12px;color:var(--text)" onchange="applyBgImage()">
-          <button class="btn btn-flat btn-sm" onclick="clearBgImage()" style="color:var(--error)" data-i18n="clear_bg">Clear</button>
+          <input type="file" id="bgImageInput" accept="image/*" style="flex:1;font-size:12px;color:var(--text)"
+            onchange="applyBgImage()">
+          <button class="btn btn-flat btn-sm" onclick="clearBgImage()" style="color:var(--error)"
+            data-i18n="clear_bg">Clear</button>
         </div>
       </div>
       <!-- Android-only: App Password -->
       <div id="androidPasswordSection" class="settings-section" style="display:none">
         <div class="settings-section-title"><span data-i18n="app_password">App Password</span></div>
         <div id="passwordSetSection" style="margin-top:8px">
-          <input type="password" id="appPasswordInput" placeholder=""
-            data-i18n-ph="password_new_ph"
+          <input type="password" id="appPasswordInput" placeholder="" data-i18n-ph="password_new_ph"
             style="width:100%;padding:8px 12px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:13px;box-sizing:border-box;margin-bottom:6px">
-          <input type="password" id="appPasswordConfirm" placeholder=""
-            data-i18n-ph="password_confirm_ph"
+          <input type="password" id="appPasswordConfirm" placeholder="" data-i18n-ph="password_confirm_ph"
             style="width:100%;padding:8px 12px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:13px;box-sizing:border-box">
           <div id="passwordError" style="color:var(--error);font-size:12px;margin-top:4px;display:none"></div>
           <div style="margin-top:8px">
-            <button class="btn btn-primary" onclick="setAppPassword()" style="font-size:12px;padding:6px 14px" data-i18n="password_set">Set Password</button>
+            <button class="btn btn-primary" onclick="setAppPassword()" style="font-size:12px;padding:6px 14px"
+              data-i18n="password_set">Set Password</button>
           </div>
         </div>
         <div id="passwordRemoveSection" style="display:none">
@@ -2624,17 +2727,20 @@
               <span class="password-status-dot"></span>
               <span data-i18n="password_active">Password is active</span>
             </div>
-            <button class="btn btn-flat btn-sm" onclick="showPasswordRemovePrompt()" style="color:var(--error)" data-i18n="password_change_remove">Change / Remove</button>
+            <button class="btn btn-flat btn-sm" onclick="showPasswordRemovePrompt()" style="color:var(--error)"
+              data-i18n="password_change_remove">Change / Remove</button>
           </div>
           <div id="passwordRemovePrompt" style="display:none;margin-top:8px">
-            <input type="password" id="appPasswordCurrent" placeholder=""
-              data-i18n-ph="password_current_ph"
+            <input type="password" id="appPasswordCurrent" placeholder="" data-i18n-ph="password_current_ph"
               style="width:100%;padding:8px 12px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:13px;box-sizing:border-box">
             <div id="passwordRemoveError" style="color:var(--error);font-size:12px;margin-top:4px;display:none"></div>
             <div style="display:flex;gap:6px;margin-top:8px">
-              <button class="btn btn-primary" onclick="changeAppPassword()" style="font-size:12px;padding:6px 14px" data-i18n="password_change">Change</button>
-              <button class="btn btn-flat" onclick="removeAppPassword()" style="font-size:12px;padding:6px 14px;color:var(--error)" data-i18n="password_remove">Remove</button>
-              <button class="btn btn-flat" onclick="hidePasswordRemovePrompt()" style="font-size:12px;padding:6px 14px" data-i18n="cancel">Cancel</button>
+              <button class="btn btn-primary" onclick="changeAppPassword()" style="font-size:12px;padding:6px 14px"
+                data-i18n="password_change">Change</button>
+              <button class="btn btn-flat" onclick="removeAppPassword()"
+                style="font-size:12px;padding:6px 14px;color:var(--error)" data-i18n="password_remove">Remove</button>
+              <button class="btn btn-flat" onclick="hidePasswordRemovePrompt()" style="font-size:12px;padding:6px 14px"
+                data-i18n="cancel">Cancel</button>
             </div>
           </div>
         </div>
@@ -2657,7 +2763,8 @@
         </div>
         <div class="import-row">
           <input id="importUriInput" placeholder="thefeed://..." data-i18n-ph="import_uri_ph">
-          <button class="btn btn-flat btn-sm" type="button" onclick="pasteImportUri()" data-i18n-title="paste" title="Paste" aria-label="Paste" style="font-size:14px">&#128203;</button>
+          <button class="btn btn-flat btn-sm" type="button" onclick="pasteImportUri()" data-i18n-title="paste"
+            title="Paste" aria-label="Paste" style="font-size:14px">&#128203;</button>
           <button class="btn btn-primary btn-sm" onclick="doImportUri()" data-i18n="import">Import</button>
         </div>
         <div id="importError" style="color:var(--error);font-size:12px;display:none;margin-top:6px"></div>
@@ -2679,7 +2786,8 @@
        renders the same URI for cross-device share. -->
   <div class="modal-overlay" id="shareProfileModal">
     <div class="modal" style="max-width:440px">
-      <h2 style="margin-top:0"><span data-i18n="share">Share</span> &middot; <span id="shareModalProfileName" style="color:var(--text-dim);font-weight:400"></span></h2>
+      <h2 style="margin-top:0"><span data-i18n="share">Share</span> &middot; <span id="shareModalProfileName"
+          style="color:var(--text-dim);font-weight:400"></span></h2>
       <div class="form-group">
         <label data-i18n="share_source">Source</label>
         <select id="shareModalSource" onchange="reloadShareModalResolvers()"></select>
@@ -2688,15 +2796,20 @@
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
           <label style="margin:0" data-i18n="select_resolvers_export">Resolvers to include</label>
           <div style="display:flex;gap:4px">
-            <button type="button" class="btn btn-flat" style="font-size:11px;padding:3px 8px" onclick="toggleAllShareModalResolvers(true)" data-i18n="select_all">All</button>
-            <button type="button" class="btn btn-flat" style="font-size:11px;padding:3px 8px" onclick="toggleAllShareModalResolvers(false)" data-i18n="select_none">None</button>
+            <button type="button" class="btn btn-flat" style="font-size:11px;padding:3px 8px"
+              onclick="toggleAllShareModalResolvers(true)" data-i18n="select_all">All</button>
+            <button type="button" class="btn btn-flat" style="font-size:11px;padding:3px 8px"
+              onclick="toggleAllShareModalResolvers(false)" data-i18n="select_none">None</button>
           </div>
         </div>
-        <div id="shareModalResolvers" style="max-height:160px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:6px;font-size:12px;font-family:monospace"></div>
+        <div id="shareModalResolvers"
+          style="max-height:160px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:6px;font-size:12px;font-family:monospace">
+        </div>
       </div>
       <div class="form-group">
         <label data-i18n="share_uri">Share URI</label>
-        <textarea id="shareModalUri" readonly rows="3" style="width:100%;font-family:monospace;font-size:12px;resize:vertical;box-sizing:border-box"></textarea>
+        <textarea id="shareModalUri" readonly rows="3"
+          style="width:100%;font-family:monospace;font-size:12px;resize:vertical;box-sizing:border-box"></textarea>
       </div>
       <div class="modal-actions">
         <button class="btn btn-flat" onclick="closeShareModal()" data-i18n="close">Close</button>
@@ -2710,15 +2823,19 @@
     <div class="modal">
       <h2 id="profileEditorTitle" data-i18n="new_profile">New Profile</h2>
       <div id="peWarning" class="tg-warning"></div>
-      <div class="form-group"><label data-i18n="nickname">Nickname</label><input id="peNick" maxlength="32" placeholder="My Server">
+      <div class="form-group"><label data-i18n="nickname">Nickname</label><input id="peNick" maxlength="32"
+          placeholder="My Server">
       </div>
       <div class="form-group"><label data-i18n="domain">Domain</label><input id="peDomain" placeholder="t.example.com">
       </div>
       <div class="form-group"><label data-i18n="passphrase">Passphrase</label><input type="password" id="peKey"
           placeholder="..."></div>
-      <div class="info-note" style="font-size:12px;line-height:1.5;margin:6px 0 10px;padding:8px 12px;background:var(--card-bg);border-radius:8px;border:1px solid var(--border)">
+      <div class="info-note"
+        style="font-size:12px;line-height:1.5;margin:6px 0 10px;padding:8px 12px;background:var(--card-bg);border-radius:8px;border:1px solid var(--border)">
         <span data-i18n="resolver_bank_note">Resolvers are managed in the shared Resolver Bank.</span>
-        <a href="#" onclick="event.preventDefault();closeProfileEditor();openResolversModal()" style="color:var(--accent);text-decoration:none;margin-inline-start:4px" data-i18n="open_resolver_bank">Open Resolver Bank</a>
+        <a href="#" onclick="event.preventDefault();closeProfileEditor();openResolversModal()"
+          style="color:var(--accent);text-decoration:none;margin-inline-start:4px" data-i18n="open_resolver_bank">Open
+          Resolver Bank</a>
       </div>
       <div class="form-group"><label data-i18n="query_mode">Query Mode</label>
         <select id="peQueryMode">
@@ -2726,12 +2843,13 @@
           <option value="double">Multi-label (hex)</option>
         </select>
       </div>
-        <div class="form-group"><label data-i18n="rate_limit">Concurrent block fetches</label><input type="number"
+      <div class="form-group"><label data-i18n="rate_limit">Concurrent block fetches</label><input type="number"
           id="peRateLimit" value="6" min="0" step="0.1"></div>
-        <div class="form-group"><label data-i18n="scatter">Parallel resolvers per block</label><input type="number" id="peScatter"
-          value="4" min="1" max="5" title="How many resolvers are queried at the same time for one block"></div>
-        <div class="form-group"><label data-i18n="dns_timeout">DNS Query Timeout (seconds)</label><input type="number" id="peTimeout"
-          value="15" min="1" max="60" step="1"></div>
+      <div class="form-group"><label data-i18n="scatter">Parallel resolvers per block</label><input type="number"
+          id="peScatter" value="4" min="1" max="5"
+          title="How many resolvers are queried at the same time for one block"></div>
+      <div class="form-group"><label data-i18n="dns_timeout">DNS Query Timeout (seconds)</label><input type="number"
+          id="peTimeout" value="15" min="1" max="60" step="1"></div>
       <!-- Channel Management (editing only) -->
       <div id="peChannelSection" style="display:none">
         <hr class="section-divider">
@@ -2761,9 +2879,13 @@
       <div class="export-row">
         <label data-i18n="export_count">Number of messages</label>
         <div style="display:flex;align-items:center;gap:8px">
-          <button class="btn btn-outline" onclick="var e=document.getElementById('exportCount');e.value=Math.max(1,parseInt(e.value||1)-1)" style="width:32px;height:32px;padding:0;font-size:18px;border-radius:8px">&minus;</button>
+          <button class="btn btn-outline"
+            onclick="var e=document.getElementById('exportCount');e.value=Math.max(1,parseInt(e.value||1)-1)"
+            style="width:32px;height:32px;padding:0;font-size:18px;border-radius:8px">&minus;</button>
           <input type="number" id="exportCount" value="10" min="1" max="500" style="width:70px;text-align:center">
-          <button class="btn btn-outline" onclick="var e=document.getElementById('exportCount');e.value=Math.min(parseInt(e.max)||500,parseInt(e.value||0)+1)" style="width:32px;height:32px;padding:0;font-size:18px;border-radius:8px">&plus;</button>
+          <button class="btn btn-outline"
+            onclick="var e=document.getElementById('exportCount');e.value=Math.min(parseInt(e.max)||500,parseInt(e.value||0)+1)"
+            style="width:32px;height:32px;padding:0;font-size:18px;border-radius:8px">&plus;</button>
         </div>
       </div>
       <div class="modal-actions">
@@ -2783,10 +2905,9 @@
       <div class="resolver-header">
         <h2 style="margin:0;display:flex;align-items:center;gap:8px">
           <span data-i18n="resolvers_title">Resolver Bank</span>
-          <button type="button" class="title-info-btn" id="resolverBankInfoBtn"
-            onclick="toggleResolverBankInfo()"
-            data-i18n-title="info" title="Info" aria-label="Info"
-            aria-controls="resolverBankInfoPanel" aria-expanded="false">i</button>
+          <button type="button" class="title-info-btn" id="resolverBankInfoBtn" onclick="toggleResolverBankInfo()"
+            data-i18n-title="info" title="Info" aria-label="Info" aria-controls="resolverBankInfoPanel"
+            aria-expanded="false">i</button>
         </h2>
         <!-- Bank chip — populated by renderBankPill(). Lives in the
              header so it doesn't crowd the list-tabs strip. -->
@@ -2794,7 +2915,8 @@
       </div>
       <div class="info-note" id="resolverBankInfoPanel" hidden
         style="font-size:12px;line-height:1.5;margin-bottom:12px;padding:8px 12px;background:var(--card-bg);border-radius:8px;border:1px solid var(--border)">
-        <span data-i18n="resolver_bank_info">Resolvers are DNS servers used to connect to thefeed and fetch data. Use the Scanner to find new resolvers, or add them manually below.</span>
+        <span data-i18n="resolver_bank_info">Resolvers are DNS servers used to connect to thefeed and fetch data. Use
+          the Scanner to find new resolvers, or add them manually below.</span>
       </div>
       <!-- List tabs — every named resolver list plus a "+" tab to
            create new ones. Switching tabs hot-swaps the fetcher's
@@ -2822,30 +2944,39 @@
         <div id="resolverBankListEl" style="max-height:280px;overflow-y:auto;font-size:13px;margin-bottom:10px"></div>
         <!-- Cleanup section -->
         <div style="border-top:1px solid var(--border);padding-top:10px;margin-top:6px">
-          <div style="font-size:13px;font-weight:600;margin-bottom:6px" data-i18n="cleanup_title">Remove Bad Resolvers</div>
+          <div style="font-size:13px;font-weight:600;margin-bottom:6px" data-i18n="cleanup_title">Remove Bad Resolvers
+          </div>
           <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
             <label style="font-size:12px;white-space:nowrap" data-i18n="min_score">Min score:</label>
-            <input type="range" id="bankCleanupSlider" min="0.01" max="0.5" step="0.01" value="0.10" style="flex:1" oninput="previewBankCleanup()">
-            <span id="bankCleanupValue" style="font-size:12px;font-weight:600;min-width:36px;text-align:center">0.10</span>
+            <input type="range" id="bankCleanupSlider" min="0.01" max="0.5" step="0.01" value="0.10" style="flex:1"
+              oninput="previewBankCleanup()">
+            <span id="bankCleanupValue"
+              style="font-size:12px;font-weight:600;min-width:36px;text-align:center">0.10</span>
           </div>
           <div id="bankCleanupPreview" style="font-size:12px;color:var(--text-dim);margin-bottom:8px"></div>
-          <button class="btn btn-danger btn-sm" onclick="doBankCleanup()" data-i18n="remove_bad_resolvers">Remove Bad Resolvers</button>
+          <button class="btn btn-danger btn-sm" onclick="doBankCleanup()" data-i18n="remove_bad_resolvers">Remove Bad
+            Resolvers</button>
         </div>
         <!-- Add resolvers manually -->
         <div style="border-top:1px solid var(--border);padding-top:10px;margin-top:10px">
           <div style="font-size:13px;font-weight:600;margin-bottom:6px" data-i18n="add_resolvers">Add Resolvers</div>
           <div style="display:flex;gap:6px">
-            <textarea id="bankAddResolvers" rows="2" placeholder="8.8.8.8&#10;1.1.1.1" style="flex:1;font-family:monospace;font-size:12px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:6px 8px"></textarea>
-            <button class="btn btn-primary btn-sm" onclick="addResolversToBank()" style="align-self:flex-end" data-i18n="add">Add</button>
+            <textarea id="bankAddResolvers" rows="2" placeholder="8.8.8.8&#10;1.1.1.1"
+              style="flex:1;font-family:monospace;font-size:12px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:6px 8px"></textarea>
+            <button class="btn btn-primary btn-sm" onclick="addResolversToBank()" style="align-self:flex-end"
+              data-i18n="add">Add</button>
           </div>
         </div>
       </div>
-      <div style="border-top:1px solid var(--border);padding-top:10px;margin-top:10px;display:flex;align-items:center;gap:8px">
+      <div
+        style="border-top:1px solid var(--border);padding-top:10px;margin-top:10px;display:flex;align-items:center;gap:8px">
         <input type="checkbox" id="bankAutoScan" style="width:auto" checked onchange="toggleBankAutoScan()">
-        <label for="bankAutoScan" style="font-size:12px;cursor:pointer" data-i18n="auto_scan">Automatic hourly resolver check</label>
+        <label for="bankAutoScan" style="font-size:12px;cursor:pointer" data-i18n="auto_scan">Automatic hourly resolver
+          check</label>
       </div>
       <div class="modal-actions">
-        <button class="btn btn-outline" onclick="openScannerFromBank()" data-i18n="scanner_find_resolvers">&#128269; Find Resolvers</button>
+        <button class="btn btn-outline" onclick="openScannerFromBank()" data-i18n="scanner_find_resolvers">&#128269;
+          Find Resolvers</button>
         <button class="btn btn-outline" onclick="doRescanFromBank()" data-i18n="rescan">Rescan</button>
         <button class="btn btn-outline" onclick="resetScoreboard()" data-i18n="reset_scoreboard">Reset Scores</button>
         <button class="btn btn-outline" onclick="copyResolversList()" data-i18n="copy">Copy</button>
@@ -2863,9 +2994,20 @@
       <div style="margin-bottom:14px">
         <p id="scannerAboutShort" style="font-size:13px;color:var(--text-dim);line-height:1.5;margin:0">
           <span data-i18n="scanner_about_short">Scan IP ranges to find DNS resolvers that work with your server.</span>
-          <a href="#" id="scannerReadMoreLink" onclick="event.preventDefault();document.getElementById('scannerAboutFull').style.display='';this.style.display='none'" style="color:var(--accent);text-decoration:none" data-i18n="scanner_read_more">Read more...</a>
+          <a href="#" id="scannerReadMoreLink"
+            onclick="event.preventDefault();document.getElementById('scannerAboutFull').style.display='';this.style.display='none'"
+            style="color:var(--accent);text-decoration:none" data-i18n="scanner_read_more">Read more...</a>
         </p>
-        <p id="scannerAboutFull" style="display:none;font-size:12px;color:var(--text-dim);line-height:1.6;margin:0"><span data-i18n="scanner_about">This tool scans IP ranges to find DNS servers that can reach your thefeed server. Enter CIDRs (like 192.168.1.0/24) or individual IPs, pick a profile, and hit Scan. The app sends a small test query to each IP. If the IP answers correctly, it is a working resolver. You can also turn on "Expand /24" — when a working IP is found, the app will automatically check nearby IPs in the same network. Results show response time so you can pick the fastest ones. You can pause, resume, or stop the scan at any time.</span> <a href="#" onclick="event.preventDefault();document.getElementById('scannerAboutFull').style.display='none';document.getElementById('scannerReadMoreLink').style.display=''" style="color:var(--accent);text-decoration:none" data-i18n="scanner_read_less">Show less</a></p>
+        <p id="scannerAboutFull" style="display:none;font-size:12px;color:var(--text-dim);line-height:1.6;margin:0">
+          <span data-i18n="scanner_about">This tool scans IP ranges to find DNS servers that can reach your thefeed
+            server. Enter CIDRs (like 192.168.1.0/24) or individual IPs, pick a profile, and hit Scan. The app sends a
+            small test query to each IP. If the IP answers correctly, it is a working resolver. You can also turn on
+            "Expand /24" — when a working IP is found, the app will automatically check nearby IPs in the same network.
+            Results show response time so you can pick the fastest ones. You can pause, resume, or stop the scan at any
+            time.</span> <a href="#"
+            onclick="event.preventDefault();document.getElementById('scannerAboutFull').style.display='none';document.getElementById('scannerReadMoreLink').style.display=''"
+            style="color:var(--accent);text-decoration:none" data-i18n="scanner_read_less">Show less</a>
+        </p>
       </div>
 
       <!-- Config section -->
@@ -2874,20 +3016,28 @@
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
             <label data-i18n="scanner_targets">IPs or CIDRs (one per line)</label>
             <div style="display:flex;gap:4px">
-              <button class="btn btn-flat" onclick="document.getElementById('scanTargets').value='';updateScanIpCount()" data-i18n="scanner_clear_targets" style="font-size:12px;padding:4px 10px">&#128465; Clear</button>
-              <button class="btn btn-flat" onclick="loadScannerPresets()" style="font-size:12px;padding:4px 10px"><img class="iran-flag-icon" src="/static/iran-lion-sun.svg" alt="IR" style="height:14px;vertical-align:middle;margin-right:2px"> <span data-i18n="scanner_load_presets">Load IR Presets</span></button>
+              <button class="btn btn-flat" onclick="document.getElementById('scanTargets').value='';updateScanIpCount()"
+                data-i18n="scanner_clear_targets" style="font-size:12px;padding:4px 10px">&#128465; Clear</button>
+              <button class="btn btn-flat" onclick="loadScannerPresets()" style="font-size:12px;padding:4px 10px"><img
+                  class="iran-flag-icon" src="/static/iran-lion-sun.svg" alt="IR"
+                  style="height:14px;vertical-align:middle;margin-right:2px"> <span
+                  data-i18n="scanner_load_presets">Load IR Presets</span></button>
             </div>
           </div>
-          <textarea id="scanTargets" rows="3" placeholder="5.1.0.0/16&#10;8.8.8.8&#10;1.1.1.1" style="width:100%;font-family:monospace;font-size:13px" oninput="updateScanIpCount()"></textarea>
+          <textarea id="scanTargets" rows="3" placeholder="5.1.0.0/16&#10;8.8.8.8&#10;1.1.1.1"
+            style="width:100%;font-family:monospace;font-size:13px" oninput="updateScanIpCount()"></textarea>
           <div id="scanIpCount" style="margin-top:4px;font-size:12px;color:var(--text-dim);display:none"></div>
-          <div id="scanPresetTag" style="display:none;margin-top:6px;padding:6px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;font-size:13px;color:var(--text)"></div>
+          <div id="scanPresetTag"
+            style="display:none;margin-top:6px;padding:6px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;font-size:13px;color:var(--text)">
+          </div>
         </div>
         <div class="form-group">
           <label data-i18n="scanner_profile">Profile</label>
           <select id="scanProfile" style="width:100%"></select>
         </div>
         <details style="margin-bottom:12px">
-          <summary style="cursor:pointer;font-size:13px;color:var(--text-dim);user-select:none" data-i18n="scanner_advanced">Advanced options</summary>
+          <summary style="cursor:pointer;font-size:13px;color:var(--text-dim);user-select:none"
+            data-i18n="scanner_advanced">Advanced options</summary>
           <div style="margin-top:10px;display:grid;grid-template-columns:1fr 1fr;gap:10px">
             <div class="form-group">
               <label data-i18n="query_mode">Query Mode</label>
@@ -2912,7 +3062,8 @@
           <div class="form-group" style="margin-top:4px">
             <div class="row" style="gap:6px;align-items:center">
               <input type="checkbox" id="scanExpand">
-              <label for="scanExpand" style="font-size:13px" data-i18n="scanner_expand_subnet">Expand /24 — scan nearby IPs when a resolver is found</label>
+              <label for="scanExpand" style="font-size:13px" data-i18n="scanner_expand_subnet">Expand /24 — scan nearby
+                IPs when a resolver is found</label>
             </div>
           </div>
         </details>
@@ -2925,23 +3076,29 @@
             <strong id="scanStatusLabel">-</strong>
           </div>
           <div style="font-size:13px;color:var(--text-dim)">
-            <span id="scanProgressText">0 / 0</span> &mdash; <span id="scanFoundText">0</span> <span data-i18n="scanner_found">found</span>
+            <span id="scanProgressText">0 / 0</span> &mdash; <span id="scanFoundText">0</span> <span
+              data-i18n="scanner_found">found</span>
           </div>
         </div>
         <div style="height:6px;border-radius:3px;margin-bottom:14px;background:var(--border);overflow:hidden">
-          <div id="scanProgressFill" style="width:0%;height:100%;border-radius:3px;background:var(--accent);transition:width .3s"></div>
+          <div id="scanProgressFill"
+            style="width:0%;height:100%;border-radius:3px;background:var(--accent);transition:width .3s"></div>
         </div>
       </div>
 
       <!-- Results section -->
-      <div id="scannerResults" style="display:none;max-height:220px;overflow-y:auto;margin-bottom:14px;border:1px solid var(--border);border-radius:8px">
+      <div id="scannerResults"
+        style="display:none;max-height:220px;overflow-y:auto;margin-bottom:14px;border:1px solid var(--border);border-radius:8px">
         <table style="width:100%;font-size:13px;border-collapse:collapse">
-          <thead><tr style="background:var(--bg);position:sticky;top:0;z-index:1">
-            <th style="padding:8px;text-align:left;width:32px"><input type="checkbox" id="scanSelectAll" checked onchange="toggleScanSelectAll(this.checked)"></th>
-            <th style="padding:8px;text-align:left">IP</th>
-            <th style="padding:8px;text-align:right" data-i18n="scanner_latency">ms</th>
-            <th style="padding:8px;width:36px"></th>
-          </tr></thead>
+          <thead>
+            <tr style="background:var(--bg);position:sticky;top:0;z-index:1">
+              <th style="padding:8px;text-align:left;width:32px"><input type="checkbox" id="scanSelectAll" checked
+                  onchange="toggleScanSelectAll(this.checked)"></th>
+              <th style="padding:8px;text-align:left">IP</th>
+              <th style="padding:8px;text-align:right" data-i18n="scanner_latency">ms</th>
+              <th style="padding:8px;width:36px"></th>
+            </tr>
+          </thead>
           <tbody id="scanResultsBody"></tbody>
         </table>
       </div>
@@ -2952,7 +3109,8 @@
            prune individually; that path also propagates removals. -->
       <div id="scannerApplySection" style="display:none;margin-bottom:14px">
         <div style="display:flex;gap:8px;flex-wrap:wrap">
-          <button class="btn btn-primary" style="flex:1;min-width:0;padding:10px 0;font-size:14px" onclick="applyScanResults('append')">
+          <button class="btn btn-primary" style="flex:1;min-width:0;padding:10px 0;font-size:14px"
+            onclick="applyScanResults('append')">
             <span data-i18n="scanner_append">Add to bank</span> <span id="scanAppendCount" style="opacity:.7"></span>
           </button>
         </div>
@@ -2960,17 +3118,23 @@
           <button class="btn btn-flat" style="flex:1;padding:8px 0;font-size:13px" onclick="copySelectedScanResults()">
             <span data-i18n="copy">Copy</span> <span id="scanCopyCount" style="opacity:.7"></span>
           </button>
-          <button class="btn btn-flat" style="flex:1;padding:8px 0;font-size:13px" onclick="copyAllScanResults()" data-i18n="scanner_copy_all">Copy All</button>
-          <button class="btn btn-outline" style="flex:1;padding:8px 0;font-size:13px;font-weight:600" onclick="resetScannerUI()" data-i18n="scanner_new_scan">&#8634; New Scan</button>
+          <button class="btn btn-flat" style="flex:1;padding:8px 0;font-size:13px" onclick="copyAllScanResults()"
+            data-i18n="scanner_copy_all">Copy All</button>
+          <button class="btn btn-outline" style="flex:1;padding:8px 0;font-size:13px;font-weight:600"
+            onclick="resetScannerUI()" data-i18n="scanner_new_scan">&#8634; New Scan</button>
         </div>
       </div>
 
       <div class="modal-actions" style="gap:8px;flex-wrap:wrap">
-        <button class="btn btn-flat" onclick="closeScanner()" data-i18n="close" style="padding:10px 20px;font-size:14px">Close</button>
+        <button class="btn btn-flat" onclick="closeScanner()" data-i18n="close"
+          style="padding:10px 20px;font-size:14px">Close</button>
         <div style="flex:1"></div>
-        <button class="btn btn-outline" id="scanPauseBtn" style="display:none;padding:10px 20px;font-size:14px" onclick="toggleScanPause()" data-i18n="scanner_pause">Pause</button>
-        <button class="btn btn-danger" id="scanStopBtn" style="display:none;padding:10px 20px;font-size:14px" onclick="stopScan()" data-i18n="scanner_stop">Stop</button>
-        <button class="btn btn-primary" id="scanStartBtn" onclick="startScan()" data-i18n="scanner_start" style="padding:10px 24px;font-size:14px">Start Scan</button>
+        <button class="btn btn-outline" id="scanPauseBtn" style="display:none;padding:10px 20px;font-size:14px"
+          onclick="toggleScanPause()" data-i18n="scanner_pause">Pause</button>
+        <button class="btn btn-danger" id="scanStopBtn" style="display:none;padding:10px 20px;font-size:14px"
+          onclick="stopScan()" data-i18n="scanner_stop">Stop</button>
+        <button class="btn btn-primary" id="scanStartBtn" onclick="startScan()" data-i18n="scanner_start"
+          style="padding:10px 24px;font-size:14px">Start Scan</button>
       </div>
     </div>
   </div>
@@ -3709,7 +3873,9 @@
     }
 
     // ===== SETTINGS =====
+
     function openSettings() {
+      a11yModalOpen('settingsModal');
       renderLatestVersion();
       applyThemeButtons();
       document.getElementById('settingsModal').classList.add('active');
@@ -3735,7 +3901,7 @@
         localStorage.setItem('thefeed_scan_prompt_off', '1');
       }
     }
-    function closeSettings() { document.getElementById('settingsModal').classList.remove('active') }
+    function closeSettings() { a11yModalClose(); document.getElementById('settingsModal').classList.remove('active') }
     async function saveSettings() {
       var fs = parseInt(document.getElementById('fontSizeSlider').value) || 14;
       var dbg = document.getElementById('cfgDebug').checked;
@@ -4500,14 +4666,14 @@
     }
 
     function openProfiles() {
+      a11yModalOpen('profilesModal');
       document.getElementById('profilesModal').classList.add('active');
       document.getElementById('importError').style.display = 'none';
       document.getElementById('importSuccess').style.display = 'none';
       document.getElementById('importUriInput').value = '';
       renderProfilesModal();
     }
-    function closeProfiles() { document.getElementById('profilesModal').classList.remove('active') }
-
+    function closeProfiles() { a11yModalClose(); document.getElementById('profilesModal').classList.remove('active') }
     function buildProfileUri(id, selectedResolvers) {
       if (!profiles || !profiles.profiles) return '';
       var p = profiles.profiles.find(function (x) { return x.id === id });
@@ -5056,8 +5222,8 @@
           var active = num2 === selectedChannel ? ' active' : '';
           var chNm2 = e.ch.Name || e.ch.name || '';
           var badge = (channelHasNew(e.ch) && num2 !== selectedChannel) ? '<span class="ch-badge">NEW</span>' : '';
-          h += '<div class="ch-item' + active + '" data-name="' + escAttr(handle) + '" data-label="' + escAttr(label) + '" onclick="selectChannel(' + num2 + ')">';
-          h += '<div class="ch-avatar">' + esc(avatarText) + '</div>';
+          var chA11yLabel = label + (channelHasNew(e.ch) && num2 !== selectedChannel ? ', new messages' : '');
+          h += '<div class="ch-item' + active + '" data-name="' + escAttr(handle) + '" data-label="' + escAttr(label) + '" onclick="selectChannel(' + num2 + ')" role="button" tabindex="0" aria-label="' + escAttr(chA11yLabel) + '" aria-pressed="' + (num2 === selectedChannel ? 'true' : 'false') + '" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){selectChannel(' + num2 + ')}">'; h += '<div class="ch-avatar">' + esc(avatarText) + '</div>';
           var chSubText = !isX ? (handle.charAt(0) === '@' ? handle : '@' + handle) : '';
           h += '<div class="ch-info"><div class="ch-name">' + formatIranTitleHtml(label) + (isPriv ? '<span class="ch-type-tag">' + t('private') + '</span>' : (isX ? '<span class="ch-type-tag x-tag">' + t('x_label') + '</span>' : '')) + '</div>';
           if (chSubText) h += '<div class="ch-sub">' + esc(chSubText) + '</div>';
@@ -5119,6 +5285,7 @@
       openChat();
       var ch = channels[num - 1]; var name = (ch && (ch.DisplayName || ch.displayName || ch.Name || ch.name)) || 'Channel ' + num;
       document.getElementById('chatName').innerHTML = formatIranTitleHtml(name);
+      a11yAnnounce('Switched to channel: ' + name);
       var chHandle = (ch && (ch.Name || ch.name)) || '';
       var isXCh = ch && (ch.ChatType || ch.chatType) === 2;
       var subHandle = (!isXCh && chHandle) ? (chHandle.charAt(0) === '@' ? chHandle : '@' + chHandle) : '';
@@ -6573,7 +6740,7 @@
           + (hasMediaCard ? ' has-media' : '')
           + (isOutgoing ? ' msg-outgoing' : '');
         var youTag = isOutgoing ? '<div class="media-tag you-tag">[YOU]</div>' : '';
-        html += '<div class="' + msgClasses + '" dir="auto">' + youTag + mediaHtml + textHtml + '<div class="msg-meta"><button class="msg-copy-btn" onclick="copyMsg(' + i + ')">' + t('copy') + '</button><span>#' + id + '</span><span>' + timeStr + '</span></div></div>';
+        html += '<div class="' + msgClasses + '" dir="auto" role="article" aria-label="Message ' + id + ' at ' + timeStr + '">' + youTag + mediaHtml + textHtml + '<div class="msg-meta"><button class="msg-copy-btn" onclick="copyMsg(' + i + ')" aria-label="Copy message ' + id + '">' + t('copy') + '</button><span aria-hidden="true">#' + id + '</span><span aria-hidden="true">' + timeStr + '</span></div></div>';
       }
       el.innerHTML = html;
       try { mediaTryRestoreVisibleCards(); } catch (e) { }
@@ -6968,7 +7135,7 @@
         if (meta && meta.textContent.indexOf('#' + id) !== -1) {
           els[i].scrollIntoView({ behavior: 'smooth', block: 'center' });
           els[i].style.outline = '2px solid var(--accent)';
-          setTimeout(function(el) { el.style.outline = '' }, 1500, els[i]);
+          setTimeout(function (el) { el.style.outline = '' }, 1500, els[i]);
           return;
         }
       }
@@ -7015,11 +7182,13 @@
     }
 
     function openScanner() {
+      a11yModalOpen('scannerModal');
       document.getElementById('scannerModal').classList.add('active');
       populateScanProfileSelect();
       pollScannerOnce();
     }
     function closeScanner() {
+      a11yModalClose();
       document.getElementById('scannerModal').classList.remove('active');
       if (scanPollTimer) { clearInterval(scanPollTimer); scanPollTimer = null }
     }
@@ -7098,7 +7267,7 @@
     }
 
     async function stopScan() {
-      try { await fetch('/api/scanner/stop', { method: 'POST' }) } catch (e) {}
+      try { await fetch('/api/scanner/stop', { method: 'POST' }) } catch (e) { }
       if (scanPollTimer) { clearInterval(scanPollTimer); scanPollTimer = null }
       setTimeout(pollScannerOnce, 300);
     }
@@ -7109,7 +7278,7 @@
       try {
         await fetch('/api/scanner/' + (isPaused ? 'resume' : 'pause'), { method: 'POST' });
         pollScannerOnce();
-      } catch (e) {}
+      } catch (e) { }
     }
 
     function showScanRunning() {
@@ -7207,9 +7376,9 @@
         var tr = document.createElement('tr');
         tr.style.borderTop = '1px solid var(--border)';
         tr.innerHTML = '<td style="padding:8px"><input type="checkbox" class="scan-select-cb" data-ip="' + escAttr(r.ip) + '" checked onchange="updateScanSelectedCount()"></td>' +
-                        '<td style="padding:8px;font-family:monospace;font-size:13px">' + esc(r.ip) + '</td>' +
-                        '<td style="padding:8px;text-align:right;font-size:13px;color:var(--text-dim)">' + (r.latencyMs != null ? Math.round(r.latencyMs) + 'ms' : '-') + '</td>' +
-                        '<td style="padding:4px 8px"><button class="btn btn-flat" style="font-size:12px;padding:4px 8px;min-width:0" onclick="navigator.clipboard.writeText(\'' + escAttr(r.ip) + '\');showToast(t(\'copied\'))">&#9776;</button></td>';
+          '<td style="padding:8px;font-family:monospace;font-size:13px">' + esc(r.ip) + '</td>' +
+          '<td style="padding:8px;text-align:right;font-size:13px;color:var(--text-dim)">' + (r.latencyMs != null ? Math.round(r.latencyMs) + 'ms' : '-') + '</td>' +
+          '<td style="padding:4px 8px"><button class="btn btn-flat" style="font-size:12px;padding:4px 8px;min-width:0" onclick="navigator.clipboard.writeText(\'' + escAttr(r.ip) + '\');showToast(t(\'copied\'))">&#9776;</button></td>';
         body.appendChild(tr);
       }
 
@@ -7248,7 +7417,7 @@
             showScanIdle();
           }
         }
-      } catch (e) {}
+      } catch (e) { }
     }
 
     async function applyScanResults(mode) {
@@ -7555,7 +7724,9 @@
       if (tab === 'active') _fetchActiveBoard();
       else _fetchBankBoard();
     }
+
     async function openResolversModal() {
+      a11yModalOpen('resolversModal');
       document.getElementById('resolversModal').classList.add('active');
       // Load autoScan from active profile
       var autoScanEl = document.getElementById('bankAutoScan');
@@ -7577,6 +7748,7 @@
       }, 3000);
     }
     function closeResolversModal() {
+      a11yModalClose();
       document.getElementById('resolversModal').classList.remove('active');
       if (resolversRefreshTimer) { clearInterval(resolversRefreshTimer); resolversRefreshTimer = null; }
     }
@@ -7792,8 +7964,50 @@
       });
     })();
 
-    init();
-  </script>
+    // ===== A11Y: MODAL FOCUS MANAGEMENT =====
+    var _a11yFocusStack = [];
+    var _a11yFocusTrapHandler = null;
+
+    function a11yModalOpen(overlayId) {
+      var overlay = document.getElementById(overlayId);
+      if (!overlay) return;
+      _a11yFocusStack.push(document.activeElement);
+      if (_a11yFocusTrapHandler) document.removeEventListener('keydown', _a11yFocusTrapHandler);
+      _a11yFocusTrapHandler = function (e) {
+        if (e.key !== 'Tab') return;
+        var els = Array.from(overlay.querySelectorAll(
+          'button:not([disabled]),[href],input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])'
+        )).filter(function (el) { return el.offsetParent !== null; });
+        if (!els.length) return;
+        if (e.shiftKey && document.activeElement === els[0]) { e.preventDefault(); els[els.length - 1].focus(); }
+        else if (!e.shiftKey && document.activeElement === els[els.length - 1]) { e.preventDefault(); els[0].focus(); }
+      };
+      document.addEventListener('keydown', _a11yFocusTrapHandler);
+      var heading = overlay.querySelector('h2');
+      if (heading) { heading.setAttribute('tabindex', '-1'); setTimeout(function () { heading.focus(); }, 60); }
+    }
+
+    function a11yModalClose() {
+      if (_a11yFocusTrapHandler) { document.removeEventListener('keydown', _a11yFocusTrapHandler); _a11yFocusTrapHandler = null; }
+      var prev = _a11yFocusStack.pop();
+      if (prev && prev.focus) setTimeout(function () { prev.focus(); }, 30);
+    }
+
+    var _a11yLive = (function () {
+      var el = document.createElement('div');
+      el.setAttribute('aria-live', 'assertive');
+      el.setAttribute('aria-atomic', 'true');
+      el.style.cssText = 'position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap';
+      document.body.appendChild(el);
+      return el;
+    })();
+
+    function a11yAnnounce(msg) {
+      _a11yLive.textContent = '';
+      setTimeout(function () { _a11yLive.textContent = msg; }, 50);
+    }
+
+    init();  </script>
 </body>
 
 </html>
