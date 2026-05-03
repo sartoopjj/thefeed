@@ -281,6 +281,16 @@
       vertical-align: middle
     }
 
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0
+    }
+
     /* ===== CHANNEL LIST ===== */
     .channel-list {
       flex: 1;
@@ -2525,8 +2535,7 @@
               data-i18n="sidebar_resolvers">Resolvers</span> <span class="stb-badge" id="resolversBadge"
               style="color:var(--error)">0</span></button>
         </div>
-        <label for="channelSearch"
-          style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)">Search channels</label>
+        <label for="channelSearch" class="sr-only">Search channels</label>
         <input class="sidebar-search" id="channelSearch" type="text" data-i18n-ph="search" placeholder="Search..."
           oninput="filterChannels()">
       </div>
@@ -2584,8 +2593,7 @@
           <button onclick="closeMsgSearch()" title="Close">&times;</button>
         </div>
       </div>
-      <div class="messages" id="messages" role="log" aria-live="polite" aria-atomic="false" aria-label="Messages"
-        tabindex="0">
+      <div class="messages" id="messages" aria-label="Messages" tabindex="0">
         <div class="empty-state">
           <div class="big-icon">&#128225;</div>
           <p data-i18n="configure_server">Configure a server to start reading</p>
@@ -2593,8 +2601,7 @@
         </div>
       </div>
       <div class="send-panel" id="sendPanel">
-        <label for="sendInput" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)">Write a
-          message</label>
+        <label for="sendInput" class="sr-only">Write a message</label>
         <input class="send-input" id="sendInput" data-i18n-ph="write_message" placeholder="Write a message..."
           maxlength="4000">
         <button class="send-btn" onclick="sendMessage()" aria-label="Send message"><span
@@ -3798,14 +3805,21 @@
         document.getElementById('rescanPromptYes').onclick = function () { document.body.removeChild(overlay); resolve(false) };
       });
     }
+
     function showConfirmDialog(msg, yesText, noText) {
       return new Promise(function (resolve) {
         var overlay = document.createElement('div');
         overlay.className = 'modal-overlay active';
         overlay.innerHTML = '<div class="modal" style="max-width:380px"><p style="font-size:13px;color:var(--text);margin-bottom:16px;line-height:1.6">' + esc(msg) + '</p><div class="modal-actions"><button class="btn btn-flat" id="confirmNo">' + esc(noText || t('cancel')) + '</button><button class="btn btn-primary" id="confirmYes">' + esc(yesText || t('ok')) + '</button></div></div>';
         document.body.appendChild(overlay);
-        document.getElementById('confirmNo').onclick = function () { document.body.removeChild(overlay); resolve(false) };
-        document.getElementById('confirmYes').onclick = function () { document.body.removeChild(overlay); resolve(true) };
+        var done = function (val) {
+          a11yModalClose();
+          document.body.removeChild(overlay);
+          resolve(val);
+        };
+        a11yModalOpen(null, overlay);
+        document.getElementById('confirmNo').onclick = function () { done(false); };
+        document.getElementById('confirmYes').onclick = function () { done(true); };
       });
     }
 
@@ -4636,6 +4650,7 @@
         } else if (snapChannel > 0 && snapChannel === selectedChannel) {
           delete refreshingChannels[snapChannel]; var fb3 = document.getElementById('prog-fetch-ch-' + snapChannel); if (fb3) fb3.remove();
           await loadMessages(snapChannel)
+          a11yAnnounce(t('new_messages'));
         }
         updateSendPanel();
       });
@@ -4923,6 +4938,7 @@
 
     // ===== PROFILE EDITOR =====
     function openProfileEditor(id) {
+      a11yModalOpen('profileEditorModal');
       editingProfileId = id;
       document.getElementById('profileEditorModal').classList.add('active');
       document.getElementById('peError').style.display = 'none';
@@ -4964,7 +4980,7 @@
         document.getElementById('peChannelSection').style.display = 'none';
       }
     }
-    function closeProfileEditor() { document.getElementById('profileEditorModal').classList.remove('active'); editingProfileId = null }
+    function closeProfileEditor() { a11yModalClose(); document.getElementById('profileEditorModal').classList.remove('active'); editingProfileId = null }
 
     async function loadEditorChannels() {
       var el = document.getElementById('peChannelList');
@@ -6740,7 +6756,7 @@
           + (hasMediaCard ? ' has-media' : '')
           + (isOutgoing ? ' msg-outgoing' : '');
         var youTag = isOutgoing ? '<div class="media-tag you-tag">[YOU]</div>' : '';
-        html += '<div class="' + msgClasses + '" dir="auto" role="article" aria-label="Message ' + id + ' at ' + timeStr + '">' + youTag + mediaHtml + textHtml + '<div class="msg-meta"><button class="msg-copy-btn" onclick="copyMsg(' + i + ')" aria-label="Copy message ' + id + '">' + t('copy') + '</button><span aria-hidden="true">#' + id + '</span><span aria-hidden="true">' + timeStr + '</span></div></div>';
+        html += '<div class="' + msgClasses + '" dir="auto" aria-label="Message ' + id + ' at ' + timeStr + '">' + youTag + mediaHtml + textHtml + '<div class="msg-meta"><button class="msg-copy-btn" onclick="copyMsg(' + i + ')" aria-label="Copy message ' + id + '">' + t('copy') + '</button><span aria-hidden="true">#' + id + '</span><span aria-hidden="true">' + timeStr + '</span></div></div>';
       }
       el.innerHTML = html;
       try { mediaTryRestoreVisibleCards(); } catch (e) { }
@@ -7589,9 +7605,10 @@
       if (!currentMsgTexts.length) { showToast(t('export_no_messages')); return }
       document.getElementById('exportCount').value = Math.min(10, currentMsgTexts.length);
       document.getElementById('exportCount').max = currentMsgTexts.length;
+      a11yModalOpen('exportModal');
       document.getElementById('exportModal').classList.add('active');
     }
-    function closeExportModal() { document.getElementById('exportModal').classList.remove('active') }
+    function closeExportModal() { a11yModalClose(); document.getElementById('exportModal').classList.remove('active') }
     function doExport() {
       var n = parseInt(document.getElementById('exportCount').value) || 10;
       if (n < 1) n = 1;
@@ -7966,14 +7983,13 @@
 
     // ===== A11Y: MODAL FOCUS MANAGEMENT =====
     var _a11yFocusStack = [];
-    var _a11yFocusTrapHandler = null;
+    var _a11yFocusTrapStack = [];
 
-    function a11yModalOpen(overlayId) {
-      var overlay = document.getElementById(overlayId);
+    function a11yModalOpen(overlayId, overlayEl) {
+      var overlay = overlayEl || document.getElementById(overlayId);
       if (!overlay) return;
       _a11yFocusStack.push(document.activeElement);
-      if (_a11yFocusTrapHandler) document.removeEventListener('keydown', _a11yFocusTrapHandler);
-      _a11yFocusTrapHandler = function (e) {
+      var handler = function (e) {
         if (e.key !== 'Tab') return;
         var els = Array.from(overlay.querySelectorAll(
           'button:not([disabled]),[href],input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])'
@@ -7982,17 +7998,19 @@
         if (e.shiftKey && document.activeElement === els[0]) { e.preventDefault(); els[els.length - 1].focus(); }
         else if (!e.shiftKey && document.activeElement === els[els.length - 1]) { e.preventDefault(); els[0].focus(); }
       };
-      document.addEventListener('keydown', _a11yFocusTrapHandler);
+      document.addEventListener('keydown', handler);
+      _a11yFocusTrapStack.push(handler);
       var heading = overlay.querySelector('h2');
       if (heading) { heading.setAttribute('tabindex', '-1'); setTimeout(function () { heading.focus(); }, 60); }
     }
 
+
     function a11yModalClose() {
-      if (_a11yFocusTrapHandler) { document.removeEventListener('keydown', _a11yFocusTrapHandler); _a11yFocusTrapHandler = null; }
+      var handler = _a11yFocusTrapStack.pop();
+      if (handler) document.removeEventListener('keydown', handler);
       var prev = _a11yFocusStack.pop();
       if (prev && prev.focus) setTimeout(function () { prev.focus(); }, 30);
     }
-
     var _a11yLive = (function () {
       var el = document.createElement('div');
       el.setAttribute('aria-live', 'assertive');
