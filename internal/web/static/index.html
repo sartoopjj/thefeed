@@ -4684,7 +4684,6 @@
           if (data.channel === selectedChannel && _chatPanelVisible()) await loadMessages(data.channel)
         } else if (snapChannel > 0 && snapChannel === selectedChannel) {
           delete refreshingChannels[snapChannel]; var fb3 = document.getElementById('prog-fetch-ch-' + snapChannel); if (fb3) fb3.remove();
-          await loadMessages(snapChannel)
           if (_chatPanelVisible()) {
             await loadMessages(snapChannel)
             a11yAnnounce(t('new_messages'));
