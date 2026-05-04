@@ -291,6 +291,37 @@
       border: 0
     }
 
+    .skip-link {
+      position: absolute;
+      top: -40px;
+      left: 0;
+      background: var(--accent);
+      color: #fff;
+      padding: 8px 16px;
+      text-decoration: none;
+      font-size: 13px;
+      z-index: 9999;
+      border-radius: 0 0 8px 0;
+      transition: top .15s
+    }
+
+    .skip-link:focus {
+      top: 0
+    }
+
+    :focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      * {
+        transition-duration: .01ms !important;
+        animation-duration: .01ms !important;
+        animation-iteration-count: 1 !important
+      }
+    }
+
     /* ===== CHANNEL LIST ===== */
     .channel-list {
       flex: 1;
@@ -2507,15 +2538,11 @@
 </head>
 
 <body>
-  <a href="#messages" class="skip-link" style="position:absolute;top:-40px;left:0;background:var(--accent);color:#fff;
-          padding:8px 16px;text-decoration:none;font-size:13px;z-index:9999;
-          border-radius:0 0 8px 0;transition:top .15s" onfocus="this.style.top='0'" onblur="this.style.top='-40px'">
-    Skip to messages
-  </a>
+  <a href="#messages" class="skip-link" data-i18n="skip_to_messages">Skip to messages</a>
   <div class="app" id="app">
 
     <!-- SIDEBAR -->
-    <nav class="sidebar" id="sidebar" aria-label="Channels">
+    <nav class="sidebar" id="sidebar" aria-label="Channels" data-i18n-aria="sr_channels_nav">
       <div class="sidebar-header">
         <div class="sidebar-header-top">
           <button class="profile-btn" id="profileBtn" onclick="openProfiles()">
@@ -2524,9 +2551,10 @@
             <span class="profile-btn-arrow"><span class="plus">+</span>&#9660;</span>
           </button>
           <button class="icon-btn" onclick="openSettings()" title="Settings" data-i18n-title="settings"
-            aria-label="Settings"><span aria-hidden="true">&#9881;</span></button>
+            aria-label="Settings" data-i18n-aria="sr_settings"><span aria-hidden="true">&#9881;</span></button>
           <button class="icon-btn" onclick="jumpToLog()" title="Log" data-i18n-title="sidebar_log"
-            style="font-size:16px" aria-label="Open log"><span aria-hidden="true">&#128220;</span></button>
+            style="font-size:16px" aria-label="Open log" data-i18n-aria="sr_open_log"><span
+              aria-hidden="true">&#128220;</span></button>
         </div>
         <div class="sidebar-toolbar">
           <button class="stb" id="scannerIconBtn" onclick="openScanner()" data-i18n="scanner_find_resolvers">Find
@@ -2535,7 +2563,7 @@
               data-i18n="sidebar_resolvers">Resolvers</span> <span class="stb-badge" id="resolversBadge"
               style="color:var(--error)">0</span></button>
         </div>
-        <label for="channelSearch" class="sr-only">Search channels</label>
+        <label for="channelSearch" class="sr-only" data-i18n="sr_channel_search">Search channels</label>
         <input class="sidebar-search" id="channelSearch" type="text" data-i18n-ph="search" placeholder="Search..."
           oninput="filterChannels()">
       </div>
@@ -2551,10 +2579,10 @@
     </nav>
 
     <!-- CHAT AREA -->
-    <main class="chat-area" aria-label="Chat">
+    <main class="chat-area" aria-label="Chat" data-i18n-aria="sr_chat_main">
       <div class="chat-header">
-        <button class="back-btn" onclick="openSidebar()" aria-label="Back to channel list"><span
-            aria-hidden="true">&#8592;</span></button>
+        <button class="back-btn" onclick="openSidebar()" aria-label="Back to channel list"
+          data-i18n-aria="sr_back_to_channels"><span aria-hidden="true">&#8592;</span></button>
         <div class="chat-header-info">
           <div class="chat-header-name" id="chatName">thefeed</div>
           <div class="chat-header-sub" id="chatSub"></div>
@@ -2572,7 +2600,8 @@
             style="width:auto;height:30px;font-size:12px;padding:0 10px;border-radius:8px;border:1px solid var(--border);background:var(--surface)"
             data-i18n="export_messages">Export</button>
           <button class="icon-btn" id="refreshBtn" onclick="doRefreshUI()" title="Refresh" aria-label="Refresh messages"
-            style="width:40px;height:40px;font-size:20px"><span aria-hidden="true">&#8635;</span></button>
+            data-i18n-aria="sr_refresh" style="width:40px;height:40px;font-size:20px"><span
+              aria-hidden="true">&#8635;</span></button>
           <div class="header-kebab" id="headerKebab">
             <button class="icon-btn" onclick="toggleKebabMenu(event)" title="More"
               style="width:40px;height:40px;font-size:20px">&#8942;</button>
@@ -2593,7 +2622,8 @@
           <button onclick="closeMsgSearch()" title="Close">&times;</button>
         </div>
       </div>
-      <div class="messages" id="messages" aria-label="Messages" tabindex="0">
+
+      <div class="messages" id="messages" aria-label="Messages" data-i18n-aria="sr_messages_region">
         <div class="empty-state">
           <div class="big-icon">&#128225;</div>
           <p data-i18n="configure_server">Configure a server to start reading</p>
@@ -2601,15 +2631,15 @@
         </div>
       </div>
       <div class="send-panel" id="sendPanel">
-        <label for="sendInput" class="sr-only">Write a message</label>
+        <label for="sendInput" class="sr-only" data-i18n="sr_write_message">Write a message</label>
         <input class="send-input" id="sendInput" data-i18n-ph="write_message" placeholder="Write a message..."
           maxlength="4000">
-        <button class="send-btn" onclick="sendMessage()" aria-label="Send message"><span
+        <button class="send-btn" onclick="sendMessage()" aria-label="Send message" data-i18n-aria="sr_send"><span
             aria-hidden="true">&#10148;</span></button>
       </div>
       <button class="scroll-down-btn" id="scrollDownBtn" onclick="scrollToBottom()" title="Jump to latest"
-        aria-label="Jump to latest messages"><span aria-hidden="true">&#8595;</span><span class="scroll-down-badge"
-          id="scrollDownBadge"></span></button>
+        aria-label="Jump to latest messages" data-i18n-aria="sr_scroll_bottom"><span
+          aria-hidden="true">&#8595;</span><span class="scroll-down-badge" id="scrollDownBadge"></span></button>
 
       <div class="progress-panel" id="progressPanel"></div>
       <div class="log-toggle" onclick="toggleLog()"><span>LOG</span><span id="logToggleIcon">&#9654;</span></div>
@@ -3358,6 +3388,21 @@
         password_wrong: 'رمز عبور اشتباه است',
         password_empty: 'رمز عبور نمی\u200cتواند خالی باشد',
         poll_placeholder: 'نظرسنجی (برای مشاهده تلگرام را باز کنید)',
+        skip_to_messages: 'رفتن به پیام‌ها',
+        sr_settings: 'تنظیمات',
+        sr_open_log: 'باز کردن لاگ',
+        sr_back_to_channels: 'بازگشت به لیست کانال‌ها',
+        sr_refresh: 'بروزرسانی پیام‌ها',
+        sr_send: 'ارسال پیام',
+        sr_scroll_bottom: 'رفتن به آخرین پیام',
+        sr_channels_nav: 'کانال‌ها',
+        sr_chat_main: 'چت',
+        sr_messages_region: 'پیام‌ها',
+        sr_channel_search: 'جستجوی کانال',
+        sr_write_message: 'پیام بنویسید',
+        sr_switched_channel: 'تغییر کانال به: ',
+        sr_new_messages_suffix: '، پیام جدید',
+        sr_msg_at: ' در ',
       },
       en: {
         search: 'Search...', settings: 'Settings', profiles: 'Profiles',
@@ -3568,6 +3613,21 @@
         password_wrong: 'Wrong password',
         password_empty: 'Password cannot be empty',
         poll_placeholder: 'Poll (open Telegram to view)',
+        skip_to_messages: 'Skip to messages',
+        sr_settings: 'Settings',
+        sr_open_log: 'Open log',
+        sr_back_to_channels: 'Back to channel list',
+        sr_refresh: 'Refresh messages',
+        sr_send: 'Send message',
+        sr_scroll_bottom: 'Jump to latest messages',
+        sr_channels_nav: 'Channels',
+        sr_chat_main: 'Chat',
+        sr_messages_region: 'Messages',
+        sr_channel_search: 'Search channels',
+        sr_write_message: 'Write a message',
+        sr_switched_channel: 'Switched to channel: ',
+        sr_new_messages_suffix: ', new messages',
+        sr_msg_at: ' at ',
       }
     };
     var lang = localStorage.getItem('thefeed_lang') || 'fa';
@@ -3579,6 +3639,7 @@
       document.querySelectorAll('[data-i18n]').forEach(function (el) { el.textContent = t(el.dataset.i18n) });
       document.querySelectorAll('[data-i18n-ph]').forEach(function (el) { el.placeholder = t(el.dataset.i18nPh) });
       document.querySelectorAll('[data-i18n-title]').forEach(function (el) { el.title = t(el.dataset.i18nTitle) });
+      document.querySelectorAll('[data-i18n-aria]').forEach(function (el) { el.setAttribute('aria-label', t(el.dataset.i18nAria)) });
       document.getElementById('langFa').classList.toggle('active-lang', lang === 'fa');
       document.getElementById('langEn').classList.toggle('active-lang', lang === 'en');
       document.getElementById('sendInput').style.direction = isRtl ? 'rtl' : 'ltr';
@@ -3863,9 +3924,11 @@
           + '<button class="btn btn-primary" id="inputDialogOk">' + esc(opts.okText || t('ok') || 'OK') + '</button>'
           + '</div></div>';
         document.body.appendChild(overlay);
+        a11yModalOpen(null, overlay);
         var field = document.getElementById('inputDialogField');
         var done = function (val) {
           document.removeEventListener('keydown', onKey);
+          a11yModalClose();
           if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
           resolve(val);
         };
@@ -3897,7 +3960,8 @@
         overlay.className = 'modal-overlay active';
         overlay.innerHTML = '<div class="modal" style="max-width:380px"><p style="font-size:13px;color:var(--text);margin-bottom:16px;line-height:1.6;white-space:pre-line">' + esc(msg) + '</p><div class="modal-actions"><button class="btn btn-primary" id="infoOk">' + esc(okText || t('ok') || 'OK') + '</button></div></div>';
         document.body.appendChild(overlay);
-        document.getElementById('infoOk').onclick = function () { document.body.removeChild(overlay); resolve(true) };
+        a11yModalOpen(null, overlay);
+        document.getElementById('infoOk').onclick = function () { a11yModalClose(); document.body.removeChild(overlay); resolve(true) };
       });
     }
 
@@ -4602,9 +4666,9 @@
       var useBtn = document.getElementById('savedResolversUseBtn');
       if (useBtn) useBtn.style.display = hasSaved ? '' : 'none';
       document.getElementById('savedResolversModal').classList.add('active');
+      a11yModalOpen('savedResolversModal');
     }
     function savedResolversSkip() {
-      // "Later" — just close, server already applied saved resolvers and refresh is underway
       document.getElementById('savedResolversModal').classList.remove('active');
       sessionStorage.setItem('thefeed_scan_prompt_shown', '1');
     }
@@ -4686,7 +4750,9 @@
           delete refreshingChannels[snapChannel]; var fb3 = document.getElementById('prog-fetch-ch-' + snapChannel); if (fb3) fb3.remove();
           if (_chatPanelVisible()) {
             await loadMessages(snapChannel)
-            a11yAnnounce(t('new_messages'));
+            var msgsEl = document.getElementById('messages');
+            var atBottom = msgsEl && (msgsEl.scrollHeight - msgsEl.scrollTop - msgsEl.clientHeight < 150);
+            if (!atBottom) a11yAnnounce(t('new_messages'));
           }
         }
         updateSendPanel();
@@ -4797,10 +4863,11 @@
         src.appendChild(opt);
       });
       document.getElementById('shareProfileModal').classList.add('active');
+      a11yModalOpen('shareProfileModal');
       await reloadShareModalResolvers();
     }
-
     function closeShareModal() {
+      a11yModalClose();
       document.getElementById('shareProfileModal').classList.remove('active');
       shareModalProfileId = '';
     }
@@ -5275,7 +5342,7 @@
           var active = num2 === selectedChannel ? ' active' : '';
           var chNm2 = e.ch.Name || e.ch.name || '';
           var badge = (channelHasNew(e.ch) && num2 !== selectedChannel) ? '<span class="ch-badge">NEW</span>' : '';
-          var chA11yLabel = label + (channelHasNew(e.ch) && num2 !== selectedChannel ? ', new messages' : '');
+          var chA11yLabel = label + (channelHasNew(e.ch) && num2 !== selectedChannel ? t('sr_new_messages_suffix') : '');
           h += '<div class="ch-item' + active + '" data-name="' + escAttr(handle) + '" data-label="' + escAttr(label) + '" onclick="selectChannel(' + num2 + ')" role="button" tabindex="0" aria-label="' + escAttr(chA11yLabel) + '" aria-pressed="' + (num2 === selectedChannel ? 'true' : 'false') + '" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){selectChannel(' + num2 + ')}">'; h += '<div class="ch-avatar">' + esc(avatarText) + '</div>';
           var chSubText = !isX ? (handle.charAt(0) === '@' ? handle : '@' + handle) : '';
           h += '<div class="ch-info"><div class="ch-name">' + formatIranTitleHtml(label) + (isPriv ? '<span class="ch-type-tag">' + t('private') + '</span>' : (isX ? '<span class="ch-type-tag x-tag">' + t('x_label') + '</span>' : '')) + '</div>';
@@ -5338,7 +5405,7 @@
       openChat();
       var ch = channels[num - 1]; var name = (ch && (ch.DisplayName || ch.displayName || ch.Name || ch.name)) || 'Channel ' + num;
       document.getElementById('chatName').innerHTML = formatIranTitleHtml(name);
-      a11yAnnounce('Switched to channel: ' + name);
+      a11yAnnounce(t('sr_switched_channel') + name);
       var chHandle = (ch && (ch.Name || ch.name)) || '';
       var isXCh = ch && (ch.ChatType || ch.chatType) === 2;
       var subHandle = (!isXCh && chHandle) ? (chHandle.charAt(0) === '@' ? chHandle : '@' + chHandle) : '';
@@ -6771,7 +6838,7 @@
           + (hasMediaCard ? ' has-media' : '')
           + (isOutgoing ? ' msg-outgoing' : '');
         var youTag = isOutgoing ? '<div class="media-tag you-tag">[YOU]</div>' : '';
-        html += '<div class="' + msgClasses + '" dir="auto" aria-label="Message ' + id + ' at ' + timeStr + '">' + youTag + mediaHtml + textHtml + '<div class="msg-meta"><button class="msg-copy-btn" onclick="copyMsg(' + i + ')" aria-label="Copy message ' + id + '">' + t('copy') + '</button><span aria-hidden="true">#' + id + '</span><span aria-hidden="true">' + timeStr + '</span></div></div>';
+        html += '<div class="' + msgClasses + '" dir="auto" aria-label="' + t('new_messages') + t('sr_msg_at') + timeStr + '">' + youTag + mediaHtml + textHtml + '<div class="msg-meta"><button class="msg-copy-btn" onclick="copyMsg(' + i + ')" aria-label="Copy message ' + id + '">' + t('copy') + '</button><span aria-hidden="true">#' + id + '</span><span aria-hidden="true">' + timeStr + '</span></div></div>';
       }
       el.innerHTML = html;
       try { mediaTryRestoreVisibleCards(); } catch (e) { }
