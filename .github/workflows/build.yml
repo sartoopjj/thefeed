@@ -123,10 +123,10 @@ jobs:
             export CGO_ENABLED=1
             case "${{ matrix.goarch }}" in
               arm)
-                export CC="$ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi26-clang"
+                export CC="$ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi24-clang"
                 ;;
               arm64)
-                export CC="$ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang"
+                export CC="$ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android24-clang"
                 ;;
             esac
             test -x "$CC" || { echo "NDK clang not found at $CC"; exit 1; }

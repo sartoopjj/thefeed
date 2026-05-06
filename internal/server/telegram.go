@@ -68,6 +68,10 @@ type TelegramReader struct {
 	cacheTTL      time.Duration
 	fetchInterval time.Duration
 
+	// lastPhotoID dedups profile-pic downloads across cycles. username →
+	// last seen Telegram photo ID; skip download when unchanged.
+	lastPhotoID map[string]int64
+
 	// api is set once authenticated, used for sending messages.
 	apiMu sync.RWMutex
 	api   *tg.Client
@@ -92,6 +96,10 @@ type resolvedPeer struct {
 	chatType protocol.ChatType
 	canSend  bool
 	title    string
+	// photoID is the Telegram-assigned ID of the peer's profile photo,
+	// 0 when the channel has none. Used to skip the download path when
+	// the photo hasn't changed since last fetch.
+	photoID int64
 }
 
 type cachedMessages struct {
@@ -289,6 +297,10 @@ func (tr *TelegramReader) fetchAll(ctx context.Context, api *tg.Client) {
 	}
 	log.Printf("[telegram] fetch cycle done in %s: %d fetched, %d failed, %d skipped, %d total",
 		time.Since(start).Round(time.Millisecond), fetched, failed, skipped, len(tr.channels))
+	// Profile pics piggyback the regular cycle: best-effort, doesn't
+	// gate channel data. Each channel's photo is downloaded once and
+	// only re-fetched when Telegram reports a different photo ID.
+	tr.fetchAllProfilePhotos(ctx, api)
 	tr.feed.AfterFetchCycle(ctx)
 }
 
@@ -306,6 +318,7 @@ func (tr *TelegramReader) resolvePeer(ctx context.Context, api *tg.Client, usern
 	for _, chat := range resolved.Chats {
 		if ch, ok := chat.(*tg.Channel); ok {
 			canSend := !ch.Broadcast || ch.Creator || ch.AdminRights.PostMessages
+			pid, _ := extractChatPhotoID(ch.Photo)
 			return &resolvedPeer{
 				peer: &tg.InputPeerChannel{
 					ChannelID:  ch.ID,
@@ -314,6 +327,7 @@ func (tr *TelegramReader) resolvePeer(ctx context.Context, api *tg.Client, usern
 				chatType: protocol.ChatTypeChannel,
 				canSend:  canSend,
 				title:    ch.Title,
+				photoID:  pid,
 			}, nil
 		}
 	}
@@ -321,6 +335,7 @@ func (tr *TelegramReader) resolvePeer(ctx context.Context, api *tg.Client, usern
 	// Check Users (bots, private chats)
 	for _, u := range resolved.Users {
 		if user, ok := u.(*tg.User); ok {
+			pid, _ := extractUserPhotoID(user.Photo)
 			return &resolvedPeer{
 				peer: &tg.InputPeerUser{
 					UserID:     user.ID,
@@ -329,6 +344,7 @@ func (tr *TelegramReader) resolvePeer(ctx context.Context, api *tg.Client, usern
 				chatType: protocol.ChatTypePrivate,
 				canSend:  true,
 				title:    user.FirstName,
+				photoID:  pid,
 			}, nil
 		}
 	}

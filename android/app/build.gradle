@@ -9,7 +9,7 @@ android {
 
     defaultConfig {
         applicationId 'com.thefeed.android'
-        minSdk 26
+        minSdk 24
         targetSdk 35
         // versionCode auto-increments from git commit count so each build can be installed over the previous one
         versionCode = { ->

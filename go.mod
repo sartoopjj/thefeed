@@ -5,14 +5,17 @@ go 1.26.1
 require (
 	github.com/gotd/td v0.142.0
 	github.com/miekg/dns v1.1.72
+	github.com/refraction-networking/utls v1.6.7
 	golang.org/x/crypto v0.49.0
 	golang.org/x/net v0.52.0
 	golang.org/x/term v0.41.0
 )
 
 require (
+	github.com/andybalholm/brotli v1.2.0 // indirect
 	github.com/cenkalti/backoff/v4 v4.3.0 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
+	github.com/cloudflare/circl v1.3.7 // indirect
 	github.com/coder/websocket v1.8.14 // indirect
 	github.com/dlclark/regexp2 v1.11.5 // indirect
 	github.com/fatih/color v1.18.0 // indirect

@@ -226,6 +226,10 @@ func (xr *XPublicReader) fetchAll(ctx context.Context) {
 	}
 	log.Printf("[x] fetch cycle done in %s: %d fetched, %d failed, %d skipped, %d total",
 		time.Since(start).Round(time.Millisecond), fetched, failed, skipped, len(xr.accounts))
+	// Avatars: same cycle, merged into the feed's profile-pic bundle. We
+	// merge rather than overwrite because TelegramReader / PublicReader
+	// may also be feeding into the same bundle.
+	xr.fetchAllXProfilePhotos(ctx)
 	xr.feed.AfterFetchCycle(ctx)
 }
 

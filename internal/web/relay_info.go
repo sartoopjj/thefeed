@@ -40,19 +40,22 @@ func (e *ghRateLimitError) Error() string {
 // (see .github/workflows/build.yml), so net.Lookup* goes through
 // bionic libc → netd → the device's actual DNS, the same path any other
 // Android app uses. On desktop the OS resolver is similarly fine.
+//
+// Tight connect / TLS / header timeouts so a blocked GitHub fails fast
+// and we fall back to DNS quickly. Body read gets the full 90 s budget
+// to cover multi-MB downloads on slow links.
 var relayHTTPClient = &http.Client{
-	// Per-request budget — large enough to cover multi-MB downloads
-	// over a slow link without hugging short-circuit timeouts.
-	Timeout: 5 * time.Minute,
+	Timeout: 90 * time.Second,
 	Transport: &http.Transport{
 		DialContext: (&net.Dialer{
-			Timeout:   15 * time.Second,
+			Timeout:   5 * time.Second,
 			KeepAlive: 30 * time.Second,
 		}).DialContext,
 		ForceAttemptHTTP2:     true,
 		MaxIdleConns:          10,
 		IdleConnTimeout:       90 * time.Second,
-		TLSHandshakeTimeout:   15 * time.Second,
+		TLSHandshakeTimeout:   5 * time.Second,
+		ResponseHeaderTimeout: 10 * time.Second,
 		ExpectContinueTimeout: 1 * time.Second,
 	},
 }
@@ -116,6 +119,64 @@ func (c *relayCache) get(ctx context.Context, fetcher *client.Fetcher) (client.R
 	return info, nil
 }
 
+// fetchFromGitHubRelayBytes is the byte-returning twin of
+// serveFromGitHubRelay (cache lookup + GitHub fetch + decrypt + CRC
+// check). Returns (nil, nil) when the relay isn't configured.
+func (s *Server) fetchFromGitHubRelayBytes(ctx context.Context, size int64, crc uint32) ([]byte, error) {
+	if size <= 0 || crc == 0 {
+		return nil, nil
+	}
+	s.mu.RLock()
+	fetcher := s.fetcher
+	rc := s.relayInfo
+	cache := s.mediaCache
+	cfg := s.config
+	s.mu.RUnlock()
+	if fetcher == nil || rc == nil || cfg == nil || cfg.Domain == "" {
+		return nil, nil
+	}
+
+	info, err := rc.get(ctx, fetcher)
+	if err != nil || info.GitHubRepo == "" {
+		return nil, nil
+	}
+	if cfg.Key == "" {
+		return nil, nil
+	}
+	relayKey, err := protocol.DeriveRelayKey(cfg.Key)
+	if err != nil {
+		return nil, err
+	}
+	domainSeg := protocol.RelayDomainSegment(cfg.Domain, cfg.Key)
+	objectSeg := protocol.RelayObjectName(size, crc, cfg.Key)
+
+	if cache != nil {
+		if body, _, ok := cache.Get(size, crc); ok {
+			return body, nil
+		}
+	}
+
+	url := fmt.Sprintf("https://api.github.com/repos/%s/contents/%s/%s",
+		info.GitHubRepo, domainSeg, objectSeg)
+	const aeadOverhead = protocol.NonceSize + 16
+	encBody, _, err := fetchGitHubRaw(ctx, relayHTTPClient, url, size+int64(aeadOverhead))
+	if err != nil {
+		return nil, err
+	}
+	body, err := protocol.DecryptRelayBlob(relayKey, encBody)
+	if err != nil {
+		return nil, err
+	}
+	if int64(len(body)) != size || crc32.ChecksumIEEE(body) != crc {
+		return nil, errors.New("relay: hash/size mismatch")
+	}
+	if cache != nil {
+		mime := http.DetectContentType(body)
+		_ = cache.Put(size, crc, body, mime)
+	}
+	return body, nil
+}
+
 // serveFromGitHubRelay tries to stream the file from raw.githubusercontent.com
 // Returns true if the request was fully handled (success or terminal error
 // already written). Returns false to let the caller fall back to DNS.
@@ -133,9 +194,8 @@ func (s *Server) serveFromGitHubRelay(w http.ResponseWriter, r *http.Request, si
 		return false
 	}
 
-	// Long enough to cover a multi-MB GitHub fetch over a slow link, plus
-	// a multi-block DNS-tunneled relay-info lookup if the cache is empty.
-	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Minute)
+	// Covers a cold-cache relay-info DNS lookup + GitHub fetch.
+	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Minute)
 	defer cancel()
 
 	info, err := rc.get(ctx, fetcher)

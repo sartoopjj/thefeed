@@ -39,6 +39,13 @@ const (
 	// owner/repo + domain segment). Block 0 carries it.
 	RelayInfoChannel uint16 = 0xFFF8
 
+	// ProfilePicsChannel serves the per-channel profile-picture index:
+	// for every Telegram channel that has a profile photo we emit
+	// (username, mediaCh, size, crc32). Bytes themselves live on the
+	// referenced mediaCh and are fetched via the regular media path.
+	// Off by default on the client.
+	ProfilePicsChannel uint16 = 0xFFF7
+
 	// MaxUpstreamBlockPayload keeps uploaded query chunks comfortably below DNS
 	// name limits across typical domains and resolver paths.
 	MaxUpstreamBlockPayload = 8

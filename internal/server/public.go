@@ -169,6 +169,9 @@ func (pr *PublicReader) fetchAll(ctx context.Context) {
 	}
 	log.Printf("[public] fetch cycle done in %s: %d fetched, %d failed, %d skipped, %d total",
 		time.Since(start).Round(time.Millisecond), fetched, failed, skipped, len(pr.channels))
+	// Fetch avatars for the same channel set — same cadence, best-effort.
+	// Public mode has no MTProto session so we scrape them off t.me/s/<u>.
+	pr.fetchAllPublicProfilePhotos(ctx)
 	pr.feed.AfterFetchCycle(ctx)
 }
 

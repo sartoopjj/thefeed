@@ -11,7 +11,7 @@ DNS-based feed reader for Telegram channels and public X accounts. Designed for 
   ```bash
   sudo bash -c "$(curl -Ls https://raw.githubusercontent.com/sartoopjj/thefeed/main/scripts/install.sh)"
   ```
-- **Android APK**: pick `arm64-v8a` for any phone newer than ~2017, `armeabi-v7a` for older 32-bit-only devices.
+- **Android APK** (Android 7.0+): pick `arm64-v8a` for any phone newer than ~2017, `armeabi-v7a` for older 32-bit-only devices.
 
 Public configs to test with: [@thefeedconfig](https://t.me/thefeedconfig).
 
@@ -122,6 +122,7 @@ Thank you for your support ❤️
 - Public TheFeed Configs: [@thefeedconfig](https://t.me/thefeedconfig)
 - Setup TheFeed server guide: [@networkti](https://t.me/networkti/25)
 - Setup TheFeed server with SlipGate guide: [@networkti](https://t.me/networkti/200)
+- Roadmap / task board: [GitHub project](https://github.com/users/sartoopjj/projects/1/views/1)
 
 ## Quick Install (Server)
 

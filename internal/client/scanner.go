@@ -35,7 +35,7 @@ type ScannerConfig struct {
 	MaxIPs int `json:"maxIPs"`
 	// RateLimit is the concurrent probe limit (default 50).
 	RateLimit int `json:"rateLimit"`
-	// Timeout is the per-probe timeout in seconds (default 15).
+	// Timeout is the per-probe timeout in seconds (default 10).
 	Timeout float64 `json:"timeout"`
 	// ExpandSubnet: if true, when a working resolver is found, also scan its /24.
 	ExpandSubnet bool `json:"expandSubnet"`
@@ -220,7 +220,7 @@ func (rs *ResolverScanner) Start(cfg ScannerConfig) error {
 	}
 	timeout := time.Duration(cfg.Timeout * float64(time.Second))
 	if timeout <= 0 {
-		timeout = 15 * time.Second
+		timeout = 10 * time.Second
 	}
 	domain := strings.TrimSuffix(cfg.Domain, ".")
 

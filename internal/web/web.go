@@ -50,9 +50,6 @@ type Config struct {
 }
 
 // Profile wraps a Config with a user-chosen nickname and a unique ID.
-// AutoUpdate is the per-profile list of channel usernames the auto-update
-// goroutine should refresh; AutoUpdateInterval (seconds, 0 → default) sets
-// the cadence.
 type Profile struct {
 	ID                 string   `json:"id"`
 	Nickname           string   `json:"nickname"`
@@ -120,6 +117,10 @@ type ProfileList struct {
 	// changes (each launch picks a fresh port → different localStorage
 	// origin → flag was lost on every restart).
 	ScanPromptOff bool `json:"scanPromptOff,omitempty"`
+
+	// ProfilePicsEnabled enables fetching avatars over DNS when the
+	// GitHub relay can't serve them. Off by default.
+	ProfilePicsEnabled bool `json:"profilePicsEnabled,omitempty"`
 }
 
 // lastScanData is the on-disk structure for last_scan.json.
@@ -127,6 +128,16 @@ type lastScanData struct {
 	Resolvers []string `json:"resolvers"`
 	ScannedAt int64    `json:"scannedAt"`
 }
+
+// channelsCacheEntry is one profile's startup snapshot.
+type channelsCacheEntry struct {
+	Channels  []protocol.ChannelInfo `json:"channels"`
+	NextFetch uint32                 `json:"nextFetch"`
+	SavedAt   int64                  `json:"savedAt"`
+}
+
+// channelsCacheFile maps profile ID → snapshot.
+type channelsCacheFile map[string]*channelsCacheEntry
 
 // Server is the web UI server for thefeed client.
 type Server struct {
@@ -203,6 +214,15 @@ type Server struct {
 	// overwrites the selected list instead of just topping it up.
 	rescanFlagMu      sync.Mutex
 	rescanReplaceList bool
+
+	// profilesMu serialises read-modify-write cycles on profiles.json.
+	profilesMu sync.Mutex
+
+	// Optional, removable backup feed (Telegram-via-Translate proxy).
+	telemirror *telemirrorHub
+
+	// Optional per-channel profile pictures cache.
+	profilePics *profilePicsHub
 }
 
 // New creates a new web server.
@@ -239,6 +259,8 @@ func New(dataDir string, port int, host string, password string) (*Server, error
 		mediaCache:     mediaCache,
 		dlProgress:     make(map[string]*mediaDLProgress),
 		relayInfo:      newRelayCache(),
+		telemirror:     newTelemirrorHub(dataDir),
+		profilePics:    newProfilePicsHub(dataDir),
 	}
 
 	if mediaCache != nil {
@@ -269,6 +291,11 @@ func New(dataDir string, port int, host string, password string) (*Server, error
 				}
 			}
 		}
+	}
+
+	if cc := s.loadChannelsCache(); cc != nil {
+		s.channels = cc.Channels
+		s.nextFetch = cc.NextFetch
 	}
 
 	return s, nil
@@ -322,6 +349,16 @@ func (s *Server) Run() error {
 	// contract.
 	mux.HandleFunc("/api/media/get", s.handleMediaGet)
 	mux.HandleFunc("/api/media/progress", s.handleMediaProgress)
+	// Optional telemirror feature — see internal/telemirror/.
+	mux.HandleFunc("/api/telemirror/channels", s.telemirror.handleChannels)
+	mux.HandleFunc("/api/telemirror/channel/", s.telemirror.handleChannel)
+	mux.HandleFunc("/api/telemirror/img", s.telemirror.handleImg)
+	mux.HandleFunc("/api/telemirror/avatar/", s.telemirror.handleAvatar)
+	// Profile-pics cache + control endpoints.
+	mux.HandleFunc("/api/profile-pics/", s.profilePics.handleProfilePic)
+	mux.HandleFunc("/api/profile-pics", s.handleProfilePicsList)
+	mux.HandleFunc("/api/profile-pics/refresh", s.handleProfilePicsRefresh)
+	mux.HandleFunc("/api/profile-pics/progress", s.handleProfilePicsProgress)
 	mux.HandleFunc("/", s.handleIndex)
 
 	// Listen on the specified host (default 127.0.0.1)
@@ -1282,6 +1319,7 @@ func (s *Server) refreshMetadataOnly() {
 	if cache != nil {
 		_ = cache.PutMetadata(meta)
 	}
+	s.saveChannelsCache(channels, meta.NextFetch)
 
 	s.broadcast("event: update\ndata: \"channels\"\n\n")
 
@@ -1294,6 +1332,42 @@ func (s *Server) refreshMetadataOnly() {
 	}
 	if needsFetch {
 		go s.ensureTitlesFetched(basectx)
+	}
+
+	go s.maybeRefreshProfilePics(basectx)
+}
+
+// maybeRefreshProfilePics fires a refresh when GitHub relay is up or
+// the user has opted into the DNS path. No-op otherwise; hub coalesces.
+func (s *Server) maybeRefreshProfilePics(parentCtx context.Context) {
+	s.mu.RLock()
+	hub := s.profilePics
+	fetcher := s.fetcher
+	rc := s.relayInfo
+	s.mu.RUnlock()
+	if hub == nil || fetcher == nil {
+		return
+	}
+	dnsAllowed := s.profilePicsEnabled()
+	githubLikelyUp := false
+	if rc != nil {
+		ctx, cancel := context.WithTimeout(parentCtx, 5*time.Second)
+		info, err := rc.get(ctx, fetcher)
+		cancel()
+		if err == nil && info.GitHubRepo != "" {
+			githubLikelyUp = true
+		}
+	}
+	if !dnsAllowed && !githubLikelyUp {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+	onStored := func(string) {
+		s.broadcast("event: update\ndata: \"profile-pics\"\n\n")
+	}
+	if err := hub.refresh(ctx, fetcher, dnsAllowed, s.fetchFromGitHubRelayBytes, onStored); err == nil {
+		s.broadcast("event: update\ndata: \"profile-pics\"\n\n")
 	}
 }
 
@@ -1355,9 +1429,11 @@ func (s *Server) ensureTitlesFetched(ctx context.Context) {
 		}
 	}
 	s.channels = channels
+	nextFetch := s.nextFetch
 	s.mu.Unlock()
 
 	if updated {
+		s.saveChannelsCache(channels, nextFetch)
 		s.broadcast("event: update\ndata: \"channels\"\n\n")
 	}
 }
@@ -1457,6 +1533,7 @@ func (s *Server) refreshChannel(channelNum int) {
 		if cache != nil {
 			_ = cache.PutMetadata(meta)
 		}
+		s.saveChannelsCache(channels, meta.NextFetch)
 		s.broadcast("event: update\ndata: \"channels\"\n\n")
 		needsFetch := false
 		for _, ch := range channels {
@@ -1541,6 +1618,7 @@ func (s *Server) refreshChannel(channelNum int) {
 			if cache != nil {
 				_ = cache.PutMetadata(freshMeta)
 			}
+			s.saveChannelsCache(freshMeta.Channels, freshMeta.NextFetch)
 			if channelNum < 1 || channelNum > len(freshMeta.Channels) {
 				return
 			}
@@ -1586,6 +1664,7 @@ func (s *Server) refreshChannel(channelNum int) {
 			if cache != nil {
 				_ = cache.PutMetadata(freshMeta)
 			}
+			s.saveChannelsCache(freshMeta.Channels, freshMeta.NextFetch)
 			if channelNum < 1 || channelNum > len(freshMeta.Channels) {
 				return
 			}
@@ -1657,6 +1736,74 @@ func (s *Server) saveLastScan(resolvers []string) {
 		return
 	}
 	_ = os.WriteFile(filepath.Join(s.dataDir, "last_scan.json"), b, 0600)
+}
+
+func (s *Server) activeProfileID() string {
+	pl, err := s.loadProfiles()
+	if err != nil || pl == nil {
+		return ""
+	}
+	return pl.Active
+}
+
+func (s *Server) channelsCachePath() string {
+	return filepath.Join(s.dataDir, "channels_cache.json")
+}
+
+func (s *Server) readChannelsCacheFile() channelsCacheFile {
+	b, err := os.ReadFile(s.channelsCachePath())
+	if err != nil {
+		return channelsCacheFile{}
+	}
+	var f channelsCacheFile
+	if err := json.Unmarshal(b, &f); err != nil || f == nil {
+		return channelsCacheFile{}
+	}
+	return f
+}
+
+func (s *Server) saveChannelsCache(channels []protocol.ChannelInfo, nextFetch uint32) {
+	id := s.activeProfileID()
+	if id == "" || len(channels) == 0 {
+		return
+	}
+	f := s.readChannelsCacheFile()
+	f[id] = &channelsCacheEntry{
+		Channels:  channels,
+		NextFetch: nextFetch,
+		SavedAt:   time.Now().Unix(),
+	}
+	b, err := json.MarshalIndent(f, "", "  ")
+	if err != nil {
+		return
+	}
+	_ = os.WriteFile(s.channelsCachePath(), b, 0600)
+}
+
+func (s *Server) loadChannelsCache() *channelsCacheEntry {
+	id := s.activeProfileID()
+	if id == "" {
+		return nil
+	}
+	return s.readChannelsCacheFile()[id]
+}
+
+func (s *Server) dropChannelsCacheEntry(profileID string) {
+	if profileID == "" {
+		return
+	}
+	f := s.readChannelsCacheFile()
+	if _, ok := f[profileID]; !ok {
+		return
+	}
+	delete(f, profileID)
+	if len(f) == 0 {
+		_ = os.Remove(s.channelsCachePath())
+		return
+	}
+	if b, err := json.MarshalIndent(f, "", "  "); err == nil {
+		_ = os.WriteFile(s.channelsCachePath(), b, 0600)
+	}
 }
 
 // loadLastScan reads the most recent resolver scan result.
@@ -2097,6 +2244,25 @@ func (s *Server) loadProfiles() (*ProfileList, error) {
 	return &pl, nil
 }
 
+// loadProfilesExisting returns (nil, nil) only when the file truly
+// doesn't exist; other errors are surfaced so callers don't overwrite
+// with an empty struct.
+func (s *Server) loadProfilesExisting() (*ProfileList, error) {
+	path := filepath.Join(s.dataDir, "profiles.json")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	var pl ProfileList
+	if err := json.Unmarshal(data, &pl); err != nil {
+		return nil, err
+	}
+	return &pl, nil
+}
+
 func (s *Server) saveProfiles(pl *ProfileList) error {
 	if err := os.MkdirAll(s.dataDir, 0700); err != nil {
 		return err
@@ -2171,6 +2337,9 @@ func addToBank(pl *ProfileList, resolvers []string) int {
 }
 
 // persistResolverScores saves the current fetcher stats to profiles.json.
+// Not serialised by profilesMu — initFetcher holds s.mu while calling this,
+// and grabbing profilesMu here would risk AB-BA with handlers that take
+// profilesMu first. The score map-merge is benign under last-writer-wins.
 func (s *Server) persistResolverScores(stats map[string][3]int64) {
 	if len(stats) == 0 {
 		return
@@ -2217,9 +2386,15 @@ func computeResolverScore(success, failure, totalMs int64) float64 {
 func (s *Server) handleProfiles(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
-		pl, err := s.loadProfiles()
+		s.profilesMu.Lock()
+		pl, err := s.loadProfilesExisting()
 		if err != nil {
-			// Migrate existing config.json into a profile
+			s.profilesMu.Unlock()
+			http.Error(w, fmt.Sprintf("load: %v", err), 500)
+			return
+		}
+		if pl == nil {
+			// First-run migration from config.json.
 			pl = &ProfileList{}
 			if s.config != nil {
 				p := Profile{
@@ -2232,6 +2407,7 @@ func (s *Server) handleProfiles(w http.ResponseWriter, r *http.Request) {
 				_ = s.saveProfiles(pl)
 			}
 		}
+		s.profilesMu.Unlock()
 		writeJSON(w, pl)
 
 	case http.MethodPost:
@@ -2245,7 +2421,13 @@ func (s *Server) handleProfiles(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "invalid JSON", 400)
 			return
 		}
-		pl, _ := s.loadProfiles()
+		s.profilesMu.Lock()
+		pl, err := s.loadProfilesExisting()
+		if err != nil {
+			s.profilesMu.Unlock()
+			http.Error(w, fmt.Sprintf("load: %v", err), 500)
+			return
+		}
 		if pl == nil {
 			pl = &ProfileList{}
 		}
@@ -2300,6 +2482,7 @@ func (s *Server) handleProfiles(w http.ResponseWriter, r *http.Request) {
 							needsReinit = true
 						}
 					}
+					s.dropChannelsCacheEntry(req.Profile.ID)
 					break
 				}
 			}
@@ -2320,35 +2503,46 @@ func (s *Server) handleProfiles(w http.ResponseWriter, r *http.Request) {
 			}
 
 		default:
+			s.profilesMu.Unlock()
 			http.Error(w, "unknown action", 400)
 			return
 		}
 
-		if err := s.saveProfiles(pl); err != nil {
-			http.Error(w, fmt.Sprintf("save profiles: %v", err), 500)
-			return
-		}
-
-		// Only re-init the fetcher when the active profile's config was modified.
+		saveErr := s.saveProfiles(pl)
+		var activeConfig *Config
 		if needsReinit && pl.Active != "" {
 			for _, p := range pl.Profiles {
 				if p.ID == pl.Active {
-					_ = s.saveConfig(&p.Config)
-					s.mu.Lock()
-					s.config = &p.Config
-					s.mu.Unlock()
-					if err := s.initFetcher(); err != nil {
-						log.Printf("[web] re-init fetcher after profile change: %v", err)
-					} else if req.SkipCheck {
-						s.skipCheckerUseSaved()
-					} else {
-						s.startCheckerThenRefresh()
-					}
+					cfg := p.Config
+					activeConfig = &cfg
 					break
 				}
 			}
 		}
+		s.profilesMu.Unlock()
 
+		if saveErr != nil {
+			http.Error(w, fmt.Sprintf("save profiles: %v", saveErr), 500)
+			return
+		}
+
+		// initFetcher takes s.mu — call it OUTSIDE profilesMu so handlers
+		// that need both don't AB-BA against it.
+		if activeConfig != nil {
+			_ = s.saveConfig(activeConfig)
+			s.mu.Lock()
+			s.config = activeConfig
+			s.mu.Unlock()
+			if err := s.initFetcher(); err != nil {
+				log.Printf("[web] re-init fetcher after profile change: %v", err)
+			} else if req.SkipCheck {
+				s.skipCheckerUseSaved()
+			} else {
+				s.startCheckerThenRefresh()
+			}
+		}
+
+		s.broadcast("event: update\ndata: \"profiles\"\n\n")
 		writeJSON(w, map[string]any{"ok": true, "profiles": pl})
 
 	default:
@@ -2370,8 +2564,10 @@ func (s *Server) handleProfileSwitch(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid JSON", 400)
 		return
 	}
+	s.profilesMu.Lock()
 	pl, err := s.loadProfiles()
 	if err != nil || pl == nil {
+		s.profilesMu.Unlock()
 		http.Error(w, "no profiles", 400)
 		return
 	}
@@ -2383,11 +2579,14 @@ func (s *Server) handleProfileSwitch(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if found == nil {
+		s.profilesMu.Unlock()
 		http.Error(w, "profile not found", 404)
 		return
 	}
 	pl.Active = found.ID
-	if err := s.saveProfiles(pl); err != nil {
+	saveErr := s.saveProfiles(pl)
+	s.profilesMu.Unlock()
+	if err := saveErr; err != nil {
 		http.Error(w, fmt.Sprintf("save: %v", err), 500)
 		return
 	}
@@ -2396,10 +2595,16 @@ func (s *Server) handleProfileSwitch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Reset state
+	// Reset state and seed channels from the new profile's cache (if any).
+	cc := s.loadChannelsCache()
 	s.mu.Lock()
 	s.config = &found.Config
-	s.channels = nil
+	if cc != nil {
+		s.channels = cc.Channels
+		s.nextFetch = cc.NextFetch
+	} else {
+		s.channels = nil
+	}
 	s.messages = make(map[int][]protocol.Message)
 	if s.relayInfo != nil {
 		s.relayInfo.invalidate()
@@ -2407,12 +2612,29 @@ func (s *Server) handleProfileSwitch(w http.ResponseWriter, r *http.Request) {
 	s.lastMsgIDs = make(map[int]uint32)
 	s.lastHashes = make(map[int]uint32)
 	s.mu.Unlock()
+	// Tell every connected client (other tabs / devices) that the active
+	// profile changed so they refresh their UI instead of pointing at the
+	// old one.
+	s.broadcast("event: update\ndata: \"profiles\"\n\n")
+	if cc != nil {
+		s.broadcast("event: update\ndata: \"channels\"\n\n")
+	}
 
 	if err := s.initFetcher(); err != nil {
 		http.Error(w, fmt.Sprintf("init fetcher: %v", err), 500)
 		return
 	}
-	if req.SkipCheck {
+	// Same fallback chain as boot: selected list → last_scan → full scan.
+	if req.SkipCheck && s.applySelectedList() {
+		s.mu.RLock()
+		checker := s.checker
+		ctx := s.fetcherCtx
+		s.mu.RUnlock()
+		if checker != nil && ctx != nil {
+			checker.StartPeriodic(ctx)
+		}
+		go s.refreshMetadataOnly()
+	} else if req.SkipCheck {
 		s.skipCheckerUseSaved()
 	} else {
 		s.startCheckerThenRefresh()
@@ -2586,53 +2808,80 @@ func (s *Server) handleSettings(w http.ResponseWriter, r *http.Request) {
 		if pl == nil {
 			pl = &ProfileList{}
 		}
-		writeJSON(w, map[string]any{"fontSize": pl.FontSize, "debug": pl.Debug, "theme": pl.Theme, "lang": pl.Lang, "scanPromptOff": pl.ScanPromptOff, "version": version.Version, "commit": version.Commit})
+		writeJSON(w, map[string]any{
+			"fontSize":           pl.FontSize,
+			"debug":              pl.Debug,
+			"theme":              pl.Theme,
+			"lang":               pl.Lang,
+			"scanPromptOff":      pl.ScanPromptOff,
+			"profilePicsEnabled": pl.ProfilePicsEnabled,
+			"version":            version.Version,
+			"commit":             version.Commit,
+		})
 
 	case http.MethodPost:
+		// Optional pointers so partial requests don't reset other fields.
 		var req struct {
-			FontSize      int    `json:"fontSize"`
-			Debug         bool   `json:"debug"`
-			Theme         string `json:"theme"`
-			Lang          string `json:"lang"`
-			ScanPromptOff *bool  `json:"scanPromptOff"`
+			FontSize           *int    `json:"fontSize"`
+			Debug              *bool   `json:"debug"`
+			Theme              *string `json:"theme"`
+			Lang               *string `json:"lang"`
+			ScanPromptOff      *bool   `json:"scanPromptOff"`
+			ProfilePicsEnabled *bool   `json:"profilePicsEnabled"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			http.Error(w, "invalid JSON", 400)
 			return
 		}
-		if req.FontSize < 10 {
-			req.FontSize = 0
+		s.profilesMu.Lock()
+		defer s.profilesMu.Unlock()
+		pl, err := s.loadProfilesExisting()
+		if err != nil {
+			http.Error(w, fmt.Sprintf("load: %v", err), 500)
+			return
 		}
-		if req.FontSize > 24 {
-			req.FontSize = 24
-		}
-		pl, _ := s.loadProfiles()
 		if pl == nil {
 			pl = &ProfileList{}
 		}
-		pl.FontSize = req.FontSize
-		pl.Debug = req.Debug
-		if req.Theme == "dark" || req.Theme == "light" {
-			pl.Theme = req.Theme
+		if req.FontSize != nil {
+			fs := *req.FontSize
+			if fs < 10 {
+				fs = 0
+			}
+			if fs > 24 {
+				fs = 24
+			}
+			pl.FontSize = fs
 		}
-		if req.Lang == "fa" || req.Lang == "en" {
-			pl.Lang = req.Lang
+		if req.Debug != nil {
+			pl.Debug = *req.Debug
+		}
+		if req.Theme != nil && (*req.Theme == "dark" || *req.Theme == "light") {
+			pl.Theme = *req.Theme
+		}
+		if req.Lang != nil && (*req.Lang == "fa" || *req.Lang == "en") {
+			pl.Lang = *req.Lang
 		}
 		if req.ScanPromptOff != nil {
 			pl.ScanPromptOff = *req.ScanPromptOff
+		}
+		if req.ProfilePicsEnabled != nil {
+			pl.ProfilePicsEnabled = *req.ProfilePicsEnabled
 		}
 		if err := s.saveProfiles(pl); err != nil {
 			http.Error(w, fmt.Sprintf("save: %v", err), 500)
 			return
 		}
 		// Apply debug to the current fetcher session immediately.
-		s.mu.RLock()
-		f := s.fetcher
-		s.mu.RUnlock()
-		if f != nil {
-			f.SetDebug(req.Debug)
+		if req.Debug != nil {
+			s.mu.RLock()
+			f := s.fetcher
+			s.mu.RUnlock()
+			if f != nil {
+				f.SetDebug(*req.Debug)
+			}
+			s.scanner.SetDebug(*req.Debug)
 		}
-		s.scanner.SetDebug(req.Debug)
 		writeJSON(w, map[string]any{"ok": true})
 
 	default:
@@ -3396,10 +3645,17 @@ func (s *Server) handleClearCache(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
+	if s.telemirror != nil {
+		s.telemirror.ClearCache()
+	}
+	if s.profilePics != nil {
+		s.profilePics.Clear()
+	}
 	mediaDeleted := 0
 	if s.mediaCache != nil {
 		mediaDeleted = s.mediaCache.Clear()
 	}
+	_ = os.Remove(s.channelsCachePath())
 	// Reset in-memory message state too so refreshChannel's "no changes"
 	// guard doesn't skip the next fetch (prev IDs match what's on the
 	// server, but our cache is gone).

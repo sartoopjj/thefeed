@@ -119,6 +119,19 @@ func NewMediaCache(cfg MediaCacheConfig) *MediaCache {
 // client. content is the raw file bytes; the caller may pass a slice it
 // continues to use after the call (Store copies into block-sized chunks).
 func (c *MediaCache) Store(cacheKey, tag string, content []byte, mimeType, filename string) (protocol.MediaMeta, error) {
+	return c.StoreWithOptions(cacheKey, tag, content, mimeType, filename, MediaCacheStoreOptions{})
+}
+
+// MediaCacheStoreOptions toggles relay paths for a single Store call.
+// Zero value = both DNS channel and (if a relay is configured) GitHub
+// upload. SkipGitHub keeps the DNS allocation but skips the upload —
+// used when many small siblings share one bundled GitHub upload.
+type MediaCacheStoreOptions struct {
+	SkipGitHub bool
+}
+
+// StoreWithOptions is Store with selective relay control.
+func (c *MediaCache) StoreWithOptions(cacheKey, tag string, content []byte, mimeType, filename string, opts MediaCacheStoreOptions) (protocol.MediaMeta, error) {
 	if cacheKey == "" {
 		return protocol.MediaMeta{}, errors.New("media: empty cache key")
 	}
@@ -126,9 +139,6 @@ func (c *MediaCache) Store(cacheKey, tag string, content []byte, mimeType, filen
 		tag = protocol.MediaFile
 	}
 	size := int64(len(content))
-	// Reject only when no enabled relay could host this file. A file too big
-	// for DNS but small enough for GitHub still belongs in the cache —
-	// MaxAcceptableBytes() collapses both caps into a single ceiling.
 	if max := c.MaxAcceptableBytes(); max > 0 && size > max {
 		atomic.AddUint64(&c.storeRejected, 1)
 		return protocol.MediaMeta{
@@ -246,9 +256,9 @@ func (c *MediaCache) Store(cacheKey, tag string, content []byte, mimeType, filen
 	atomic.AddInt64(&c.currentBytes, size)
 	c.logf("media: store tag=%s key=%s ch=%d size=%d blocks=%d", tag, cacheKey, channel, size, len(blocks))
 
-	// Best-effort relay upload — copy of `content` because the caller may
-	// reuse the slice. Failures are logged but never block the DNS path.
-	if c.gh != nil {
+	// Best-effort relay upload. Copy because the caller may reuse the
+	// slice. Failures don't block the DNS path.
+	if c.gh != nil && !opts.SkipGitHub {
 		gh := c.gh
 		body := append([]byte(nil), content...)
 		go func() {
@@ -260,7 +270,11 @@ func (c *MediaCache) Store(cacheKey, tag string, content []byte, mimeType, filen
 		}()
 	}
 
-	return c.metaForLocked(entry), nil
+	meta := c.metaForLocked(entry)
+	if opts.SkipGitHub && len(meta.Relays) > protocol.RelayGitHub {
+		meta.Relays[protocol.RelayGitHub] = false
+	}
+	return meta, nil
 }
 
 // LookupByChannel returns the cached entry's transport metadata (mime,

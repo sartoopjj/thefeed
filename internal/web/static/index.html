@@ -359,6 +359,7 @@
     }
 
     .ch-avatar {
+      position: relative;
       width: 44px;
       height: 44px;
       border-radius: 50%;
@@ -369,7 +370,23 @@
       font-size: 17px;
       color: var(--text-dim);
       flex-shrink: 0;
-      font-weight: 600
+      font-weight: 600;
+      overflow: hidden
+    }
+
+    .ch-avatar-letter {
+      line-height: 1
+    }
+
+    /* Overlays the initial-letter span; img.onerror removes it and
+       adds .ch-avatar-noimg so the letter shows through. */
+    .ch-avatar-img {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block
     }
 
     .ch-item.active .ch-avatar {
@@ -1005,6 +1022,908 @@
     .media-lightbox-close:hover {
       background: rgba(255, 255, 255, .3)
     }
+
+    .media-lightbox-speed {
+      position: absolute;
+      top: 16px;
+      right: 64px;
+      min-width: 44px;
+      height: 32px;
+      padding: 0 10px;
+      border: none;
+      border-radius: 16px;
+      background: rgba(255, 255, 255, .15);
+      color: #fff;
+      font-family: inherit;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      touch-action: manipulation;
+      user-select: none;
+      -webkit-user-select: none;
+      -webkit-tap-highlight-color: transparent
+    }
+
+    .media-lightbox-speed:hover {
+      background: rgba(255, 255, 255, .3)
+    }
+
+    /* BEGIN telemirror */
+    /* Sidebar trigger — small "↗" icon signals leaving the main flow.
+       inline-flex would override .stb's text-align:center, so use
+       inline-block and inline-block the icon alongside the text. */
+    .tm-sidebar-btn-ext {
+      display: inline-block;
+      margin-inline-start: 4px;
+      font-size: 11px;
+      opacity: .65;
+      line-height: 1;
+      vertical-align: baseline
+    }
+
+    .tm-sidebar-btn:hover .tm-sidebar-btn-ext {
+      opacity: 1
+    }
+
+    .tm-no-scroll {
+      overflow: hidden
+    }
+
+    .tm-modal {
+      position: fixed;
+      inset: 0;
+      z-index: 9000;
+      background: var(--bg);
+      display: none;
+      flex-direction: column;
+      color: var(--text)
+    }
+
+    .tm-modal.active {
+      display: flex
+    }
+
+    .tm-topbar {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 16px;
+      min-height: 56px;
+      border-bottom: 1px solid var(--border);
+      background: linear-gradient(180deg, var(--bg-elevated, var(--bg)), var(--bg));
+      box-shadow: 0 1px 3px rgba(0, 0, 0, .06);
+      flex-shrink: 0
+    }
+
+    .tm-back,
+    .tm-menu {
+      background: none;
+      border: 1px solid transparent;
+      color: var(--text);
+      font-size: 16px;
+      cursor: pointer;
+      padding: 6px 10px;
+      border-radius: 8px;
+      transition: background .12s, border-color .12s
+    }
+
+    .tm-back:hover,
+    .tm-menu:hover {
+      background: var(--border);
+      border-color: var(--border)
+    }
+
+    /* .tm-menu visibility handled inside the same @media block as the sidebar drawer (below). */
+    .tm-menu {
+      display: none
+    }
+
+    .tm-topbar-info {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex: 1;
+      min-width: 0
+    }
+
+    .tm-topbar-meta {
+      min-width: 0;
+      flex: 1
+    }
+
+    .tm-topbar-name {
+      font-weight: 600;
+      font-size: 15px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis
+    }
+
+    .tm-topbar-sub {
+      font-size: 11px;
+      color: var(--text-dim);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      margin-top: 2px
+    }
+
+    .tm-avatar {
+      border-radius: 50%;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+      font-weight: 600;
+      font-size: 16px;
+      overflow: hidden;
+      flex-shrink: 0;
+      background: var(--accent);
+      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .08), 0 1px 2px rgba(0, 0, 0, .15);
+      position: relative
+    }
+
+    .tm-avatar img {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block
+    }
+
+    .tm-avatar-initial {
+      pointer-events: none;
+      user-select: none;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      height: 100%
+    }
+
+    .tm-body {
+      flex: 1;
+      min-height: 0;
+      display: flex;
+      position: relative
+    }
+
+    .tm-sidebar {
+      width: 320px;
+      flex-shrink: 0;
+      border-right: 1px solid var(--border);
+      background: var(--bg-elevated, var(--bg));
+      display: flex;
+      flex-direction: column;
+      min-height: 0
+    }
+
+    /* Backdrop sits between the sidebar (z:2) and the content. In mobile
+       drawer mode it lights up when .tm-sidebar.open is set so tapping
+       outside the drawer dismisses it. */
+    .tm-backdrop {
+      display: none
+    }
+
+    /* Mobile drawer. The hamburger menu also shows up here, plus on
+       touch devices up to 1024px so phones in landscape and tablets
+       in portrait still get the drawer treatment. */
+    @media (max-width: 768px),
+    (pointer: coarse) and (max-width: 1024px) {
+      .tm-menu {
+        display: inline-flex
+      }
+
+      .tm-sidebar {
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        width: 86%;
+        max-width: 340px;
+        z-index: 2;
+        transition: transform .22s ease;
+        box-shadow: 0 0 0 rgba(0, 0, 0, .0)
+      }
+
+      /* LTR: slide in from the left. */
+      html[dir="ltr"] .tm-sidebar {
+        left: 0;
+        right: auto;
+        transform: translateX(-100%)
+      }
+
+      html[dir="ltr"] .tm-sidebar.open {
+        transform: translateX(0);
+        box-shadow: 4px 0 24px rgba(0, 0, 0, .32)
+      }
+
+      /* RTL: slide in from the right (where the channel list belongs). */
+      html[dir="rtl"] .tm-sidebar {
+        right: 0;
+        left: auto;
+        transform: translateX(100%)
+      }
+
+      html[dir="rtl"] .tm-sidebar.open {
+        transform: translateX(0);
+        box-shadow: -4px 0 24px rgba(0, 0, 0, .32)
+      }
+
+      .tm-backdrop {
+        display: block;
+        position: absolute;
+        inset: 0;
+        background: rgba(0, 0, 0, 0);
+        pointer-events: none;
+        transition: background .22s ease;
+        z-index: 1
+      }
+
+      .tm-sidebar.open~.tm-backdrop {
+        background: rgba(0, 0, 0, .42);
+        pointer-events: auto
+      }
+    }
+
+    .tm-disclaimer {
+      padding: 12px 14px;
+      margin: 10px;
+      font-size: 11px;
+      color: var(--text-dim);
+      line-height: 1.6;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      border-inline-start: 3px solid var(--accent)
+    }
+
+    .tm-add-row {
+      display: flex;
+      gap: 6px;
+      padding: 0 10px 10px;
+      border-bottom: 1px solid var(--border)
+    }
+
+    .tm-add-row input {
+      flex: 1;
+      padding: 8px 12px;
+      font-size: 13px;
+      background: var(--bg);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-family: inherit;
+      transition: border-color .12s
+    }
+
+    .tm-add-row input:focus {
+      outline: none;
+      border-color: var(--accent)
+    }
+
+    .tm-add-row .btn {
+      padding: 8px 14px;
+      font-size: 13px;
+      border-radius: 8px
+    }
+
+    .tm-channels-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 6px
+    }
+
+    .tm-channel-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 9px 10px;
+      cursor: pointer;
+      border-radius: 10px;
+      border: 1px solid transparent;
+      transition: background .12s, border-color .12s;
+      margin-bottom: 2px
+    }
+
+    .tm-channel-item:hover {
+      background: var(--bg);
+      border-color: var(--border)
+    }
+
+    .tm-channel-item.active {
+      background: color-mix(in oklab, var(--accent) 18%, transparent);
+      border-color: var(--accent)
+    }
+
+    .tm-channel-item.active .tm-channel-item-name {
+      color: var(--accent)
+    }
+
+    .tm-channel-item-meta {
+      flex: 1;
+      min-width: 0
+    }
+
+    .tm-channel-item-name {
+      font-size: 13px;
+      font-weight: 600;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis
+    }
+
+    .tm-pin {
+      font-size: 9px;
+      opacity: .55;
+      margin-inline-start: 4px
+    }
+
+    .tm-x {
+      background: none;
+      border: 1px solid transparent;
+      color: inherit;
+      font-size: 16px;
+      cursor: pointer;
+      opacity: .45;
+      padding: 2px 7px;
+      border-radius: 6px;
+      transition: background .12s, opacity .12s
+    }
+
+    .tm-x:hover {
+      opacity: 1;
+      background: var(--border)
+    }
+
+    .tm-content {
+      flex: 1;
+      overflow-y: auto;
+      padding: 18px 16px 40px;
+      background:
+        radial-gradient(circle at 25% 0%, color-mix(in oklab, var(--accent) 6%, transparent), transparent 40%),
+        var(--bg);
+      display: flex;
+      flex-direction: column;
+      gap: 12px
+    }
+
+    .tm-empty {
+      margin: auto;
+      padding: 32px 24px;
+      text-align: center;
+      color: var(--text-dim);
+      font-size: 13px
+    }
+
+    /* Channel bio — clearly distinct from posts: dashed border, label header, accent left edge. */
+    .tm-channel-bio {
+      max-width: 720px;
+      width: 100%;
+      margin: 0 auto 8px;
+      background: color-mix(in oklab, var(--accent) 5%, transparent);
+      border: 1px dashed color-mix(in oklab, var(--accent) 50%, var(--border));
+      border-radius: 12px;
+      overflow: hidden
+    }
+
+    .tm-channel-bio-label {
+      padding: 8px 14px;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .04em;
+      color: var(--accent);
+      background: color-mix(in oklab, var(--accent) 10%, transparent);
+      border-bottom: 1px dashed color-mix(in oklab, var(--accent) 35%, var(--border))
+    }
+
+    .tm-channel-bio-body {
+      padding: 12px 14px;
+      font-size: 13px;
+      line-height: 1.75;
+      color: var(--text-dim);
+      overflow-wrap: anywhere;
+      word-break: break-word
+    }
+
+    .tm-channel-bio-body a {
+      color: var(--accent)
+    }
+
+    .tm-post {
+      max-width: 720px;
+      width: 100%;
+      margin: 0 auto;
+      background: var(--bg-elevated, var(--bg));
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 12px 16px 10px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, .05);
+      transition: border-color .15s, transform .15s
+    }
+
+    .tm-post:hover {
+      border-color: color-mix(in oklab, var(--accent) 35%, var(--border))
+    }
+
+    .tm-post-head {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 11px;
+      color: var(--text-dim);
+      margin-bottom: 8px;
+      padding-bottom: 6px;
+      border-bottom: 1px dashed var(--border)
+    }
+
+    .tm-post-author {
+      font-weight: 700;
+      color: var(--accent)
+    }
+
+    .tm-post-time {
+      opacity: .85
+    }
+
+    .tm-post-edited {
+      font-size: 10px;
+      padding: 1px 6px;
+      border-radius: 4px;
+      background: var(--border);
+      color: var(--text-dim)
+    }
+
+    .tm-post-text {
+      font-size: 14px;
+      line-height: 1.7;
+      overflow-wrap: anywhere;
+      /* break long URLs / unbroken strings */
+      word-break: break-word
+    }
+
+    .tm-post-text pre,
+    .tm-post-text code {
+      white-space: pre-wrap;
+      overflow-wrap: anywhere
+    }
+
+    .tm-post-text a {
+      color: var(--accent);
+      text-decoration: underline;
+      text-decoration-color: color-mix(in oklab, var(--accent) 50%, transparent);
+      overflow-wrap: anywhere
+    }
+
+    .tm-post-text a:hover {
+      text-decoration-color: currentColor
+    }
+
+    .tm-post-media {
+      margin-top: 10px;
+      display: grid;
+      gap: 4px
+    }
+
+    /* Single photo: fill width, natural aspect, capped height. */
+    .tm-album-1 {
+      grid-template-columns: 1fr
+    }
+
+    .tm-album-1 .tm-photo img {
+      max-height: 600px;
+      object-fit: contain;
+      background: #000
+    }
+
+    /* 2 photos side by side. */
+    .tm-album-2 {
+      grid-template-columns: 1fr 1fr
+    }
+
+    .tm-album-2 .tm-photo img {
+      aspect-ratio: 1 / 1;
+      object-fit: cover
+    }
+
+    /* 3+ photos: 3-column album. */
+    .tm-album-3 {
+      grid-template-columns: 1fr 1fr 1fr
+    }
+
+    .tm-album-3 .tm-photo img {
+      aspect-ratio: 1 / 1;
+      object-fit: cover
+    }
+
+    .tm-photo {
+      position: relative;
+      display: block;
+      line-height: 0;
+      border-radius: 10px;
+      overflow: hidden;
+      background: #000;
+      border: 1px solid var(--border)
+    }
+
+    .tm-photo img {
+      width: 100%;
+      height: auto;
+      display: block
+    }
+
+    /* Download badge — fades in on hover; always visible on touch screens. */
+    .tm-photo-dl {
+      position: absolute;
+      bottom: 8px;
+      inset-inline-end: 8px;
+      width: 32px;
+      height: 32px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(0, 0, 0, .65);
+      color: #fff;
+      border-radius: 50%;
+      font-size: 16px;
+      text-decoration: none;
+      opacity: 0;
+      transition: opacity .15s, background .15s;
+      backdrop-filter: blur(2px)
+    }
+
+    .tm-photo:hover .tm-photo-dl {
+      opacity: 1
+    }
+
+    .tm-photo-dl:hover {
+      background: rgba(0, 0, 0, .85)
+    }
+
+    @media (hover: none) {
+      .tm-photo-dl {
+        opacity: .85
+      }
+    }
+
+    .tm-vid {
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      aspect-ratio: 16 / 9;
+      background-size: cover;
+      background-position: center;
+      border-radius: 10px;
+      background-color: var(--border);
+      color: #fff;
+      text-shadow: 0 0 6px rgba(0, 0, 0, .6);
+      border: 1px solid var(--border)
+    }
+
+    .tm-vid-play {
+      width: 54px;
+      height: 54px;
+      border-radius: 50%;
+      background: rgba(0, 0, 0, .5);
+      backdrop-filter: blur(4px);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 22px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, .4)
+    }
+
+    .tm-vid-dur {
+      position: absolute;
+      bottom: 8px;
+      right: 10px;
+      background: rgba(0, 0, 0, .65);
+      padding: 2px 7px;
+      border-radius: 5px;
+      font-size: 11px
+    }
+
+    .tm-post-foot {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      margin-top: 10px;
+      padding-top: 6px;
+      border-top: 1px dashed var(--border);
+      font-size: 11px;
+      color: var(--text-dim)
+    }
+
+    .tm-views {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px
+    }
+
+    /* Time at the end of the foot (i18n-friendly with start-end). */
+    .tm-post-foot .tm-post-time {
+      margin-inline-start: auto
+    }
+
+    /* Topbar refresh button */
+    .tm-refresh {
+      background: none;
+      border: 1px solid transparent;
+      color: var(--text);
+      font-size: 18px;
+      cursor: pointer;
+      padding: 6px 10px;
+      border-radius: 8px;
+      transition: background .12s, border-color .12s, transform .15s
+    }
+
+    .tm-refresh:hover {
+      background: var(--border);
+      border-color: var(--border)
+    }
+
+    .tm-refresh:active {
+      transform: rotate(45deg)
+    }
+
+    /* Copy button — text label, sits at the end of post-head. */
+    .tm-post-copy {
+      margin-inline-start: auto;
+      background: none;
+      border: 1px solid var(--border);
+      color: var(--text-dim);
+      cursor: pointer;
+      font-size: 11px;
+      padding: 3px 10px;
+      border-radius: 6px;
+      transition: background .12s, color .12s, border-color .12s
+    }
+
+    .tm-post-copy:hover {
+      background: var(--border);
+      color: var(--text);
+      border-color: var(--accent)
+    }
+
+    .tm-post-copy.tm-copied {
+      color: var(--accent);
+      border-color: var(--accent);
+      background: color-mix(in oklab, var(--accent) 10%, transparent)
+    }
+
+    /* Generic media tile (voice, audio, document, poll). */
+    .tm-media-tile {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 12px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      min-width: 0
+    }
+
+    .tm-media-icon {
+      flex-shrink: 0;
+      width: 40px;
+      height: 40px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 50%;
+      background: color-mix(in oklab, var(--accent) 18%, transparent);
+      font-size: 18px
+    }
+
+    .tm-media-meta {
+      flex: 1;
+      min-width: 0
+    }
+
+    .tm-media-title {
+      font-size: 13px;
+      font-weight: 600;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis
+    }
+
+    .tm-media-sub {
+      font-size: 11px;
+      color: var(--text-dim);
+      margin-top: 2px
+    }
+
+    /* Sticker — small inline image, no border. */
+    .tm-sticker {
+      max-width: 200px;
+      line-height: 0
+    }
+
+    .tm-sticker img {
+      max-width: 100%;
+      max-height: 200px;
+      display: block;
+      background: transparent
+    }
+
+    /* Reactions row — pills of emoji + count. */
+    .tm-post-reactions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 10px
+    }
+
+    .tm-reaction {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 3px 9px;
+      background: color-mix(in oklab, var(--accent) 10%, transparent);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      font-size: 12px
+    }
+
+    .tm-reaction-emoji {
+      font-size: 14px;
+      line-height: 1
+    }
+
+    .tm-reaction-count {
+      color: var(--text-dim);
+      font-weight: 600
+    }
+
+    /* If our image proxy fails, collapse the wrapper so we don't show
+       a permanent broken-image icon. */
+    .tm-photo-failed {
+      display: none
+    }
+
+    /* Reply quote — clickable, opens source in new tab. */
+    .tm-post-reply {
+      margin: 6px 0 8px;
+      padding: 6px 10px;
+      border-inline-start: 3px solid var(--accent);
+      background: color-mix(in oklab, var(--accent) 6%, transparent);
+      border-radius: 4px;
+      font-size: 12.5px;
+      max-height: 100px;
+      overflow: hidden
+    }
+
+    .tm-post-reply-author {
+      color: var(--accent);
+      font-weight: 600;
+      margin-bottom: 2px
+    }
+
+    .tm-post-reply-text {
+      color: var(--text-dim);
+      line-height: 1.4
+    }
+
+    .tm-post-reply-text br {
+      display: block;
+      margin-bottom: 2px
+    }
+
+    /* "Forwarded from X" header. */
+    .tm-post-forward {
+      font-size: 12px;
+      color: var(--text-dim);
+      margin-bottom: 4px
+    }
+
+    .tm-post-forward a {
+      color: var(--accent);
+      text-decoration: none
+    }
+
+    .tm-post-forward a:hover {
+      text-decoration: underline
+    }
+
+    /* Poll options under the question. */
+    .tm-poll-options {
+      list-style: none;
+      padding: 0;
+      margin: 8px 0 0;
+      display: flex;
+      flex-direction: column;
+      gap: 4px
+    }
+
+    .tm-poll-options li {
+      padding: 4px 8px;
+      background: var(--border);
+      border-radius: 4px;
+      font-size: 12.5px;
+      color: var(--text)
+    }
+
+    .tm-poll-options li::before {
+      content: "○ ";
+      color: var(--text-dim)
+    }
+
+    /* Confirm dialog rendered inside the telemirror modal so it sits
+       on top of the drawer / backdrop / posts at the right stacking. */
+    .tm-confirm-overlay {
+      position: absolute;
+      inset: 0;
+      z-index: 10;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+      background: rgba(0, 0, 0, .55);
+      animation: tm-fade-in .15s ease
+    }
+
+    @keyframes tm-fade-in {
+      from {
+        opacity: 0
+      }
+
+      to {
+        opacity: 1
+      }
+    }
+
+    .tm-confirm-box {
+      max-width: 380px;
+      width: 100%;
+      background: var(--bg-elevated, var(--bg));
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 18px 20px 14px;
+      box-shadow: 0 12px 32px rgba(0, 0, 0, .4)
+    }
+
+    .tm-confirm-msg {
+      margin: 0 0 14px;
+      font-size: 13px;
+      line-height: 1.7;
+      color: var(--text)
+    }
+
+    .tm-confirm-actions {
+      display: flex;
+      gap: 8px;
+      justify-content: flex-end
+    }
+
+    /* First-visit hint — points the user at the channel list. */
+    .tm-first-hint {
+      margin: auto;
+      padding: 28px 24px;
+      max-width: 420px;
+      text-align: center;
+      color: var(--text-dim);
+      font-size: 14px;
+      line-height: 1.7;
+      background: var(--bg-elevated, var(--bg));
+      border: 1px dashed var(--border);
+      border-radius: 14px
+    }
+
+    .tm-first-hint-arrow {
+      font-size: 32px;
+      line-height: 1;
+      color: var(--accent);
+      margin-bottom: 10px
+    }
+
+    .tm-first-hint-text {
+      white-space: pre-line
+    }
+
+    /* END telemirror */
 
     .media-action {
       display: flex;
@@ -2562,6 +3481,11 @@
           <button class="stb" id="resolversSidebarBtn" onclick="openResolversModal()"><span
               data-i18n="sidebar_resolvers">Resolvers</span> <span class="stb-badge" id="resolversBadge"
               style="color:var(--error)">0</span></button>
+          <!-- BEGIN telemirror -->
+          <button class="stb tm-sidebar-btn" id="telemirrorSidebarBtn" onclick="openTelemirror()"
+            data-i18n-title="telemirror_btn_title"><span data-i18n="telemirror_btn">Browse channels</span><span
+              class="tm-sidebar-btn-ext" aria-hidden="true">&#8599;</span></button>
+          <!-- END telemirror -->
         </div>
         <label for="channelSearch" class="sr-only" data-i18n="sr_channel_search">Search channels</label>
         <input class="sidebar-search" id="channelSearch" type="text" data-i18n-ph="search" placeholder="Search..."
@@ -2650,6 +3574,40 @@
   <!-- TOAST -->
   <div id="toast"></div>
 
+  <!-- BEGIN telemirror -->
+  <div id="telemirrorModal" class="tm-modal">
+    <header class="tm-topbar">
+      <button class="tm-back" onclick="closeTelemirror()" aria-label="Close">&#10094;</button>
+      <button class="tm-menu" onclick="toggleTmSidebar()" aria-label="Channels">&#9776;</button>
+      <div class="tm-topbar-info">
+        <div id="tmTopbarAvatar"></div>
+        <div class="tm-topbar-meta">
+          <div class="tm-topbar-name" id="tmTopbarName" data-i18n="telemirror_title">Browse channels</div>
+          <div class="tm-topbar-sub" id="tmTopbarSub"></div>
+        </div>
+      </div>
+      <button class="tm-refresh" onclick="tmRefreshActive()" title="Refresh"
+        data-i18n-title="telemirror_refresh">&#8635;</button>
+    </header>
+    <div class="tm-body">
+      <aside id="tmSidebar" class="tm-sidebar">
+        <p class="tm-disclaimer" data-i18n="telemirror_disclaimer">Experimental backup feature for browsing public
+          Telegram channels. Depends on third-party services and may stop working or be rate-limited. For reliable
+          access, use the core thefeed feature.</p>
+        <div class="tm-add-row">
+          <input id="tmAddInput" type="text" data-i18n-ph="telemirror_add_ph" placeholder="@username" maxlength="40">
+          <button class="btn btn-primary" onclick="telemirrorAdd()" data-i18n="add">Add</button>
+        </div>
+        <div id="tmChannelsList" class="tm-channels-list"></div>
+      </aside>
+      <div class="tm-backdrop" onclick="toggleTmSidebar()" aria-hidden="true"></div>
+      <main id="tmContent" class="tm-content">
+        <div class="tm-empty" data-i18n="telemirror_pick_channel">Pick a channel</div>
+      </main>
+    </div>
+  </div>
+  <!-- END telemirror -->
+
   <!-- ===== SAVED RESOLVERS POPUP ===== -->
   <div class="modal-overlay" id="savedResolversModal">
     <div class="modal" style="max-width:380px">
@@ -2699,6 +3657,22 @@
         <div class="row">
           <input type="checkbox" id="cfgShowScanPrompt" onchange="setShowScanPrompt(this.checked)">
           <label for="cfgShowScanPrompt" data-i18n="show_scan_prompt">Show scan prompt on startup</label>
+        </div>
+      </div>
+      <!-- Profile pictures. GitHub path is automatic; toggle opts into DNS. -->
+      <div class="form-group">
+        <div class="row">
+          <input type="checkbox" id="cfgProfilePics" onchange="setProfilePicsEnabled(this.checked)">
+          <label for="cfgProfilePics" data-i18n="profile_pics_enable">Also fetch profile pictures over DNS</label>
+        </div>
+        <div class="row" style="margin-top:4px;font-size:11px;color:var(--text-dim)">
+          <span data-i18n="profile_pics_dns_note">GitHub relay path is always used automatically. This option
+            additionally pulls avatars over DNS when the relay is unavailable.</span>
+        </div>
+        <div class="row" style="margin-top:6px;gap:8px;align-items:center">
+          <button type="button" class="btn btn-flat" id="profilePicsRefreshBtn" onclick="profilePicsRefresh()"
+            data-i18n="profile_pics_refresh">Refresh avatars</button>
+          <span id="profilePicsProgress" style="font-size:11px;color:var(--text-dim)"></span>
         </div>
       </div>
       <div class="form-group">
@@ -3089,7 +4063,7 @@
             </div>
             <div class="form-group">
               <label data-i18n="scanner_timeout">Timeout (s)</label>
-              <input type="number" id="scanTimeout" value="15" min="1" max="60">
+              <input type="number" id="scanTimeout" value="10" min="1" max="60">
             </div>
             <div class="form-group">
               <label data-i18n="scanner_max_ips">Max IPs (0=all)</label>
@@ -3190,7 +4164,7 @@
         download: 'دانلود', media_too_large: 'حجم فایل بیش از حد مجاز سرور است', media_failed: 'دانلود ناموفق بود',
         downloading: 'در حال دانلود...', media_open: 'باز کردن', media_play: 'پخش', media_save: 'ذخیره', media_share: 'اشتراک‌گذاری', close: 'بستن',
         queued: 'در صف', media_hash_mismatch: 'هش محتوا با پیام مطابقت ندارد',
-        blocks_label: 'بلاک',
+        blocks_label: 'قطعه',
         media_blocked_title: 'برای دانلود در دسترس نیست',
         media_blocked_too_large: 'حجم این فایل ({size}) بیشتر از سقف کش سرور ({limit}) است.',
         media_blocked_unavailable: 'سرور این فایل را کش نکرده است؛ احتمالاً از سقف {limit} بزرگ‌تر است یا دریافت آن ناموفق بوده.',
@@ -3198,7 +4172,42 @@
         ok: 'باشه',
         cancel_media_msg: 'دانلود این رسانه لغو شود؟', dismiss: 'بستن',
         write_message: 'پیام بنویسید...', configure_server: 'برای شروع یک سرور راه‌اندازی کنید',
-        set_up: 'راه‌اندازی', switching: 'در حال تغییر پروفایل...',
+        set_up: 'راه‌اندازی', switching: 'در حال تغییر پروفایل...', select_channel_hint: 'یک کانال را برای دیدن پیام‌ها انتخاب کنید',
+        // BEGIN telemirror
+        telemirror_btn: 'دیدن کانال‌های دلخواه (teleMirror)',
+        telemirror_btn_title: 'دیدن کانال‌های دلخواه (teleMirror)',
+        telemirror_title: 'دیدن کانال‌های دلخواه (teleMirror)',
+        telemirror_disclaimer: 'روش باز کردن کانال‌های دلخواه در این بخش فقط تا زمانی که سرویس‌های گوگل باز باشن کار می‌کنه. اگر براتون کار نکرد، از قابلیت‌های اصلی thefeed استفاده کنید چون ضدفیلتر هستن.',
+        telemirror_add_ph: 'مثلا @VahidOnline',
+        telemirror_loading: 'در حال بارگذاری...',
+        telemirror_load_failed: 'دریافت کانال ناموفق بود.',
+        telemirror_no_posts: 'هیچ پستی پیدا نشد.',
+        telemirror_pick_channel: 'یک کانال را انتخاب کن',
+        telemirror_invalid_user: 'نام کاربری نامعتبر',
+        telemirror_remove_pinned: 'این کانال پیش‌فرض قابل حذف نیست',
+        telemirror_views: 'بازدید',
+        telemirror_edited: 'ویرایش شده',
+        telemirror_first_hint: 'یک کانال از لیست انتخاب کن، یا با ورودی بالا کانال جدیدی اضافه کن.',
+        telemirror_first_hint_mobile: 'برای دیدن لیست کانال‌ها، دکمه‌ی منو در بالای صفحه را بزن. سپس یک کانال انتخاب یا اضافه کن.',
+        telemirror_refresh: 'به‌روز کردن',
+        telemirror_refresh_warn: 'این کانال {n} ثانیه پیش به‌روز شد. به‌روزرسانی مکرر ممکنه به محدودیت تعداد درخواست بخوره و چند دقیقه قابل استفاده نباشه. ادامه می‌دی؟',
+        telemirror_refresh_yes: 'به‌روز کن',
+        telemirror_voice: 'پیام صوتی',
+        telemirror_audio: 'فایل صوتی',
+        telemirror_file: 'فایل',
+        telemirror_poll: 'نظرسنجی',
+        telemirror_forwarded_from: 'فروارد شده از',
+        telemirror_about: 'درباره‌ی این کانال',
+        download: 'دانلود',
+        copy: 'کپی',
+        // END telemirror
+        profile_pics_enable: 'دریافت عکس پروفایل از طریق DNS',
+        profile_pics_dns_note: 'عکس‌هایی که از طریق رله گیتهاب در دسترس باشند به‌صورت خودکار دریافت می‌شوند. این گزینه فقط برای دریافت عکس‌هایی است که رله نمی‌تواند سرویس بدهد و باید از طریق DNS کند گرفته شوند.',
+        profile_pics_refresh: 'به‌روز کردن عکس‌ها',
+        profile_pics_starting: 'در حال شروع...',
+        profile_pics_progress: 'در حال دریافت عکس‌ها: {n}/{m}',
+        profile_pics_done: 'انجام شد ({n} عکس)',
+        profile_pics_failed: 'دریافت ناموفق بود',
         font_size: 'اندازه قلم', debug_mode: 'حالت دیباگ', language: 'زبان',
         next_fetch_info: 'زمان باقی‌مانده تا دریافت بعدی محتوا توسط سرور',
         no_profiles: 'هنوز پروفایلی وجود ندارد', add_profile: '+ پروفایل جدید',
@@ -3415,7 +4424,7 @@
         download: 'Download', media_too_large: 'Too large for server cache', media_failed: 'Download failed',
         downloading: 'Downloading...', media_open: 'Open', media_play: 'Play', media_save: 'Save', media_share: 'Share', close: 'Close',
         queued: 'Queued', media_hash_mismatch: 'Content hash does not match the message',
-        blocks_label: 'blocks',
+        blocks_label: 'chunks',
         media_blocked_title: 'Not available for download',
         media_blocked_too_large: 'This file ({size}) is larger than the server\'s cache limit ({limit}).',
         media_blocked_unavailable: 'The server didn\'t cache this file. It may exceed the {limit} cache limit, or the upstream fetch failed.',
@@ -3423,7 +4432,42 @@
         ok: 'OK',
         cancel_media_msg: 'Cancel this download?', dismiss: 'Dismiss',
         write_message: 'Write a message...', configure_server: 'Configure a server to start reading',
-        set_up: 'Set Up', switching: 'Switching profile...',
+        set_up: 'Set Up', switching: 'Switching profile...', select_channel_hint: 'Pick a channel to view its messages',
+        // BEGIN telemirror
+        telemirror_btn: 'Browse channels (teleMirror)',
+        telemirror_btn_title: 'Browse channels (teleMirror)',
+        telemirror_title: 'Browse channels (teleMirror)',
+        telemirror_disclaimer: 'Browsing custom channels here only works while Google services are reachable. If it stops working for you, use thefeed\'s main features — those are filter-resistant.',
+        telemirror_add_ph: 'e.g. @VahidOnline',
+        telemirror_loading: 'Loading...',
+        telemirror_load_failed: 'Failed to load channel.',
+        telemirror_no_posts: 'No posts found.',
+        telemirror_pick_channel: 'Pick a channel',
+        telemirror_invalid_user: 'Invalid username',
+        telemirror_remove_pinned: 'Pinned channels cannot be removed',
+        telemirror_views: 'views',
+        telemirror_edited: 'edited',
+        telemirror_first_hint: 'Pick a channel from the list, or add a new one with the input above.',
+        telemirror_first_hint_mobile: 'Tap the menu button at the top to open the channel list, then pick or add a channel.',
+        telemirror_refresh: 'Refresh',
+        telemirror_refresh_warn: 'This channel was refreshed {n} sec ago. Refreshing too often can hit a rate limit and stop working for a few minutes. Refresh anyway?',
+        telemirror_refresh_yes: 'Refresh',
+        telemirror_forwarded_from: 'Forwarded from',
+        telemirror_voice: 'Voice message',
+        telemirror_audio: 'Audio',
+        telemirror_file: 'File',
+        telemirror_poll: 'Poll',
+        telemirror_about: 'About this channel',
+        download: 'Download',
+        copy: 'Copy',
+        // END telemirror
+        profile_pics_enable: 'Also fetch profile pictures over DNS',
+        profile_pics_dns_note: 'Avatars served by the GitHub relay are fetched automatically. Enable this to additionally fall back to DNS for avatars the relay can\'t serve (slower).',
+        profile_pics_refresh: 'Refresh avatars',
+        profile_pics_starting: 'Starting…',
+        profile_pics_progress: 'Refreshing avatars: {n}/{m}',
+        profile_pics_done: 'Done ({n} avatars)',
+        profile_pics_failed: 'Refresh failed',
         font_size: 'Font Size', debug_mode: 'Debug mode', language: 'Language',
         next_fetch_info: 'Time until the server next fetches fresh channel content',
         no_profiles: 'No profiles yet', add_profile: '+ Add Profile',
@@ -3738,6 +4782,9 @@
       loadBgImage();
       connectSSE();
       refreshResolversBadge();
+      // Populate profilePicCache so the channel list renders avatars
+      // without a per-item probe.
+      loadProfilePicState().catch(function () { });
       // Quietly ask GitHub for the latest published client version. Runs in
       // the background so a slow github.com response can't delay startup —
       // if there's an update, the dialog shows up a few seconds later.
@@ -3753,8 +4800,14 @@
         renderLatestVersion();
         updateNextFetchDisplay();
         await loadChannels();
-        if (channels && channels.length > 0) await selectChannel(1);
-        else { showInitProgress(); await doRefresh(); openChat() }
+        // Land on the channel list; don't auto-open the first channel.
+        if (!channels || channels.length === 0) {
+          showInitProgress(); await doRefresh();
+        } else {
+          // Mobile: make sure the sidebar is visible so the user can pick.
+          openSidebar();
+          document.getElementById('messages').innerHTML = '<div class="empty-state"><p>' + (t('select_channel_hint') || '') + '</p></div>';
+        }
         startAutoRefresh();
       } catch (e) { }
     }
@@ -3870,18 +4923,46 @@
     }
 
     // ===== RESCAN PROMPT =====
-    function showRescanPrompt(count) {
+    // Resolves true → skip rescan. Honors scanPromptOff.
+    function askRescan(count) {
       return new Promise(function (resolve) {
+        if (localStorage.getItem('thefeed_scan_prompt_off') === '1') { resolve(true); return; }
+        if (!count || count <= 0) { resolve(true); return; }
         var msg = t('rescan_prompt_msg').replace('{n}', count);
         var overlay = document.createElement('div');
         overlay.className = 'modal-overlay active';
-        overlay.innerHTML = '<div class="modal" style="max-width:380px"><h2>' + t('rescan_prompt_title') + '</h2><p style="font-size:13px;color:var(--text-dim);margin-bottom:16px;line-height:1.6">' + esc(msg) + '</p><div class="modal-actions"><button class="btn btn-primary" id="rescanPromptSkip">' + t('rescan_prompt_skip') + '</button><button class="btn btn-outline" id="rescanPromptYes">' + t('rescan_prompt_yes') + '</button></div></div>';
+        overlay.innerHTML =
+          '<div class="modal" style="max-width:380px">'
+          + '<h2 style="margin-top:0">' + esc(t('rescan_prompt_title')) + '</h2>'
+          + '<p style="font-size:13px;color:var(--text-dim);margin-bottom:16px;line-height:1.6">' + esc(msg) + '</p>'
+          + '<div style="display:flex;justify-content:flex-end;margin-bottom:10px">'
+          + '<button class="btn btn-flat" id="rescanPromptNever" style="font-size:11px;padding:4px 10px;color:var(--text-dim)">' + esc(t('dont_show_again')) + '</button>'
+          + '</div>'
+          + '<div class="modal-actions">'
+          + '<button class="btn btn-outline" id="rescanPromptYes">' + esc(t('rescan_prompt_yes')) + '</button>'
+          + '<button class="btn btn-primary" id="rescanPromptSkip">' + esc(t('rescan_prompt_skip')) + '</button>'
+          + '</div></div>';
         document.body.appendChild(overlay);
-        document.getElementById('rescanPromptSkip').onclick = function () { document.body.removeChild(overlay); resolve(true) };
-        document.getElementById('rescanPromptYes').onclick = function () { document.body.removeChild(overlay); resolve(false) };
+        var done = function (skip) {
+          if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+          resolve(skip);
+        };
+        document.getElementById('rescanPromptSkip').onclick = function () { done(true) };
+        document.getElementById('rescanPromptYes').onclick = function () { done(false) };
+        document.getElementById('rescanPromptNever').onclick = function () {
+          localStorage.setItem('thefeed_scan_prompt_off', '1');
+          try {
+            fetch('/api/settings', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ scanPromptOff: true })
+            });
+          } catch (e) { }
+          done(true);
+        };
       });
     }
-
+    function showRescanPrompt(count) { return askRescan(count); }
     function showConfirmDialog(msg, yesText, noText) {
       return new Promise(function (resolve) {
         var overlay = document.createElement('div');
@@ -3978,6 +5059,74 @@
       // settings is opened.
       var promptEl = document.getElementById('cfgShowScanPrompt');
       if (promptEl) promptEl.checked = localStorage.getItem('thefeed_scan_prompt_off') !== '1';
+      // Sync the profile-pics toggle from the server (it's persisted in
+      // profiles.json so survives app restarts).
+      fetch('/api/settings').then(function (r) { return r.ok ? r.json() : null; }).then(function (s) {
+        if (!s) return;
+        var pp = document.getElementById('cfgProfilePics');
+        if (pp) pp.checked = !!s.profilePicsEnabled;
+      }).catch(function () { });
+    }
+
+    // ===== PROFILE PICTURES =====
+    // Cached lowercase usernames so renderChannels can decide whether
+    // to overlay an <img> over the initial-letter circle.
+    var profilePicCache = { enabled: false, users: {} };
+    var profilePicsPollTimer = null;
+    // SSE throttle state — server fires one event per stored avatar.
+    var profilePicsReloadTimer = null;
+    var profilePicsLastReloadAt = 0;
+
+    function loadProfilePicState() {
+      // no-store so SSE reloads see fresh data, not a cached entry.
+      return fetch('/api/profile-pics', { cache: 'no-store' }).then(function (r) { return r.ok ? r.json() : null; }).then(function (d) {
+        if (!d) return;
+        profilePicCache.enabled = !!d.enabled;
+        profilePicCache.users = {};
+        (d.users || []).forEach(function (u) { profilePicCache.users[u.toLowerCase()] = true; });
+        try { renderChannels(); } catch (e) { }
+      }).catch(function () { });
+    }
+
+    function setProfilePicsEnabled(enabled) {
+      // Toggle only controls the DNS path; cached GitHub avatars keep
+      // displaying either way.
+      fetch('/api/settings', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ profilePicsEnabled: !!enabled })
+      }).then(function () {
+        profilePicCache.enabled = !!enabled;
+        if (enabled) profilePicsRefresh();
+      }).catch(function () { });
+    }
+
+    function profilePicsRefresh() {
+      var prog = document.getElementById('profilePicsProgress');
+      if (prog) prog.textContent = t('profile_pics_starting') || 'Starting…';
+      fetch('/api/profile-pics/refresh', { method: 'POST' }).then(function (r) {
+        if (!r.ok) {
+          if (prog) prog.textContent = t('profile_pics_failed') || 'Failed';
+          return;
+        }
+        // Poll progress until inactive.
+        if (profilePicsPollTimer) clearInterval(profilePicsPollTimer);
+        profilePicsPollTimer = setInterval(function () {
+          fetch('/api/profile-pics/progress').then(function (r) { return r.ok ? r.json() : null; }).then(function (p) {
+            if (!p) return;
+            if (prog) {
+              if (p.active) {
+                var label = (t('profile_pics_progress') || 'Refreshing avatars: {n}/{m}').replace('{n}', p.done || 0).replace('{m}', p.total || 0);
+                prog.textContent = label + (p.username ? '  (@' + p.username + ')' : '');
+              } else {
+                prog.textContent = (t('profile_pics_done') || 'Done').replace('{n}', p.done || 0);
+                clearInterval(profilePicsPollTimer);
+                profilePicsPollTimer = null;
+                loadProfilePicState();
+              }
+            }
+          });
+        }, 800);
+      }).catch(function () { });
     }
 
     // Toggle the "show startup scan prompt" preference. Persists
@@ -4721,12 +5870,54 @@
           }
           return;
         }
+        // Throttle (not debounce): first event fires immediately,
+        // subsequent events at most every 600 ms during a burst.
+        if (data === 'profile-pics') {
+          var THROTTLE_MS = 600;
+          var now = Date.now();
+          var since = now - profilePicsLastReloadAt;
+          if (since >= THROTTLE_MS) {
+            profilePicsLastReloadAt = now;
+            loadProfilePicState().catch(function () { });
+          } else if (!profilePicsReloadTimer) {
+            // Trailing call for the last avatar in the burst.
+            profilePicsReloadTimer = setTimeout(function () {
+              profilePicsReloadTimer = null;
+              profilePicsLastReloadAt = Date.now();
+              loadProfilePicState().catch(function () { });
+            }, THROTTLE_MS - since);
+          }
+          return;
+        }
+        // Another tab/device switched the active profile.
+        if (data === 'profiles') {
+          var prevActive = activeProfileId;
+          await loadProfiles();
+          if (activeProfileId !== prevActive) {
+            // The active profile changed under us — drop stale local state
+            // so the user doesn't see the old profile's channel/messages.
+            selectedChannel = 0;
+            channels = [];
+            document.getElementById('chatName').textContent = 'thefeed';
+            document.getElementById('chatSub').textContent = '';
+            openSidebar();
+          }
+          if (document.getElementById('profilesModal').classList.contains('active')) {
+            renderProfilesModal();
+          }
+          return;
+        }
         var wasEmpty = channels.length === 0;
         var snapChannel = selectedChannel;
         await loadChannels();
         if (wasEmpty && channels.length > 0 && selectedChannel === 0) {
           closeProfiles();
-          await selectChannel(1); return
+          // Flip to the sidebar on mobile so the user can see and pick a
+          // channel — the empty-state hint is invisible while the chat
+          // panel covers the screen.
+          openSidebar();
+          document.getElementById('messages').innerHTML = '<div class="empty-state"><p>' + (t('select_channel_hint') || '') + '</p></div>';
+          return;
         }
         if (data && typeof data === 'object' && data.type === 'no_changes') {
           // Only show the toast if the user explicitly asked for this
@@ -4938,7 +6129,6 @@
 
     async function activateProfile(id) {
       if (id === activeProfileId) { closeProfiles(); return }
-      // If there are active resolvers, ask user whether to rescan; otherwise skip.
       var skipCheck = true;
       try {
         var bankR = await fetch('/api/resolvers/bank');
@@ -4946,19 +6136,34 @@
           var bankD = await bankR.json();
           var activeN = 0;
           (bankD.bank || []).forEach(function (b) { if (b.active) activeN++ });
-          if (activeN > 0) {
-            skipCheck = await showConfirmDialog(t('rescan_prompt_msg').replace('{n}', activeN), t('rescan_prompt_skip'), t('rescan_prompt_yes'));
-          }
+          if (activeN > 0) skipCheck = await askRescan(activeN);
         }
-      } catch (e) { /* ignore — default to skipCheck=true */ }
+      } catch (e) { }
       try {
         var r = await fetch('/api/profiles/switch', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: id, skipCheck: skipCheck }) });
         if (!r.ok) return;
-        activeProfileId = id; selectedChannel = 0; channels = []; document.getElementById('progressPanel').innerHTML = ''; document.getElementById('messages').innerHTML = '<div class="empty-state"><p>' + t('switching') + '</p></div>';
+        activeProfileId = id; selectedChannel = 0; channels = [];
+        refreshingChannels = {};
+        progressSilencedUntil = Date.now() + 5000;
+        // Reset the chat header so it doesn't keep showing the previous
+        // profile's channel name/handle while the user picks a new one.
+        document.getElementById('chatName').textContent = 'thefeed';
+        document.getElementById('chatSub').textContent = '';
+        document.getElementById('progressPanel').innerHTML = '';
+        document.getElementById('messages').innerHTML = '<div class="empty-state"><p>' + t('switching') + '</p></div>';
+        // On desktop the chat panel is always visible; collapse it back to
+        // the sidebar so the empty state doesn't sit next to a stale header.
+        openSidebar();
         await loadProfiles(); closeProfiles();
         await loadChannels();
-        if (channels.length > 0) await selectChannel(1);
-        else { showInitProgress(); await doRefresh() }
+        if (channels.length === 0) {
+          // No cache for this profile — DNS metadata fetch is in flight; the
+          // SSE 'update' handler will replace this with the "pick a channel"
+          // hint once channels actually arrive.
+          showInitProgress(); await doRefresh();
+        } else {
+          document.getElementById('messages').innerHTML = '<div class="empty-state"><p>' + (t('select_channel_hint') || '') + '</p></div>';
+        }
       } catch (e) { }
     }
 
@@ -5139,7 +6344,6 @@
       }
       var action = editingProfileId ? 'update' : 'create';
       var wasFirst = !profiles || !profiles.profiles || profiles.profiles.length === 0;
-      // If there are active resolvers, ask user whether to rescan; otherwise skip.
       var skipCheck = true;
       var isActiveEdit = editingProfileId && editingProfileId === activeProfileId;
       if (isActiveEdit || wasFirst) {
@@ -5150,7 +6354,7 @@
             var activeN = 0;
             (bankD.bank || []).forEach(function (b) { if (b.active) activeN++ });
             if (activeN > 0) {
-              skipCheck = await showConfirmDialog(t('rescan_prompt_msg').replace('{n}', activeN), t('rescan_prompt_skip'), t('rescan_prompt_yes'));
+              skipCheck = await askRescan(activeN);
             }
           }
         } catch (e) { /* ignore — default to skipCheck=true */ }
@@ -5313,6 +6517,35 @@
               var key = chNm.replace(/^@/, '').trim();
               autoBtn.classList.toggle('on', autoUpdateChannels.has(key));
             }
+            // Avatar diff against profilePicCache. Without this the
+            // fast path skips avatar updates and SSE-driven reloads
+            // don't reach the UI.
+            var ct2 = channels[ui].ChatType || channels[ui].chatType || 0;
+            var isX2 = ct2 === 2;
+            var bareHandle2 = chNm.replace(/^@/, '').toLowerCase();
+            if (isX2 && bareHandle2.indexOf('x/') === 0) bareHandle2 = bareHandle2.substring(2);
+            var unameKey2 = isX2 ? ('x:' + bareHandle2) : bareHandle2;
+            var avatarEl = existingItems[ui].querySelector('.ch-avatar');
+            if (avatarEl) {
+              var imgEl = avatarEl.querySelector('.ch-avatar-img');
+              var shouldShow = !!profilePicCache.users[unameKey2];
+              if (shouldShow && !imgEl) {
+                var img = document.createElement('img');
+                img.className = 'ch-avatar-img';
+                img.src = '/api/profile-pics/' + encodeURIComponent(unameKey2);
+                img.loading = 'lazy';
+                img.alt = '';
+                img.onerror = function () {
+                  this.parentNode.classList.add('ch-avatar-noimg');
+                  this.remove();
+                };
+                avatarEl.classList.remove('ch-avatar-noimg');
+                avatarEl.insertBefore(img, avatarEl.firstChild);
+              } else if (!shouldShow && imgEl) {
+                imgEl.remove();
+                avatarEl.classList.add('ch-avatar-noimg');
+              }
+            }
           }
           _updateRefreshBadge(); return;
         }
@@ -5343,7 +6576,15 @@
           var chNm2 = e.ch.Name || e.ch.name || '';
           var badge = (channelHasNew(e.ch) && num2 !== selectedChannel) ? '<span class="ch-badge">NEW</span>' : '';
           var chA11yLabel = label + (channelHasNew(e.ch) && num2 !== selectedChannel ? t('sr_new_messages_suffix') : '');
-          h += '<div class="ch-item' + active + '" data-name="' + escAttr(handle) + '" data-label="' + escAttr(label) + '" onclick="selectChannel(' + num2 + ')" role="button" tabindex="0" aria-label="' + escAttr(chA11yLabel) + '" aria-pressed="' + (num2 === selectedChannel ? 'true' : 'false') + '" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){selectChannel(' + num2 + ')}">'; h += '<div class="ch-avatar">' + esc(avatarText) + '</div>';
+          h += '<div class="ch-item' + active + '" data-name="' + escAttr(handle) + '" data-label="' + escAttr(label) + '" onclick="selectChannel(' + num2 + ')" role="button" tabindex="0" aria-label="' + escAttr(chA11yLabel) + '" aria-pressed="' + (num2 === selectedChannel ? 'true' : 'false') + '" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){selectChannel(' + num2 + ')}">';
+          var avatarImg = '';
+          var bareHandle = (chNm2 || avatarName || '').replace(/^@/, '').toLowerCase();
+          if (isX && bareHandle.indexOf('x/') === 0) bareHandle = bareHandle.substring(2);
+          var unameKey = isX ? ('x:' + bareHandle) : bareHandle;
+          if (profilePicCache.users[unameKey]) {
+            avatarImg = '<img class="ch-avatar-img" src="/api/profile-pics/' + encodeURIComponent(unameKey) + '" loading="lazy" alt="" onerror="this.parentNode.classList.add(\'ch-avatar-noimg\');this.remove()">';
+          }
+          h += '<div class="ch-avatar">' + avatarImg + '<span class="ch-avatar-letter">' + esc(avatarText) + '</span></div>';
           var chSubText = !isX ? (handle.charAt(0) === '@' ? handle : '@' + handle) : '';
           h += '<div class="ch-info"><div class="ch-name">' + formatIranTitleHtml(label) + (isPriv ? '<span class="ch-type-tag">' + t('private') + '</span>' : (isX ? '<span class="ch-type-tag x-tag">' + t('x_label') + '</span>' : '')) + '</div>';
           if (chSubText) h += '<div class="ch-sub">' + esc(chSubText) + '</div>';
@@ -5906,9 +7147,9 @@
       }
     }
 
-    // Single quick retry on transient errors (network blip, 5xx). 404 / 429
-    // skip retry entirely — file genuinely missing or rate-limited.
-    var GH_MAX_RETRIES = 2, GH_RETRY_DELAY_MS = 500;
+    // GH_MAX_ATTEMPTS = total tries (initial + retries). 2 = 1 initial + 1 retry.
+    // 404 / 429 skip retry entirely — file genuinely missing or rate-limited.
+    var GH_MAX_ATTEMPTS = 2, GH_RETRY_DELAY_MS = 500;
 
     async function mediaRunDownload(domID, opts) {
       opts = opts || {};
@@ -5965,7 +7206,7 @@
       async function handleFastFailure(reason, status) {
         attempt++;
         var skipRetry = (status === 404 || status === 429);
-        if (!skipRetry && attempt < GH_MAX_RETRIES) {
+        if (!skipRetry && attempt < GH_MAX_ATTEMPTS) {
           await new Promise(function (r) { setTimeout(r, GH_RETRY_DELAY_MS); });
           runOnce();
           return;
@@ -6274,6 +7515,19 @@
     // of those from the close-confirmation dialog.
     window.handleAndroidBack = async function () {
       if (closeMediaLightbox()) return;
+      // Telemirror has its own full-screen modal (.tm-modal, not
+      // .modal-overlay). Drawer first, then modal, then anything else.
+      var tmModal = document.getElementById('telemirrorModal');
+      if (tmModal && tmModal.classList.contains('active')) {
+        var tmSb = document.getElementById('tmSidebar');
+        if (tmSb && tmSb.classList.contains('open')) {
+          tmSb.classList.remove('open');
+          return;
+        }
+        if (typeof closeTelemirror === 'function') closeTelemirror();
+        else tmModal.classList.remove('active');
+        return;
+      }
       var openModal = document.querySelector('.modal-overlay.active');
       if (openModal) { openModal.classList.remove('active'); return; }
       if (mobileQuery.matches && document.getElementById('app').classList.contains('chat-open')) {
@@ -6398,7 +7652,10 @@
       var overlay = document.createElement('div');
       overlay.id = 'mediaLightbox';
       overlay.className = 'media-lightbox';
-      overlay.innerHTML = '<button class="media-lightbox-close" type="button" aria-label="' + esc(t('close') || 'Close') + '">&times;</button>' + element;
+      overlay.innerHTML =
+        '<button class="media-lightbox-speed" type="button" aria-label="Playback speed">1x</button>'
+        + '<button class="media-lightbox-close" type="button" aria-label="' + esc(t('close') || 'Close') + '">&times;</button>'
+        + element;
       var close = function () {
         overlay.removeEventListener('click', onClick);
         document.removeEventListener('keydown', onKey);
@@ -6417,6 +7674,46 @@
       document.addEventListener('keydown', onKey);
       document.body.appendChild(overlay);
       mediaLightboxCloser = close;
+
+      // Playback-speed cycling. Standard HTML5 playbackRate — supported
+      // on every modern WebView, no native bridge needed. Pitch is
+      // preserved by default in Chromium / WebKit (preservesPitch=true).
+      var speeds = [1, 1.25, 1.5, 2];
+      var saved = parseFloat(localStorage.getItem('thefeed_play_speed'));
+      var idx = speeds.indexOf(saved);
+      if (idx < 0) idx = 0;
+      var media = overlay.querySelector('audio,video');
+      var speedBtn = overlay.querySelector('.media-lightbox-speed');
+      function applySpeed() {
+        var s = speeds[idx];
+        if (media) {
+          try { media.playbackRate = s; } catch (e) { }
+          // Webkit needs the prefixed flag for pitch preservation.
+          try { media.preservesPitch = true; } catch (e) { }
+          try { media.webkitPreservesPitch = true; } catch (e) { }
+        }
+        if (speedBtn) speedBtn.textContent = (s === Math.floor(s) ? s : s.toFixed(2).replace(/0$/, '')) + 'x';
+        localStorage.setItem('thefeed_play_speed', String(s));
+      }
+      // Re-apply on every fresh `loadeddata` — some WebViews reset the
+      // rate when the source becomes ready.
+      if (media) media.addEventListener('loadeddata', applySpeed);
+      applySpeed();
+      if (speedBtn) {
+        // Coalesce rapid duplicate clicks. Some Android WebView builds
+        // fire click twice per tap (touchend + synthesized 300ms tap),
+        // which made one fast tap skip a step (1 → 1.5). 250 ms is well
+        // under any human double-tap interval.
+        var lastClickAt = 0;
+        speedBtn.addEventListener('click', function (e) {
+          e.stopPropagation();
+          var now = Date.now();
+          if (now - lastClickAt < 250) return;
+          lastClickAt = now;
+          idx = (idx + 1) % speeds.length;
+          applySpeed();
+        });
+      }
     }
 
     function mediaFilenameFor(msgID, tag, mime) {
@@ -6499,6 +7796,13 @@
         var dy = t0.clientY - t1.clientY;
         return Math.hypot(dx, dy);
       }
+      function clampPan() {
+        if (scale <= 1) { translateX = 0; translateY = 0; return; }
+        var maxX = (el.offsetWidth * (scale - 1)) / 2;
+        var maxY = (el.offsetHeight * (scale - 1)) / 2;
+        translateX = Math.max(-maxX, Math.min(maxX, translateX));
+        translateY = Math.max(-maxY, Math.min(maxY, translateY));
+      }
       el.addEventListener('touchstart', function (e) {
         if (e.touches.length === 2) {
           pinchStartDist = distance(e.touches[0], e.touches[1]);
@@ -6521,15 +7825,24 @@
           e.preventDefault();
           translateX = e.touches[0].clientX - startTX;
           translateY = e.touches[0].clientY - startTY;
+          clampPan();
           apply();
         }
       }, { passive: false });
-      el.addEventListener('touchend', function () {
+      el.addEventListener('touchend', function (e) {
         lastTouchEnd = Date.now();
-        // Snap back: clear busy flag a tick later so the trailing
-        // synthetic click event can be filtered.
         setTimeout(function () { if (busyCb) busyCb(false); }, 50);
         pinchStartDist = 0;
+        // 2→1 finger: re-seed pan origin so the leftover finger doesn't
+        // compute translation against stale startTX/startTY (=0) and snap
+        // the image off-screen.
+        if (e.touches.length === 1 && scale > 1) {
+          startTX = e.touches[0].clientX - translateX;
+          startTY = e.touches[0].clientY - translateY;
+        } else if (e.touches.length === 0) {
+          clampPan();
+          apply();
+        }
       });
       el.addEventListener('click', function (e) {
         // Ignore clicks that immediately follow a pinch.
@@ -7041,7 +8354,12 @@
       }
     }
 
+    var progressSilencedUntil = 0;
     function updateProgressDisplay(line) {
+      // Silence briefly across a profile switch — log events from the
+      // previous profile's in-flight fetch keep arriving until the old
+      // fetcher's context cancellation lands.
+      if (Date.now() < progressSilencedUntil) return;
       var match = line.match(/Channel\s+(\d+)/); if (!match) return;
       var channelNum = parseInt(match[1]);
       var fracMatch = line.match(/\((\d+)\/(\d+)\)/);
@@ -7351,7 +8669,7 @@
         preset: scannerActivePreset || undefined,
         profileId: document.getElementById('scanProfile').value,
         rateLimit: parseInt(document.getElementById('scanRateLimit').value) || 50,
-        timeout: parseInt(document.getElementById('scanTimeout').value) || 15,
+        timeout: parseInt(document.getElementById('scanTimeout').value) || 10,
         maxIPs: parseInt(document.getElementById('scanMaxIPs').value) || 0,
         expandSubnet: document.getElementById('scanExpand').checked,
         queryMode: document.getElementById('scanQueryMode').value
@@ -7969,11 +9287,23 @@
       var file = inp.files[0];
       if (file.size > 10 * 1024 * 1024) { showToast('File too large (max 10MB)'); return }
       try {
-        var r = await fetch('/api/bg-image', { method: 'POST', body: file });
+        // Buffer via FileReader so content:// URIs from Google Photos
+        // work too — fetch's stream path fails on those in some WebViews.
+        var buf = await new Promise(function (resolve, reject) {
+          var fr = new FileReader();
+          fr.onload = function () { resolve(fr.result); };
+          fr.onerror = function () { reject(fr.error || new Error('read failed')); };
+          fr.readAsArrayBuffer(file);
+        });
+        var r = await fetch('/api/bg-image', {
+          method: 'POST',
+          headers: { 'Content-Type': file.type || 'application/octet-stream' },
+          body: buf
+        });
         if (!r.ok) { showToast(await r.text()); return }
         _setBg('/api/bg-image?t=' + Date.now());
         showToast(t('apply'));
-      } catch (e) { showToast(e.message); }
+      } catch (e) { showToast((e && e.message) || 'failed'); }
     }
     async function clearBgImage() {
       try { await fetch('/api/bg-image', { method: 'DELETE' }) } catch (e) { }
@@ -7987,7 +9317,7 @@
       if (e.key === 'Enter' && document.activeElement === document.getElementById('sendInput')) { e.preventDefault(); sendMessage() }
       if (e.key === 'Enter' && document.activeElement === document.getElementById('peAddChannelInput')) { e.preventDefault(); addChannelEditor() }
       if (e.key === 'Enter' && document.activeElement === document.getElementById('msgSearchInput')) { e.preventDefault(); msgSearchNext() }
-      if (e.key === 'Escape') { closeSettings(); closeProfiles(); closeProfileEditor(); closeScanner(); closeMsgSearch(); closeExportModal(); closeResolversModal() }
+      if (e.key === 'Escape') { closeSettings(); closeProfiles(); closeProfileEditor(); closeScanner(); closeMsgSearch(); closeExportModal(); closeResolversModal(); closeTelemirror() }
     });
     mobileQuery.addEventListener('change', function () {
       var app = document.getElementById('app');
@@ -8062,7 +9392,6 @@
         if (fn) fn();
       });
     })();
-
     // ===== A11Y: MODAL FOCUS MANAGEMENT =====
     var _a11yFocusStack = [];
     var _a11yFocusTrapStack = [];
@@ -8107,7 +9436,11 @@
       setTimeout(function () { _a11yLive.textContent = msg; }, 50);
     }
 
-    init();  </script>
+    init();
+  </script>
+  <!-- BEGIN telemirror -->
+  <script src="/static/telemirror.js"></script>
+  <!-- END telemirror -->
 </body>
 
 </html>

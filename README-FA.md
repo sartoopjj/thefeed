@@ -146,6 +146,7 @@ thefeed یک سیستم تونل DNS است که به شما اجازه می‌�
 - کانال کانفیگ عمومی دفید: [@thefeedconfig](https://t.me/thefeedconfig)
 - راهنمای نصب سرور دفید: [@networkti](https://t.me/networkti/25)
 - راهنمای نصب سرور دفید با اسلیپ گیت: [@networkti](https://t.me/networkti/200)
+- لیست تسک‌ها و رودمپ پروژه: [بورد گیتهاب](https://github.com/users/sartoopjj/projects/1/views/1)
 
 ## ⚡ نصب سریع سرور
 
@@ -350,7 +351,7 @@ chmod +x thefeed-client
 
 ### اندروید (نسخه APK)
 
-از صفحه‌ی [Releases](https://github.com/sartoopjj/thefeed/releases) فایل APK مناسب گوشی خود را دانلود کنید:
+از صفحه‌ی [Releases](https://github.com/sartoopjj/thefeed/releases) فایل APK مناسب گوشی خود را دانلود کنید (نیازمند اندروید ۷ یا بالاتر):
 
 - `thefeed-android-<version>-arm64-v8a.apk` — برای گوشی‌های ۶۴ بیتی (تقریباً همه‌ی گوشی‌های جدید از سال ۱۳۹۶ به بعد). **این گزینه برای اکثر کاربران درست است.**
 - `thefeed-android-<version>-armeabi-v7a.apk` — فقط برای گوشی‌های قدیمی ۳۲ بیتی.
