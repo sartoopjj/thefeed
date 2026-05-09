@@ -9,9 +9,11 @@ import (
 	"time"
 )
 
-// Cache TTLs.
+// Cache TTLs. FreshTTL is intentionally short so opening a channel a
+// second time triggers a background refresh — without it, a "live"
+// feed feels frozen for the first 10 minutes after every fetch.
 const (
-	FreshTTL = 10 * time.Minute
+	FreshTTL = 1 * time.Minute
 	StaleTTL = 24 * time.Hour
 )
 

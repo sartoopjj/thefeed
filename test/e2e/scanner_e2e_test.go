@@ -178,10 +178,10 @@ func TestE2E_Scanner_Presets(t *testing.T) {
 	if len(data.Presets) == 0 {
 		t.Error("expected non-empty presets list")
 	}
-	if data.Presets[0].Name != "ir" {
-		t.Errorf("first preset name = %q, want ir", data.Presets[0].Name)
+	if data.Presets[0].Name != "default" {
+		t.Errorf("first preset name = %q, want default", data.Presets[0].Name)
 	}
 	if data.Presets[0].Count == 0 {
-		t.Error("expected non-zero count for ir preset")
+		t.Error("expected non-zero count for default preset")
 	}
 }

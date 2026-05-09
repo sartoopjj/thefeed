@@ -276,7 +276,10 @@ class AndroidBridge(private val activity: Activity) {
             "xlsx" -> "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             "ppt" -> "application/vnd.ms-powerpoint"
             "pptx" -> "application/vnd.openxmlformats-officedocument.presentationml.presentation"
-            else -> sanitiseMime(fallback)
+            // Unknown extension: don't trust the sniffed fallback (often
+            // text/plain, which makes MediaStore append .txt). Generic
+            // binary leaves the filename verbatim.
+            else -> "application/octet-stream"
         }
     }
 

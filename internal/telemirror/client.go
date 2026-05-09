@@ -161,6 +161,19 @@ func (c *Client) markSuccess(idx int) {
 
 // FetchHTML returns the rendered widget HTML for the username.
 func (c *Client) FetchHTML(ctx context.Context, username string) (string, error) {
+	return c.fetchHTMLWithBefore(ctx, username, 0)
+}
+
+// FetchHTMLBefore fetches the widget filtered to posts strictly older
+// than beforeID. Used for "Load older" pagination.
+func (c *Client) FetchHTMLBefore(ctx context.Context, username string, beforeID int) (string, error) {
+	if beforeID <= 0 {
+		return c.FetchHTML(ctx, username)
+	}
+	return c.fetchHTMLWithBefore(ctx, username, beforeID)
+}
+
+func (c *Client) fetchHTMLWithBefore(ctx context.Context, username string, beforeID int) (string, error) {
 	username = SanitizeUsername(username)
 	if username == "" {
 		return "", ErrEmptyUsername
@@ -178,7 +191,7 @@ func (c *Client) FetchHTML(ctx context.Context, username string) (string, error)
 			return "", err
 		}
 		ua := userAgents[mrand.IntN(len(userAgents))]
-		body, status, err := c.do(ctx, ap, username, ua)
+		body, status, err := c.do(ctx, ap, username, ua, beforeID)
 		if err != nil {
 			lastErr = fmt.Errorf("attempt %d (%s): %w", i+1, ap.label(), err)
 			continue
@@ -391,11 +404,14 @@ func setBrowserHeaders(req *http.Request, ua string, fronted bool) {
 	}
 }
 
-func (c *Client) do(ctx context.Context, ap proxyAttempt, username, ua string) (string, int, error) {
+func (c *Client) do(ctx context.Context, ap proxyAttempt, username, ua string, beforeID int) (string, int, error) {
 	url := fmt.Sprintf(
 		"https://%s/s/%s?_x_tr_sl=%s&_x_tr_tl=%s&_x_tr_hl=en&_x_tr_pto=wapp",
 		proxyHost, username, ap.sl, ap.tl,
 	)
+	if beforeID > 0 {
+		url += fmt.Sprintf("&before=%d", beforeID)
+	}
 
 	transport := transportFor(ap)
 	defer transport.CloseIdleConnections()

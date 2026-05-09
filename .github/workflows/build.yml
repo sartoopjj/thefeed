@@ -222,8 +222,60 @@ jobs:
             artifacts/thefeed-android-*-arm64-v8a.apk
             artifacts/thefeed-android-*-armeabi-v7a.apk
 
+  ios-ipa:
+    needs: test
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+          cache: true
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode.app
+
+      - name: Install gomobile + gobind
+        run: |
+          go install golang.org/x/mobile/cmd/gomobile@latest
+          go install golang.org/x/mobile/cmd/gobind@latest
+          gomobile init
+          go get golang.org/x/mobile/bind golang.org/x/mobile/bind/objc
+          go mod tidy
+
+      - name: Build Mobile.xcframework
+        run: gomobile bind -iosversion=14.0 -target=ios,iossimulator -o ios/Mobile.xcframework ./mobile
+
+      - name: Archive (unsigned)
+        run: |
+          xcodebuild \
+            -project ios/Thefeed.xcodeproj \
+            -scheme Thefeed \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath build/Thefeed.xcarchive \
+            archive \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            DEVELOPMENT_TEAM=""
+
+      - name: Pack unsigned IPA
+        run: |
+          VERSION=${GITHUB_REF_NAME:-dev}
+          mkdir -p build/Payload
+          cp -r build/Thefeed.xcarchive/Products/Applications/Thefeed.app build/Payload/
+          (cd build && zip -qry "thefeed-ios-${VERSION}-unsigned.ipa" Payload)
+          ls -lh build/*.ipa
+
+      - name: Upload iOS IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: thefeed-ios-ipa
+          path: build/thefeed-ios-*-unsigned.ipa
+
   release:
-    needs: [build, android-apk]
+    needs: [build, android-apk, ios-ipa]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     steps:
@@ -254,3 +306,6 @@ jobs:
             | Windows | amd64 | [server-سرور](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/thefeed-server-windows-amd64.exe) / [client-کلاینت](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/thefeed-client-${{ github.ref_name }}-windows-amd64.exe) |
             | Android | arm64-v8a (most modern phones) | [thefeed-android-${{ github.ref_name }}-arm64-v8a.apk - اندروید (گوشی‌های جدید)](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/thefeed-android-${{ github.ref_name }}-arm64-v8a.apk) |
             | Android | armeabi-v7a (older 32-bit phones) | [thefeed-android-${{ github.ref_name }}-armeabi-v7a.apk - اندروید (دستگاه‌های قدیمی‌تر)](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/thefeed-android-${{ github.ref_name }}-armeabi-v7a.apk) |
+            | iOS (unsigned) | universal | [thefeed-ios-${{ github.ref_name }}-unsigned.ipa](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/thefeed-ios-${{ github.ref_name }}-unsigned.ipa) |
+
+            **iOS / iPadOS (preview, iOS 14+):** the `.ipa` is unsigned. Re-sign it with your own Apple ID and provisioning profile (AltStore, Sideloadly, or `xcrun altool` upload to your own TestFlight). It will not install directly from a download.

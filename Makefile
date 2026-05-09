@@ -1,4 +1,5 @@
-.PHONY: all build build-server build-client test clean lint fmt vet
+.PHONY: all build build-server build-client test clean lint fmt vet \
+	ios-bind ios-bind-catalyst ios-build ios-test ios-clean ios-list-sims ios-deps
 
 BINARY_SERVER = thefeed-server
 BINARY_CLIENT = thefeed-client
@@ -96,6 +97,46 @@ build-android-arm64:
 build-android-arm:
 	@mkdir -p $(BUILD_DIR)
 	GOOS=linux GOARCH=arm GOARM=7 go build $(call CLIENT_GOFLAGS,thefeed-client-android-arm) -o $(BUILD_DIR)/$(BINARY_CLIENT)-android-arm ./cmd/client
+
+# ===== iOS / Mac Catalyst =====
+# Requires: Xcode + gomobile (go install golang.org/x/mobile/cmd/gomobile@latest && gomobile init)
+
+IOS_DIR = ios
+IOS_FRAMEWORK = $(IOS_DIR)/Mobile.xcframework
+IOS_SCHEME = Thefeed
+IOS_PROJECT = $(IOS_DIR)/Thefeed.xcodeproj
+# Default simulator: pick the first available iPhone (override with IOS_SIM_NAME='iPhone 17').
+IOS_SIM_NAME ?= $(shell xcrun simctl list devices available 2>/dev/null | awk -F'[()]' '/-- iOS [0-9]/{ios=1;next} /^-- /{ios=0} ios && /iPhone/{print $$1; exit}' | sed 's/^[[:space:]]*//;s/[[:space:]]*$$//')
+
+ios-deps:
+	@grep -q "golang.org/x/mobile" go.mod || go get golang.org/x/mobile/bind golang.org/x/mobile/bind/objc
+	go mod tidy
+
+ios-bind: ios-deps
+	@command -v gomobile >/dev/null 2>&1 || { echo "gomobile not found. Run: go install golang.org/x/mobile/cmd/gomobile@latest && gomobile init"; exit 1; }
+	gomobile bind -iosversion=14.0 -target=ios,iossimulator -o $(IOS_FRAMEWORK) ./mobile
+
+ios-bind-catalyst: ios-deps
+	@command -v gomobile >/dev/null 2>&1 || { echo "gomobile not found"; exit 1; }
+	gomobile bind -iosversion=14.0 -target=ios,iossimulator,maccatalyst -o $(IOS_FRAMEWORK) ./mobile
+
+ios-list-sims:
+	xcrun simctl list devices available
+
+ios-build: $(IOS_FRAMEWORK)
+	xcodebuild -project $(IOS_PROJECT) -scheme $(IOS_SCHEME) \
+		-destination 'platform=iOS Simulator,name=$(IOS_SIM_NAME)' \
+		build
+
+ios-test: $(IOS_FRAMEWORK)
+	xcodebuild test -project $(IOS_PROJECT) -scheme $(IOS_SCHEME) \
+		-destination 'platform=iOS Simulator,name=$(IOS_SIM_NAME)'
+
+$(IOS_FRAMEWORK):
+	$(MAKE) ios-bind
+
+ios-clean:
+	rm -rf $(IOS_FRAMEWORK) $(IOS_DIR)/build $(IOS_DIR)/DerivedData
 
 # UPX compression (requires upx in PATH) — only for Linux/Windows binaries
 upx:

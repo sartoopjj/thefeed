@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/url"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -25,17 +26,22 @@ type telemirrorHub struct {
 	store  *telemirror.Store
 	imgs   *telemirror.ImageCache
 
+	// onUpdate fires after a successful refresh so the SSE channel can
+	// nudge the frontend to re-fetch. nil-safe.
+	onUpdate func(username string)
+
 	mu         sync.Mutex
 	refreshing map[string]chan struct{}
 }
 
-func newTelemirrorHub(dataDir string) *telemirrorHub {
+func newTelemirrorHub(dataDir string, onUpdate func(string)) *telemirrorHub {
 	tmDir := filepath.Join(dataDir, "telemirror")
 	return &telemirrorHub{
 		client:     telemirror.NewClient(),
 		cache:      telemirror.NewCache(tmDir),
 		store:      telemirror.NewStore(dataDir),
 		imgs:       telemirror.NewImageCache(filepath.Join(tmDir, "images")),
+		onUpdate:   onUpdate,
 		refreshing: make(map[string]chan struct{}),
 	}
 }
@@ -110,12 +116,37 @@ func (h *telemirrorHub) handleChannel(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, rewriteImageURLs(cached))
 		return
 	}
+
+	// forceRefresh + cache hit: trigger refresh in background but cap
+	// how long we make the user wait. On flaky networks fronting can
+	// take minutes — we'd rather return cached than time out. The
+	// background fetch keeps running (h.refresh coalesces concurrent
+	// callers), so the next request sees fresh data.
+	if forceRefresh && cached != nil {
+		ch := make(chan *telemirror.FetchResult, 1)
+		go func() {
+			res, err := h.refresh(username)
+			if err != nil || res == nil {
+				ch <- nil
+				return
+			}
+			ch <- res
+		}()
+		select {
+		case res := <-ch:
+			if res != nil {
+				writeJSON(w, rewriteImageURLs(res))
+				return
+			}
+		case <-time.After(15 * time.Second):
+		}
+		writeJSON(w, rewriteImageURLs(cached))
+		return
+	}
+
+	// No cache yet — must wait for the first fetch.
 	res, err := h.refresh(username)
 	if err != nil {
-		if cached != nil {
-			writeJSON(w, rewriteImageURLs(cached))
-			return
-		}
 		http.Error(w, err.Error(), 502)
 		return
 	}
@@ -306,6 +337,9 @@ func (h *telemirrorHub) refresh(username string) (*telemirror.FetchResult, error
 	}
 	res := &telemirror.FetchResult{Channel: *chInfo, Posts: posts}
 	_ = h.cache.Put(username, res)
+	if h.onUpdate != nil {
+		h.onUpdate(username)
+	}
 	go h.ensureAvatarCached(chInfo.Username, chInfo.Photo)
 	return res, nil
 }
@@ -390,4 +424,43 @@ func (h *telemirrorHub) handleAvatar(w http.ResponseWriter, r *http.Request) {
 func (h *telemirrorHub) ClearCache() {
 	h.cache.Clear()
 	h.imgs.Clear()
+}
+
+// handleOlder serves /api/telemirror/older/<username>?before=<id>.
+// Fetches a fresh widget filtered to posts older than the given id.
+// Not cached — every call hits upstream because pagination data
+// otherwise grows unbounded per channel.
+func (h *telemirrorHub) handleOlder(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", 405)
+		return
+	}
+	username := strings.ToLower(telemirror.SanitizeUsername(
+		strings.TrimPrefix(r.URL.Path, "/api/telemirror/older/")))
+	if username == "" {
+		http.Error(w, "missing username", 400)
+		return
+	}
+	beforeID, _ := strconv.Atoi(r.URL.Query().Get("before"))
+	if beforeID <= 0 {
+		http.Error(w, "missing before", 400)
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 60*time.Second)
+	defer cancel()
+	body, err := h.client.FetchHTMLBefore(ctx, username, beforeID)
+	if err != nil {
+		http.Error(w, err.Error(), 502)
+		return
+	}
+	chInfo, posts, err := telemirror.ParseHTML(body)
+	if err != nil {
+		http.Error(w, err.Error(), 502)
+		return
+	}
+	if chInfo.Username == "" {
+		chInfo.Username = username
+	}
+	res := &telemirror.FetchResult{Channel: *chInfo, Posts: posts}
+	writeJSON(w, rewriteImageURLs(res))
 }

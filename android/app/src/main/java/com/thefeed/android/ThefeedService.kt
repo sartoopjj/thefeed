@@ -11,6 +11,7 @@ import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
 import java.io.File
+import java.net.InetSocketAddress
 import java.net.ServerSocket
 
 class ThefeedService : Service() {
@@ -135,25 +136,35 @@ class ThefeedService : Service() {
         return bin
     }
 
-    private fun findFreePort(): Int {
-        ServerSocket(0).use { socket ->
-            socket.reuseAddress = true
-            return socket.localPort
+    private fun tryBind(port: Int): Boolean {
+        return try {
+            val s = ServerSocket()
+            // reuseAddress must be set BEFORE bind so the close doesn't
+            // leave the port in TIME_WAIT and block the Go binary.
+            s.reuseAddress = true
+            s.bind(InetSocketAddress("127.0.0.1", port))
+            s.close()
+            true
+        } catch (_: Exception) {
+            false
         }
     }
 
-    // Try the last port first; fall back to a new free one if it's
-    // taken. Keeps localStorage origin stable across launches.
+    // Try the saved port first, then scan a small fixed range so the
+    // WebView origin is stable across launches. Last resort: kernel-
+    // assigned (any high port).
     private fun pickPort(): Int {
         val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         val last = prefs.getInt(PREF_PORT, -1)
-        if (last in 1024..65535) {
-            try {
-                ServerSocket(last).use { it.reuseAddress = true }
-                return last
-            } catch (_: Exception) { }
+        if (last in PORT_RANGE_MIN..PORT_RANGE_MAX && tryBind(last)) return last
+        for (p in PORT_RANGE_MIN..PORT_RANGE_MAX) {
+            if (tryBind(p)) return p
         }
-        return findFreePort()
+        return ServerSocket().use {
+            it.reuseAddress = true
+            it.bind(InetSocketAddress("127.0.0.1", 0))
+            it.localPort
+        }
     }
 
     private fun savePort(port: Int) {
@@ -219,5 +230,8 @@ class ThefeedService : Service() {
         const val PREFS_NAME = "thefeed_runtime"
         const val PREF_PORT = "port"
         const val ACTION_STOP = "com.thefeed.android.STOP"
+        // Scanned in order; first one that binds wins.
+        const val PORT_RANGE_MIN = 38000
+        const val PORT_RANGE_MAX = 38099
     }
 }

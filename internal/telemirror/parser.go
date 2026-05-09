@@ -117,13 +117,15 @@ func parseSinglePost(wrap *html.Node) *Post {
 				m.Duration = textOf(d)
 			}
 			p.Media = append(p.Media, m)
-		case hasClass(n, "tgme_widget_message_voice"), hasClass(n, "tgme_widget_message_voice_player"):
+		case hasClass(n, "tgme_widget_message_voice_player"):
+			// Outer player wraps the inner _voice element; only match the
+			// outer to avoid emitting one Media per nested element.
 			m := Media{Type: "voice"}
 			if d := findFirstByClass(n, "tgme_widget_message_voice_duration"); d != nil {
 				m.Duration = textOf(d)
 			}
 			p.Media = append(p.Media, m)
-		case hasClass(n, "tgme_widget_message_audio"), hasClass(n, "tgme_widget_message_audio_player"):
+		case hasClass(n, "tgme_widget_message_audio_player"):
 			m := Media{Type: "audio"}
 			if d := findFirstByClass(n, "tgme_widget_message_audio_duration"); d != nil {
 				m.Duration = textOf(d)
@@ -135,7 +137,7 @@ func parseSinglePost(wrap *html.Node) *Post {
 				m.Subtitle = textOf(a)
 			}
 			p.Media = append(p.Media, m)
-		case hasClass(n, "tgme_widget_message_document_wrap"), hasClass(n, "tgme_widget_message_document"):
+		case hasClass(n, "tgme_widget_message_document_wrap"):
 			m := Media{Type: "document"}
 			if t := findFirstByClass(n, "tgme_widget_message_document_title"); t != nil {
 				m.Title = textOf(t)
@@ -144,7 +146,7 @@ func parseSinglePost(wrap *html.Node) *Post {
 				m.Subtitle = textOf(e)
 			}
 			p.Media = append(p.Media, m)
-		case hasClass(n, "tgme_widget_message_sticker_wrap"), hasClass(n, "tgme_widget_message_sticker"):
+		case hasClass(n, "tgme_widget_message_sticker_wrap"):
 			m := Media{Type: "sticker"}
 			if img := findFirstByTag(n, "img"); img != nil {
 				m.Thumb = attrOf(img, "src")

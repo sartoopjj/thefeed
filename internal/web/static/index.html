@@ -203,12 +203,12 @@
     }
 
     .sidebar-search {
-      padding: 7px 12px;
+      padding: 5px 10px;
       border: none;
-      border-radius: 18px;
+      border-radius: 14px;
       background: var(--surface);
       color: var(--text);
-      font-size: 13px;
+      font-size: 12px;
       outline: none;
       width: 100%
     }
@@ -529,7 +529,7 @@
       text-decoration: underline
     }
 
-    .free-iran {
+    .positive-tag {
       color: var(--success);
       font-weight: 700
     }
@@ -688,6 +688,29 @@
       gap: 10px;
       direction: ltr
     }
+
+    .floating-date {
+      /* Sit just below the chat-header (~54px tall). */
+      position: absolute;
+      top: 64px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 50;
+      padding: 4px 12px;
+      border-radius: 12px;
+      background: color-mix(in oklab, var(--bg-elevated, var(--bg)) 75%, transparent);
+      color: var(--text);
+      border: 1px solid var(--border);
+      font-size: 11px;
+      font-weight: 500;
+      backdrop-filter: blur(8px);
+      box-shadow: 0 1px 3px rgba(0,0,0,.08);
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.25s ease;
+      white-space: nowrap;
+    }
+    .floating-date.visible { opacity: 0.92; }
 
     .msg-date-sep {
       text-align: center;
@@ -1076,7 +1099,11 @@
       background: var(--bg);
       display: none;
       flex-direction: column;
-      color: var(--text)
+      color: var(--text);
+      padding-top: var(--safe-top);
+      padding-bottom: var(--safe-bottom);
+      padding-left: var(--safe-left);
+      padding-right: var(--safe-right)
     }
 
     .tm-modal.active {
@@ -1467,6 +1494,100 @@
       opacity: .85
     }
 
+    .tm-post-author { font-weight: 700; color: var(--accent) }
+    #tmLightbox {
+      position: fixed; inset: 0; z-index: 99999;
+      background: rgba(0,0,0,.92);
+      display: flex; align-items: center; justify-content: center;
+      padding: 20px;
+      cursor: zoom-out;
+    }
+    #tmLightbox img {
+      max-width: 100%; max-height: 100%;
+      object-fit: contain;
+      box-shadow: 0 4px 30px rgba(0,0,0,.5);
+      cursor: default;
+    }
+    .tm-lightbox-close {
+      position: absolute;
+      top: max(12px, env(safe-area-inset-top));
+      inset-inline-end: 16px;
+      width: 40px; height: 40px;
+      border-radius: 50%;
+      border: none;
+      background: rgba(255,255,255,.15);
+      color: #fff;
+      font-size: 26px; line-height: 1;
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      backdrop-filter: blur(6px);
+    }
+    .tm-lightbox-close:hover { background: rgba(255,255,255,.28); }
+    .donate-addr-row {
+      display: flex; align-items: center; gap: 8px;
+      background: var(--surface, var(--bg-elevated, var(--bg)));
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 8px 10px;
+      direction: ltr;
+    }
+    .donate-addr {
+      flex: 1; min-width: 0;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 12px;
+      overflow-wrap: anywhere;
+      word-break: break-all;
+      color: var(--text);
+    }
+    .donate-thanks { margin-top: 14px; font-size: 13px; color: var(--text-dim); text-align: center; }
+    .donate-body { font-size: 13px; line-height: 1.7; }
+
+    .tm-scroll-down {
+      position: absolute;
+      bottom: max(20px, env(safe-area-inset-bottom));
+      inset-inline-end: 16px;
+      width: 40px; height: 40px;
+      border-radius: 50%;
+      border: 1px solid var(--border);
+      background: var(--surface2, var(--bg-elevated, var(--bg)));
+      color: var(--text);
+      font-size: 18px;
+      display: none;
+      align-items: center; justify-content: center;
+      box-shadow: 0 2px 10px rgba(0,0,0,.4);
+      z-index: 10;
+      cursor: pointer;
+    }
+    .tm-scroll-down.visible { display: flex; }
+    .tm-scroll-down:hover {
+      background: color-mix(in oklab, var(--accent) 12%, var(--surface2, var(--bg)));
+    }
+    .tm-load-older-row {
+      display: flex; justify-content: center;
+      margin: 8px 0 14px;
+    }
+    .tm-load-older {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 6px 16px;
+      border-radius: 14px;
+      font-size: 13px;
+      cursor: pointer;
+      transition: background .15s, border-color .15s;
+    }
+    .tm-load-older:hover {
+      background: color-mix(in oklab, var(--accent) 10%, transparent);
+      border-color: color-mix(in oklab, var(--accent) 50%, var(--border));
+    }
+    .tm-load-older:disabled { opacity: .6; cursor: default; }
+    .tm-post-msgid {
+      font-size: 10px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      color: var(--text-dim); padding: 1px 5px; border-radius: 4px;
+      background: color-mix(in oklab, var(--text-dim) 12%, transparent);
+      user-select: text
+    }
+    .tm-post-time { opacity: .85 }
     .tm-post-edited {
       font-size: 10px;
       padding: 1px 6px;
@@ -1480,6 +1601,12 @@
       line-height: 1.7;
       overflow-wrap: anywhere;
       /* break long URLs / unbroken strings */
+      /* Inherit from --font-size (set by the global Settings slider) and
+         add a small bump so telemirror posts read at the same scale as
+         main-feed messages. */
+      font-size: calc(var(--font-size) + 1px);
+      line-height: 1.7;
+      overflow-wrap: anywhere;          /* break long URLs / unbroken strings */
       word-break: break-word
     }
 
@@ -3457,7 +3584,51 @@
 </head>
 
 <body>
-  <a href="#messages" class="skip-link" data-i18n="skip_to_messages">Skip to messages</a>
+
+  <!-- First-launch language picker. Visible until lang is set; pure HTML/JS
+       so it works on iOS, Android, and the browser without native code. -->
+  <div id="firstRunLangModal" style="display:none;position:fixed;inset:0;z-index:99999;background:#0f1722;color:#fff;align-items:center;justify-content:center;flex-direction:column;padding:24px;font-family:-apple-system,BlinkMacSystemFont,system-ui,sans-serif">
+    <div style="font-size:38px;font-weight:700;margin-bottom:6px;letter-spacing:-0.5px">TheFeed</div>
+    <div style="opacity:.6;font-size:14px;margin-bottom:36px;text-align:center">Choose your language &nbsp;·&nbsp; زبان خود را انتخاب کنید</div>
+    <div style="display:flex;flex-direction:column;gap:14px;width:100%;max-width:320px">
+      <button onclick="firstRunPickLang('en')" style="background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);color:#fff;border-radius:14px;padding:18px;font-size:18px;font-weight:600;cursor:pointer">English<div style="font-size:12px;font-weight:400;opacity:.7;margin-top:2px">Continue in English</div></button>
+      <button onclick="firstRunPickLang('fa')" style="background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);color:#fff;border-radius:14px;padding:18px;font-size:18px;font-weight:600;cursor:pointer">فارسی<div style="font-size:12px;font-weight:400;opacity:.7;margin-top:2px">ادامه به زبان فارسی</div></button>
+    </div>
+  </div>
+  <script>
+    (function () {
+      // Server is the source of truth: wiping thefeeddata/ resets lang
+      // along with everything else. Sync XHR keeps this decision before
+      // first paint so the modal never flashes for returning users.
+      var lang = '';
+      try {
+        var xhr = new XMLHttpRequest();
+        xhr.open('GET', '/api/settings', false);
+        xhr.send();
+        if (xhr.status === 200) lang = (JSON.parse(xhr.responseText).lang || '');
+      } catch (e) {
+        // Server unreachable — fall back to client-side caches.
+        try { if (typeof IOS !== 'undefined' && IOS.getLang) lang = IOS.getLang() || ''; } catch (e2) { }
+        try { if (!lang && typeof Android !== 'undefined' && Android.getLang) lang = Android.getLang() || ''; } catch (e2) { }
+        if (!lang) lang = localStorage.getItem('thefeed_lang') || '';
+      }
+      if (!lang) document.getElementById('firstRunLangModal').style.display = 'flex';
+    })();
+    function firstRunPickLang(l) {
+      // Persist server-side synchronously so the reload sees it.
+      try {
+        var xhr = new XMLHttpRequest();
+        xhr.open('POST', '/api/settings', false);
+        xhr.setRequestHeader('Content-Type', 'application/json');
+        xhr.send(JSON.stringify({ lang: l }));
+      } catch (e) { }
+      try { localStorage.setItem('thefeed_lang', l); } catch (e) { }
+      try { if (typeof IOS !== 'undefined' && IOS.setLang) IOS.setLang(l); } catch (e) { }
+      try { if (typeof Android !== 'undefined' && Android.setLang) Android.setLang(l); } catch (e) { }
+      location.reload();
+    }
+  </script>
+
   <div class="app" id="app">
 
     <!-- SIDEBAR -->
@@ -3496,9 +3667,13 @@
           channels yet</div>
       </div>
       <div class="sidebar-footer">
-        TELEGRAM: <a href="https://t.me/networkti" target="_blank">@networkti</a>
+        <a href="https://t.me/networkti" target="_blank" data-i18n="telegram">Telegram</a>
         &middot;
-        <a href="https://github.com/sartoopjj/thefeed" target="_blank">GitHub</a>
+        <a href="https://github.com/sartoopjj/thefeed" target="_blank" data-i18n="github">GitHub</a>
+        &middot;
+        <a href="#" onclick="event.preventDefault();openDonate()" data-i18n="donate">Donate</a>
+        &middot;
+        <a href="https://sartoopjj.github.io/thefeed/privacy-policy.html" target="_blank" data-i18n="privacy_policy">Privacy</a>
       </div>
     </nav>
 
@@ -3554,6 +3729,7 @@
           <button class="btn btn-primary" onclick="openProfiles()" data-i18n="set_up">Set Up</button>
         </div>
       </div>
+      <div class="floating-date" id="floatingDate" dir="auto" hidden></div>
       <div class="send-panel" id="sendPanel">
         <label for="sendInput" class="sr-only" data-i18n="sr_write_message">Write a message</label>
         <input class="send-input" id="sendInput" data-i18n-ph="write_message" placeholder="Write a message..."
@@ -3568,7 +3744,30 @@
       <div class="progress-panel" id="progressPanel"></div>
       <div class="log-toggle" onclick="toggleLog()"><span>LOG</span><span id="logToggleIcon">&#9654;</span></div>
       <div class="log-panel hidden" id="logPanel"></div>
-    </main>
+    </div>
+  </div>
+
+  <!-- DONATE MODAL -->
+  <div class="modal-overlay" id="donateModal" onclick="if(event.target===this)closeDonate()">
+    <div class="modal" style="max-width:440px">
+      <h2 data-i18n="donate">Donate</h2>
+      <div class="donate-body" data-i18n-body="donate_body" dir="auto">
+        Send any amount in <b>USDT</b> or <b>USDC</b> on:
+        <ul style="margin:8px 0 12px 0;padding-inline-start:20px">
+          <li>Polygon</li>
+          <li>BNB Chain</li>
+        </ul>
+      </div>
+      <label style="font-size:12px;color:var(--text-dim);display:block;margin-bottom:4px" data-i18n="wallet_address">Wallet address</label>
+      <div class="donate-addr-row">
+        <code id="donateAddr" class="donate-addr">0xe73f022f668c57cce79feccd875ac7332311013a</code>
+        <button class="btn btn-flat" onclick="copyDonateAddr()" data-i18n="copy">Copy</button>
+      </div>
+      <div class="donate-thanks" data-i18n="donate_thanks" dir="auto">Thanks for your support ❤️</div>
+      <div style="margin-top:16px;text-align:end">
+        <button class="btn btn-primary" onclick="closeDonate()" data-i18n="close">Close</button>
+      </div>
+    </div>
   </div>
 
   <!-- TOAST -->
@@ -3604,6 +3803,7 @@
       <main id="tmContent" class="tm-content">
         <div class="tm-empty" data-i18n="telemirror_pick_channel">Pick a channel</div>
       </main>
+      <button class="tm-scroll-down" id="tmScrollDownBtn" onclick="tmScrollToBottom()" aria-label="Scroll to latest" title="Scroll to latest">&#8595;</button>
     </div>
   </div>
   <!-- END telemirror -->
@@ -3836,8 +4036,9 @@
       <div id="peWarning" class="tg-warning"></div>
       <div class="form-group"><label data-i18n="nickname">Nickname</label><input id="peNick" maxlength="32"
           placeholder="My Server">
+      <div class="form-group"><label data-i18n="nickname">Nickname</label><input id="peNick" maxlength="32" placeholder="My Server" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
       </div>
-      <div class="form-group"><label data-i18n="domain">Domain</label><input id="peDomain" placeholder="t.example.com">
+      <div class="form-group"><label data-i18n="domain">Domain</label><input id="peDomain" placeholder="t.example.com" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
       </div>
       <div class="form-group"><label data-i18n="passphrase">Passphrase</label><input type="password" id="peKey"
           placeholder="..."></div>
@@ -4033,6 +4234,8 @@
                   class="iran-flag-icon" src="/static/iran-lion-sun.svg" alt="IR"
                   style="height:14px;vertical-align:middle;margin-right:2px"> <span
                   data-i18n="scanner_load_presets">Load IR Presets</span></button>
+              <button class="btn btn-flat" onclick="document.getElementById('scanTargets').value='';updateScanIpCount()" data-i18n="scanner_clear_targets" style="font-size:12px;padding:4px 10px">&#128465; Clear</button>
+              <button class="btn btn-flat" onclick="loadScannerPresets()" style="font-size:12px;padding:4px 10px"><img class="lion-sun-icon" src="/static/lion-sun.svg" alt="" style="height:14px;vertical-align:middle;margin-right:2px"> <span data-i18n="scanner_load_presets">Load Presets</span></button>
             </div>
           </div>
           <textarea id="scanTargets" rows="3" placeholder="5.1.0.0/16&#10;8.8.8.8&#10;1.1.1.1"
@@ -4262,6 +4465,7 @@
         update_download_hint: 'برای دانلود نسخه جدید روی دکمه زیر کلیک کنید:',
         update_download_btn: 'دانلود',
         update_later_btn: 'بعداً',
+        update_skip_btn: 'دیگر نمایش نده',
         channel_mgmt_note: 'قابلیت مدیریت کانال نیاز به فعال سازی سمت سرور دارد. اگر توسط ادمین غیرفعال شده باشد، افزودن/حذف کار نمی\u200cکند.',
         channel_mgmt_inactive: 'برای مدیریت کانال\u200cها، ابتدا این پروفایل را فعال کنید.',
         channel_placeholder: 'نام کاربری کانال',
@@ -4323,8 +4527,18 @@
         scanner_about_short: 'بازه‌های IP را اسکن کنید تا ریزالورهای DNS سازگار با سرور شما پیدا شوند.',
         scanner_read_more: 'بیشتر بخوانید...',
         scanner_read_less: 'بستن',
-        scanner_load_presets: 'بارگذاری لیست ایران',
-        scanner_preset_active: 'ریزالورهای ایران بارگذاری شد',
+        scanner_load_presets: 'بارگذاری لیست پیش‌فرض',
+        scanner_preset_active: 'ریزالورهای پیش‌فرض بارگذاری شد',
+        privacy_policy: 'حریم خصوصی',
+        telegram: 'تلگرام',
+        github: 'گیت‌هاب',
+        donate: 'حمایت مالی',
+        donate_body: 'برای حمایت از من می‌تونید مبلغ دلخواه‌تون رو به صورت <b>USDT</b> یا <b>USDC</b> روی شبکه‌های زیر بفرستید: <ul style="margin:8px 0 12px 0;padding-inline-start:20px"><li>Polygon</li><li>BNB Chain</li></ul>',
+        wallet_address: 'آدرس ولت',
+        donate_thanks: 'ممنون از حمایت‌تون ❤️',
+        telemirror_load_older: 'بارگذاری پیام‌های قدیمی‌تر',
+        telemirror_no_older: 'پیام قدیمی‌تری وجود ندارد',
+        telemirror_load_older_failed: 'خطا در بارگذاری پیام‌های قدیمی',
         scanner_from_input: 'از ورودی',
         scanner_from_preset: 'از پیش‌فرض',
         scanner_new_scan: 'اسکن جدید',
@@ -4522,6 +4736,7 @@
         update_download_hint: 'Click the button below to download the new version:',
         update_download_btn: 'Download',
         update_later_btn: 'Later',
+        update_skip_btn: "Don't show again",
         channel_mgmt_note: 'Channel management requires server-side support. If disabled by the server admin, adding/removing channels will not work.',
         channel_mgmt_inactive: 'Switch to this profile first to manage its channels.',
         channel_placeholder: 'channel_username',
@@ -4583,8 +4798,18 @@
         scanner_about_short: 'Scan IP ranges to find DNS resolvers that work with your server.',
         scanner_read_more: 'Read more...',
         scanner_read_less: 'Show less',
-        scanner_load_presets: 'Load IR Presets',
-        scanner_preset_active: 'Iran resolvers loaded',
+        scanner_load_presets: 'Load Presets',
+        scanner_preset_active: 'Default resolvers loaded',
+        privacy_policy: 'Privacy',
+        telegram: 'Telegram',
+        github: 'GitHub',
+        donate: 'Donate',
+        donate_body: 'Send any amount in <b>USDT</b> or <b>USDC</b> on: <ul style="margin:8px 0 12px 0;padding-inline-start:20px"><li>Polygon</li><li>BNB Chain</li></ul>',
+        wallet_address: 'Wallet address',
+        donate_thanks: 'Thanks for your support ❤️',
+        telemirror_load_older: 'Load older posts',
+        telemirror_no_older: 'No older posts',
+        telemirror_load_older_failed: 'Failed to load older posts',
         scanner_from_input: 'from input',
         scanner_from_preset: 'from preset',
         scanner_new_scan: 'New Scan',
@@ -4674,7 +4899,27 @@
         sr_msg_at: ' at ',
       }
     };
-    var lang = localStorage.getItem('thefeed_lang') || 'fa';
+    // Order: native bridge (iOS/Android) → localStorage → 'fa'.
+    // iOS localStorage is per-origin (host:port) so picking up the
+    // native value first survives an embedded server rebinding to a
+    // new loopback port on each launch.
+    var lang = (function () {
+      // Same precedence as the modal-init script: server first (so a
+      // wiped thefeeddata/ also wipes the language), then native bridge,
+      // then localStorage as a final cache.
+      try {
+        var xhr = new XMLHttpRequest();
+        xhr.open('GET', '/api/settings', false);
+        xhr.send();
+        if (xhr.status === 200) {
+          var d = JSON.parse(xhr.responseText);
+          if (d.lang) return d.lang;
+        }
+      } catch (e) { }
+      try { if (typeof IOS !== 'undefined' && IOS.getLang) { var v = IOS.getLang(); if (v) return v; } } catch (e) { }
+      try { if (typeof Android !== 'undefined' && Android.getLang) { var v2 = Android.getLang(); if (v2) return v2; } } catch (e) { }
+      return localStorage.getItem('thefeed_lang') || '';
+    })();
     function t(k) { return (I18N[lang] && I18N[lang][k]) || I18N.en[k] || k }
     function applyLang() {
       var isRtl = lang === 'fa';
@@ -4683,9 +4928,9 @@
       document.querySelectorAll('[data-i18n]').forEach(function (el) { el.textContent = t(el.dataset.i18n) });
       document.querySelectorAll('[data-i18n-ph]').forEach(function (el) { el.placeholder = t(el.dataset.i18nPh) });
       document.querySelectorAll('[data-i18n-title]').forEach(function (el) { el.title = t(el.dataset.i18nTitle) });
-      document.querySelectorAll('[data-i18n-aria]').forEach(function (el) { el.setAttribute('aria-label', t(el.dataset.i18nAria)) });
-      document.getElementById('langFa').classList.toggle('active-lang', lang === 'fa');
-      document.getElementById('langEn').classList.toggle('active-lang', lang === 'en');
+      document.querySelectorAll('[data-i18n-body]').forEach(function (el) { el.innerHTML = t(el.dataset.i18nBody) });
+      var lf = document.getElementById('langFa'); if (lf) lf.classList.toggle('active-lang', lang === 'fa');
+      var le = document.getElementById('langEn'); if (le) le.classList.toggle('active-lang', lang === 'en');
       document.getElementById('sendInput').style.direction = isRtl ? 'rtl' : 'ltr';
       applyThemeButtons();
       // Re-render dynamic content
@@ -4696,6 +4941,7 @@
       localStorage.setItem('thefeed_lang', l);
       applyLang();
       if (typeof Android !== 'undefined') try { Android.setLang(l) } catch (e) { }
+      if (typeof IOS !== 'undefined' && IOS.setLang) try { IOS.setLang(l) } catch (e) { }
       fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ lang: l }) }).catch(function () { });
     }
 
@@ -4771,7 +5017,10 @@
     });
     function filterChannels() {
       var q = document.getElementById('channelSearch').value.toLowerCase();
-      document.querySelectorAll('.ch-item').forEach(function (el) { el.style.display = el.dataset.name.toLowerCase().includes(q) ? 'flex' : 'none' });
+      document.querySelectorAll('.ch-item').forEach(function (el) {
+        var hay = (el.dataset.name + ' ' + (el.dataset.label || '')).toLowerCase();
+        el.style.display = hay.includes(q) ? 'flex' : 'none';
+      });
     }
 
     // ===== INIT =====
@@ -5265,10 +5514,16 @@
         renderLatestVersion();
         if (data.hasUpdate && data.downloadURL) {
           if (!manual) {
-            // Don't nag the same user about the same version twice.
-            var seenKey = 'thefeed_seen_gh_update_' + normalizeVersion(data.latest);
-            if (localStorage.getItem(seenKey) === '1') return;
-            localStorage.setItem(seenKey, '1');
+            // Server-stored skip survives per-port localStorage wipes.
+            var skipped = '';
+            try {
+              var sx = new XMLHttpRequest();
+              sx.open('GET', '/api/settings', false);
+              sx.send();
+              if (sx.status === 200) skipped = JSON.parse(sx.responseText).skipUpdateVersion || '';
+            } catch (e) { }
+            if (!skipped) skipped = localStorage.getItem('thefeed_skip_gh_update_' + normalizeVersion(data.latest)) === '1' ? data.latest : '';
+            if (normalizeVersion(skipped) === normalizeVersion(data.latest)) return;
           }
           showUpdateDialog(data.latest, data.downloadURL);
         } else if (manual) {
@@ -5280,39 +5535,44 @@
     }
 
     function showUpdateDialog(newVersion, url) {
-      // Re-use the existing modal styling. Two buttons: download (opens
-      // the binary URL in a new tab / hands off to system app on Android)
-      // and later (just dismisses).
       var msg = (t('update_available') || 'New version available: {v}').replace('{v}', newVersion);
       var hint = t('update_download_hint') || 'Download the new version below.';
       var dl = t('update_download_btn') || 'Download';
       var later = t('update_later_btn') || 'Later';
+      var skip = t('update_skip_btn') || "Don't show again";
+      var skipKey = 'thefeed_skip_gh_update_' + normalizeVersion(newVersion);
       var overlay = document.createElement('div');
       overlay.className = 'modal-overlay active';
       overlay.innerHTML = '<div class="modal" style="max-width:380px">'
         + '<h2 style="margin-top:0">' + esc(msg) + '</h2>'
         + '<p style="font-size:13px;color:var(--text-dim);margin-bottom:12px;line-height:1.6">' + esc(hint) + '</p>'
         + '<p style="font-size:11px;color:var(--text-dim);margin-bottom:16px;word-break:break-all"><code>' + esc(url) + '</code></p>'
-        + '<div class="modal-actions">'
+        + '<div class="modal-actions" style="flex-wrap:wrap;gap:6px">'
+        + '  <button class="btn btn-flat" id="updateSkip">' + esc(skip) + '</button>'
         + '  <button class="btn btn-flat" id="updateLater">' + esc(later) + '</button>'
         + '  <button class="btn btn-primary" id="updateDownload">' + esc(dl) + '</button>'
         + '</div></div>';
       document.body.appendChild(overlay);
-      document.getElementById('updateLater').onclick = function () {
-        if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+      var dismiss = function () { if (overlay.parentNode) overlay.parentNode.removeChild(overlay); };
+      var persistSkip = function () {
+        try { localStorage.setItem(skipKey, '1'); } catch (e) { }
+        fetch('/api/settings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ skipUpdateVersion: newVersion })
+        }).catch(function () { });
       };
+      document.getElementById('updateLater').onclick = dismiss;
+      document.getElementById('updateSkip').onclick = function () { persistSkip(); dismiss(); };
       document.getElementById('updateDownload').onclick = function () {
         try {
           var a = document.createElement('a');
-          a.href = url;
-          a.target = '_blank';
-          a.rel = 'noopener noreferrer';
+          a.href = url; a.target = '_blank'; a.rel = 'noopener noreferrer';
           a.style.display = 'none';
-          document.body.appendChild(a);
-          a.click();
-          a.remove();
+          document.body.appendChild(a); a.click(); a.remove();
         } catch (e) { }
-        if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+        persistSkip();
+        dismiss();
       };
     }
 
@@ -5863,6 +6123,14 @@
         // populated from a bank scan, or user-triggered rescan
         // overwrote them). Refresh the tab strip so the count
         // badge stops showing 0 while resolvers are actually live.
+        // Server finished a background telemirror refresh for this
+        // channel — let telemirror.js re-fetch if it's the active one.
+        if (typeof data === 'string' && data.indexOf('telemirror:') === 0) {
+          if (typeof window.tmOnServerUpdate === 'function') {
+            try { window.tmOnServerUpdate(data.slice('telemirror:'.length)); } catch (e2) { }
+          }
+          return;
+        }
         if (data === 'resolver-lists') {
           if (document.getElementById('resolversModal').classList.contains('active')) {
             try { loadResolverLists(); } catch (e2) { }
@@ -5992,9 +6260,15 @@
       // pre-named profile instead of "thefeed.example.com" pulled
       // from the domain. Capped at 32 chars on this side; the
       // import side enforces the same cap defensively.
+      // Drop the default ":53" suffix from each resolver — the parser
+      // assumes 53 when no port is given, so omitting it shortens the
+      // URI considerably. Custom ports are kept and stay un-encoded.
+      var compact = resolvers.map(function (r) {
+        return r.replace(/:53$/, '');
+      }).join(',');
       var uri = 'thefeed://' + encodeURIComponent(p.config.domain)
         + '/' + encodeURIComponent(p.config.key)
-        + '?r=' + encodeURIComponent(resolvers.join(','));
+        + '?r=' + encodeURIComponent(compact).replace(/%3A/g, ':');
       var nick = (p.nickname || '').trim().slice(0, 32);
       if (nick && nick !== p.config.domain) {
         uri += '&n=' + encodeURIComponent(nick);
@@ -6214,7 +6488,7 @@
         // No 8.8.8.8 / 1.1.1.1 fallback — an empty resolver list in
         // the URI is the sender's deliberate choice (e.g. they want
         // the recipient to bring their own bank).
-        sharedNick = sharedNick.replace(/[\x00-\x1f\x7f]/g, '').trim().slice(0, 32);
+        sharedNick = sanitizeNickname(sharedNick);
         // Only ask about bank merging when the URI actually carried
         // resolvers — empty list means the sender shared zero, so
         // there's nothing to merge and no prompt to show.
@@ -6327,12 +6601,31 @@
       } catch (e) { showToast(e.message) }
     }
 
+    // sanitizeNickname extracts a clean alias from raw input. If the user
+    // pasted a thefeed:// URI, pulls the n= param. Strips control chars,
+    // the clipboard emoji, newlines, and trims to 32 chars.
+    function sanitizeNickname(raw) {
+      var v = String(raw || '');
+      var m = v.match(/thefeed:\/\/[^\s?#]+(?:\?[^\s#]*)?(?:[?&]n=([^&\s#]*))/i);
+      if (m && m[1]) {
+        try { v = decodeURIComponent(m[1].replace(/\+/g, ' ')); } catch (e) { v = m[1]; }
+      }
+      // iOS Quick Type appends UI text starting with the clipboard glyph
+      // (U+1F4CB) when the user manually pastes — cut from there.
+      var clipIdx = v.indexOf('📋');
+      if (clipIdx >= 0) v = v.slice(0, clipIdx);
+      // Strip control / zero-width / bidi / BOM characters.
+      v = v.replace(/[\u0000-\u001F\u007F\u200B-\u200F\u2028\u2029\uFEFF]/g, "");
+      v = v.replace(/\s+/g, ' ').trim();
+      return v.slice(0, 32);
+    }
+
     async function saveProfile() {
       var errEl = document.getElementById('peError'); errEl.style.display = 'none';
       // Trim and clamp the nickname server-side too: the maxlength
       // attribute on the input only stops keyboard typing, not paste
       // / programmatic value setting.
-      var nick = document.getElementById('peNick').value.trim().slice(0, 32);
+      var nick = sanitizeNickname(document.getElementById('peNick').value);
       var domain = document.getElementById('peDomain').value.trim();
       var key = document.getElementById('peKey').value;
       if (!domain || !key) { errEl.textContent = t('domain') + ' / ' + t('passphrase'); errEl.style.display = 'block'; return }
@@ -6586,7 +6879,7 @@
           }
           h += '<div class="ch-avatar">' + avatarImg + '<span class="ch-avatar-letter">' + esc(avatarText) + '</span></div>';
           var chSubText = !isX ? (handle.charAt(0) === '@' ? handle : '@' + handle) : '';
-          h += '<div class="ch-info"><div class="ch-name">' + formatIranTitleHtml(label) + (isPriv ? '<span class="ch-type-tag">' + t('private') + '</span>' : (isX ? '<span class="ch-type-tag x-tag">' + t('x_label') + '</span>' : '')) + '</div>';
+          h += '<div class="ch-info"><div class="ch-name">' + formatTitleWithFlag(label) + (isPriv ? '<span class="ch-type-tag">' + t('private') + '</span>' : (isX ? '<span class="ch-type-tag x-tag">' + t('x_label') + '</span>' : '')) + '</div>';
           if (chSubText) h += '<div class="ch-sub">' + esc(chSubText) + '</div>';
           h += '<div class="ch-preview">' + badge + '</div></div>';
           var autoKey = handle.replace(/^@/, '').trim();
@@ -6645,8 +6938,7 @@
       newMsgScrollDone = false;
       openChat();
       var ch = channels[num - 1]; var name = (ch && (ch.DisplayName || ch.displayName || ch.Name || ch.name)) || 'Channel ' + num;
-      document.getElementById('chatName').innerHTML = formatIranTitleHtml(name);
-      a11yAnnounce(t('sr_switched_channel') + name);
+      document.getElementById('chatName').innerHTML = formatTitleWithFlag(name);
       var chHandle = (ch && (ch.Name || ch.name)) || '';
       var isXCh = ch && (ch.ChatType || ch.chatType) === 2;
       var subHandle = (!isXCh && chHandle) ? (chHandle.charAt(0) === '@' ? chHandle : '@' + chHandle) : '';
@@ -7515,12 +7807,27 @@
     // of those from the close-confirmation dialog.
     window.handleAndroidBack = async function () {
       if (closeMediaLightbox()) return;
-      // Telemirror has its own full-screen modal (.tm-modal, not
-      // .modal-overlay). Drawer first, then modal, then anything else.
+      // Telemirror layered back: lightbox → mobile sidebar reopen →
+      // drawer close → modal close. Mirrors the popstate flow used on
+      // platforms that fire popstate naturally.
+      var tmLb = document.getElementById('tmLightbox');
+      if (tmLb) {
+        if (typeof tmCloseLightbox === 'function') tmCloseLightbox();
+        else tmLb.remove();
+        return;
+      }
       var tmModal = document.getElementById('telemirrorModal');
       if (tmModal && tmModal.classList.contains('active')) {
         var tmSb = document.getElementById('tmSidebar');
-        if (tmSb && tmSb.classList.contains('open')) {
+        var tmMenu = document.querySelector('.tm-menu');
+        var tmIsMobile = !!(tmMenu && getComputedStyle(tmMenu).display !== 'none');
+        // Mobile + drawer closed (channel view): reopen drawer instead
+        // of leaving telemirror.
+        if (tmIsMobile && tmSb && !tmSb.classList.contains('open')) {
+          tmSb.classList.add('open');
+          return;
+        }
+        if (tmSb && tmSb.classList.contains('open') && !tmIsMobile) {
           tmSb.classList.remove('open');
           return;
         }
@@ -7954,8 +8261,8 @@
     // and the body of a [REPLY] (so a reply that carries an image
     // still renders a downloadable media card instead of dropping it).
     function parseTextMedia(text, idBase) {
-      var iranify = function (s) {
-        return linkify(s).replace(/🇮🇷/g, '<img src="/static/iran-lion-sun.svg" alt="\u{1F981}☀️" style="height:1.1em;vertical-align:middle">');
+      var swapNationalFlag = function (s) {
+        return linkify(s).replace(/🇮🇷/g, '<img src="/static/lion-sun.svg" alt="\u{1F981}☀️" style="height:1.1em;vertical-align:middle">');
       };
       var mediaTypes = ['[IMAGE]', '[VIDEO]', '[FILE]', '[AUDIO]', '[STICKER]', '[GIF]', '[CONTACT]', '[LOCATION]'];
       var rest = text;
@@ -7979,15 +8286,15 @@
       var mediaHtml = '';
       var textHtml = '';
       if (cards.length === 0) {
-        textHtml = iranify(text);
+        textHtml = swapNationalFlag(text);
       } else if (cards.length === 1) {
         var c0 = cards[0];
         if (c0.parsed.downloadable || c0.parsed.size > 0) {
           mediaHtml = renderDownloadableMedia(c0.tag, c0.parsed, idBase);
-          textHtml = c0.parsed.caption ? iranify(c0.parsed.caption) : '';
+          textHtml = c0.parsed.caption ? swapNationalFlag(c0.parsed.caption) : '';
         } else {
           mediaHtml = '<div class="media-tag">' + c0.tag + '</div>';
-          textHtml = iranify(text.substring(c0.tag.length).replace(/^\n/, ''));
+          textHtml = swapNationalFlag(text.substring(c0.tag.length).replace(/^\n/, ''));
         }
       } else {
         mediaHtml = '<div class="media-album">';
@@ -7995,7 +8302,7 @@
           mediaHtml += renderDownloadableMedia(cards[k].tag, cards[k].parsed, idBase + '-' + k);
         }
         mediaHtml += '</div>';
-        textHtml = rest ? iranify(rest) : '';
+        textHtml = rest ? swapNationalFlag(rest) : '';
       }
       return { mediaHtml: mediaHtml, textHtml: textHtml };
     }
@@ -8054,7 +8361,7 @@
           text = '';
         }
         currentMsgTexts.push(text);
-        var mediaHtml = '', textHtml = linkify(text).replace(/\uD83C\uDDEE\uD83C\uDDF7/g, '<img src="/static/iran-lion-sun.svg" alt="\u{1F981}\u2600\uFE0F" style="height:1.1em;vertical-align:middle">');
+        var mediaHtml = '', textHtml = linkify(text).replace(/\uD83C\uDDEE\uD83C\uDDF7/g, '<img src="/static/lion-sun.svg" alt="\u{1F981}\u2600\uFE0F" style="height:1.1em;vertical-align:middle">');
         // Check for [REPLY]:ID or [REPLY] format (backward compat: also [REPLY:ID])
         var replyMatch = text.match(/^\[REPLY\](?::(\d+))?/) || text.match(/^\[REPLY:(\d+)\]/);
         if (replyMatch) {
@@ -8127,11 +8434,11 @@
             if (c0.parsed.downloadable || c0.parsed.size > 0) {
               mediaHtml = renderDownloadableMedia(c0.tag, c0.parsed, id);
               textHtml = c0.parsed.caption
-                ? linkify(c0.parsed.caption).replace(/\uD83C\uDDEE\uD83C\uDDF7/g, '<img src="/static/iran-lion-sun.svg" alt="\u{1F981}\u2600\uFE0F" style="height:1.1em;vertical-align:middle">')
+                ? linkify(c0.parsed.caption).replace(/\uD83C\uDDEE\uD83C\uDDF7/g, '<img src="/static/lion-sun.svg" alt="\u{1F981}\u2600\uFE0F" style="height:1.1em;vertical-align:middle">')
                 : '';
             } else {
               mediaHtml = '<div class="media-tag">' + c0.tag + '</div>';
-              textHtml = linkify(text.substring(c0.tag.length).replace(/^\n/, '')).replace(/\uD83C\uDDEE\uD83C\uDDF7/g, '<img src="/static/iran-lion-sun.svg" alt="\u{1F981}\u2600\uFE0F" style="height:1.1em;vertical-align:middle">');
+              textHtml = linkify(text.substring(c0.tag.length).replace(/^\n/, '')).replace(/\uD83C\uDDEE\uD83C\uDDF7/g, '<img src="/static/lion-sun.svg" alt="\u{1F981}\u2600\uFE0F" style="height:1.1em;vertical-align:middle">');
             }
           } else {
             mediaHtml = '<div class="media-album">';
@@ -8141,7 +8448,7 @@
             }
             mediaHtml += '</div>';
             textHtml = rest
-              ? linkify(rest).replace(/\uD83C\uDDEE\uD83C\uDDF7/g, '<img src="/static/iran-lion-sun.svg" alt="\u{1F981}\u2600\uFE0F" style="height:1.1em;vertical-align:middle">')
+              ? linkify(rest).replace(/\uD83C\uDDEE\uD83C\uDDF7/g, '<img src="/static/lion-sun.svg" alt="\u{1F981}\u2600\uFE0F" style="height:1.1em;vertical-align:middle">')
               : '';
           }
         }
@@ -8417,7 +8724,7 @@
       document.getElementById('progressPanel').innerHTML = '';
       var p = document.getElementById('progressPanel');
       p.innerHTML = '<div class="progress-item" id="prog-init" data-last-update="' + Date.now() + '"><button class="progress-close" onclick="this.parentNode.remove()" title="Dismiss">&times;</button><div class="progress-label">' + t('loading') + '</div><div class="progress-bar"><div class="progress-fill" style="width:30%;animation:prog-pulse 1.5s ease-in-out infinite"></div></div></div>';
-      if (mobileQuery.matches) { openChat(); openLog(); }
+      if (mobileQuery.matches) { openChat(); }
     }
     function startAutoRefresh() { if (autoRefreshTimer) return; autoRefreshTimer = setInterval(function () { if (selectedChannel > 0) doRefresh(true) }, 600000) }
     function updateNextFetchDisplay() {
@@ -8478,20 +8785,59 @@
     }
 
     // ===== COPY MSG =====
+    // ===== DONATE MODAL =====
+    function openDonate() { document.getElementById('donateModal').classList.add('active'); }
+    function closeDonate() { document.getElementById('donateModal').classList.remove('active'); }
+    function copyDonateAddr() {
+      var v = document.getElementById('donateAddr').textContent.trim();
+      navigator.clipboard.writeText(v).then(function () { showToast(t('copied')) }).catch(function () { });
+    }
+
     function copyMsg(idx) {
       var text = currentMsgTexts[idx]; if (text === undefined) return;
       navigator.clipboard.writeText(text).then(function () { showToast(t('msg_copied')) }).catch(function () { });
     }
 
-    // ===== SCROLL TO BOTTOM =====
+    // ===== SCROLL TO BOTTOM + FLOATING DATE =====
     (function () {
-      var messagesEl = null;
+      var messagesEl = null, dateEl = null, hideTimer = null;
+      function topMostDate() {
+        if (!messagesEl) return '';
+        var seps = messagesEl.querySelectorAll('.msg-date-sep');
+        if (!seps.length) return '';
+        var top = messagesEl.getBoundingClientRect().top;
+        var current = '';
+        for (var i = 0; i < seps.length; i++) {
+          var r = seps[i].getBoundingClientRect();
+          // The most recent separator at or above the viewport's top
+          // edge is the date the user is currently reading under.
+          if (r.top - top <= 8) current = seps[i].textContent;
+          else break;
+        }
+        return current.trim();
+      }
+      function showFloatingDate() {
+        if (!dateEl) return;
+        var s = topMostDate();
+        if (!s) { dateEl.classList.remove('visible'); dateEl.hidden = true; return; }
+        dateEl.textContent = s;
+        // Force RTL for Persian/Arabic content so the day-month-year
+        // sequence reads right-to-left as expected (16 اردیبهشت 1405,
+        // not 1405 اردیبهشت 16).
+        dateEl.dir = /[؀-ۿ]/.test(s) ? 'rtl' : 'ltr';
+        dateEl.hidden = false;
+        dateEl.classList.add('visible');
+        if (hideTimer) clearTimeout(hideTimer);
+        hideTimer = setTimeout(function () { dateEl.classList.remove('visible'); }, 1200);
+      }
       function initScrollBtn() {
         messagesEl = document.getElementById('messages');
+        dateEl = document.getElementById('floatingDate');
         if (!messagesEl) return;
         messagesEl.addEventListener('scroll', function () {
           var atBottom = messagesEl.scrollHeight - messagesEl.scrollTop - messagesEl.clientHeight < 150;
           document.getElementById('scrollDownBtn').classList.toggle('visible', !atBottom);
+          showFloatingDate();
         });
       }
       // Init after DOM is ready
@@ -8513,8 +8859,8 @@
     }
 
     // ===== UTILITIES =====
-    function formatIranTitleHtml(s) {
-      return esc(s).replace(/\uD83C\uDDEE\uD83C\uDDF7/g, '<img src="/static/iran-lion-sun.svg" alt="\u{1F981}\u2600\uFE0F" style="height:1em;vertical-align:middle">');
+    function formatTitleWithFlag(s) {
+      return esc(s).replace(/\uD83C\uDDEE\uD83C\uDDF7/g, '<img src="/static/lion-sun.svg" alt="\u{1F981}\u2600\uFE0F" style="height:1em;vertical-align:middle">');
     }
     function esc(s) { var d = document.createElement('div'); d.appendChild(document.createTextNode(s)); return d.innerHTML }
     function escAttr(s) { return esc(s).replace(/"/g, '&quot;').replace(/'/g, '&#39;') }
@@ -8561,7 +8907,7 @@
     // ===== SCANNER =====
     var scanPollTimer = null;
     var scanLastResults = []; // cache for selection
-    var scannerActivePreset = ''; // server-side preset name (e.g. 'ir')
+    var scannerActivePreset = ''; // server-side preset name (e.g. 'default')
     var scannerPresetIpCount = 0; // IP count from preset
 
     function countCIDRIPs(text) {
@@ -8625,7 +8971,7 @@
     }
 
     async function loadScannerPresets() {
-      if (scannerActivePreset === 'ir') {
+      if (scannerActivePreset === 'default') {
         // Toggle off
         scannerActivePreset = '';
         scannerPresetIpCount = 0;
@@ -8650,7 +8996,7 @@
       var tag = document.getElementById('scanPresetTag');
       if (scannerActivePreset) {
         tag.style.display = '';
-        tag.innerHTML = '<img src="/static/iran-lion-sun.svg" alt="IR" style="height:14px;vertical-align:middle;margin-right:4px"> ' + t('scanner_preset_active');
+        tag.innerHTML = '<img src="/static/lion-sun.svg" alt="" style="height:14px;vertical-align:middle;margin-right:4px"> ' + t('scanner_preset_active');
       } else {
         tag.style.display = 'none';
         tag.textContent = '';

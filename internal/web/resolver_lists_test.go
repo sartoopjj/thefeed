@@ -265,13 +265,18 @@ func TestPersistScanResultsRescanOverwrites(t *testing.T) {
 	}
 }
 
-func TestPersistScanResultsNoSelectedList(t *testing.T) {
+func TestPersistScanResultsSeedsDefaultListOnFirstRun(t *testing.T) {
 	s := newTestServerWithProfiles(t, &ProfileList{})
-	// No-op when there's no selected list to write into.
-	s.persistScanResultsToList([]string{"a:53"})
+	s.persistScanResultsToList([]string{"a:53", "b:53"})
 	pl := loadProfilesT(t, s)
-	if len(pl.ActiveLists) != 0 {
-		t.Errorf("ActiveLists got created: %v", pl.ActiveLists)
+	if len(pl.ActiveLists) != 1 || pl.ActiveLists[0].Name != defaultListName {
+		t.Fatalf("ActiveLists = %v, want one Default list", pl.ActiveLists)
+	}
+	if got := pl.ActiveLists[0].Resolvers; len(got) != 2 {
+		t.Errorf("Default list = %v, want 2 entries", got)
+	}
+	if pl.SelectedList != defaultListName {
+		t.Errorf("SelectedList = %q, want %q", pl.SelectedList, defaultListName)
 	}
 }
 

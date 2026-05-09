@@ -22,7 +22,7 @@ func (s *Server) handleScannerPresets(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, map[string]any{
 		"presets": []preset{
-			{Name: "ir", Label: "Iran", Count: parseScannerPresetCount()},
+			{Name: "default", Label: "Default", Count: parseScannerPresetCount()},
 		},
 	})
 }
@@ -51,7 +51,7 @@ func (s *Server) handleScannerStart(w http.ResponseWriter, r *http.Request) {
 
 	var req struct {
 		Targets      []string `json:"targets"`
-		Preset       string   `json:"preset"` // e.g. "ir" — server-side preset, avoids sending 50K IPs
+		Preset       string   `json:"preset"` // e.g. "default" — server-side preset, avoids sending 50K IPs
 		MaxIPs       int      `json:"maxIPs"`
 		RateLimit    int      `json:"rateLimit"`
 		Timeout      float64  `json:"timeout"`
@@ -65,7 +65,7 @@ func (s *Server) handleScannerStart(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Resolve preset into targets server-side.
-	if req.Preset == "ir" && len(req.Targets) == 0 {
+	if req.Preset == "default" && len(req.Targets) == 0 {
 		req.Targets = parseScannerPresetLines()
 	}
 

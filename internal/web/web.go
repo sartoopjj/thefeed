@@ -13,6 +13,7 @@ import (
 	"io/fs"
 	"log"
 	mrand "math/rand/v2"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -98,6 +99,8 @@ type ProfileList struct {
 	Debug    bool   `json:"debug,omitempty"`
 	Theme    string `json:"theme,omitempty"`
 	Lang     string `json:"lang,omitempty"`
+	// SkipUpdateVersion is the latest release the user dismissed.
+	SkipUpdateVersion string `json:"skipUpdateVersion,omitempty"`
 	// ResolverBank is the shared pool of DNS resolvers used by all profiles.
 	ResolverBank []string `json:"resolverBank,omitempty"`
 	// ResolverScores stores accumulated performance data for bank resolvers.
@@ -259,9 +262,14 @@ func New(dataDir string, port int, host string, password string) (*Server, error
 		mediaCache:     mediaCache,
 		dlProgress:     make(map[string]*mediaDLProgress),
 		relayInfo:      newRelayCache(),
-		telemirror:     newTelemirrorHub(dataDir),
-		profilePics:    newProfilePicsHub(dataDir),
+		profilePics: newProfilePicsHub(dataDir),
 	}
+	// Set up telemirror with an onUpdate hook so background refreshes
+	// push an SSE event; the frontend re-fetches the active channel
+	// when it sees the matching event.
+	s.telemirror = newTelemirrorHub(dataDir, func(username string) {
+		s.broadcast("event: update\ndata: \"telemirror:" + username + "\"\n\n")
+	})
 
 	if mediaCache != nil {
 		go mediaCache.Cleanup()
@@ -301,8 +309,15 @@ func New(dataDir string, port int, host string, password string) (*Server, error
 	return s, nil
 }
 
-// Run starts the web server.
-func (s *Server) Run() error {
+// Run starts the web server, binding to s.host:s.port.
+func (s *Server) Run() error { return s.serve(nil) }
+
+// Serve runs the web server on an already-bound listener. Used by the
+// mobile entry where the listener is opened first to discover the
+// kernel-assigned port.
+func (s *Server) Serve(ln net.Listener) error { return s.serve(ln) }
+
+func (s *Server) serve(ln net.Listener) error {
 	mux := http.NewServeMux()
 
 	staticSub, _ := fs.Sub(staticFS, "static")
@@ -354,6 +369,7 @@ func (s *Server) Run() error {
 	mux.HandleFunc("/api/telemirror/channel/", s.telemirror.handleChannel)
 	mux.HandleFunc("/api/telemirror/img", s.telemirror.handleImg)
 	mux.HandleFunc("/api/telemirror/avatar/", s.telemirror.handleAvatar)
+	mux.HandleFunc("/api/telemirror/older/", s.telemirror.handleOlder)
 	// Profile-pics cache + control endpoints.
 	mux.HandleFunc("/api/profile-pics/", s.profilePics.handleProfilePic)
 	mux.HandleFunc("/api/profile-pics", s.handleProfilePicsList)
@@ -416,6 +432,9 @@ func (s *Server) Run() error {
 		// idle period on the connection itself.
 		ReadHeaderTimeout: 30 * time.Second,
 		IdleTimeout:       30 * time.Minute,
+	}
+	if ln != nil {
+		return srv.Serve(ln)
 	}
 	return srv.ListenAndServe()
 }
@@ -2815,6 +2834,7 @@ func (s *Server) handleSettings(w http.ResponseWriter, r *http.Request) {
 			"lang":               pl.Lang,
 			"scanPromptOff":      pl.ScanPromptOff,
 			"profilePicsEnabled": pl.ProfilePicsEnabled,
+			"skipUpdateVersion":  pl.SkipUpdateVersion,
 			"version":            version.Version,
 			"commit":             version.Commit,
 		})
@@ -2828,6 +2848,7 @@ func (s *Server) handleSettings(w http.ResponseWriter, r *http.Request) {
 			Lang               *string `json:"lang"`
 			ScanPromptOff      *bool   `json:"scanPromptOff"`
 			ProfilePicsEnabled *bool   `json:"profilePicsEnabled"`
+			SkipUpdateVersion  *string `json:"skipUpdateVersion"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			http.Error(w, "invalid JSON", 400)
@@ -2867,6 +2888,9 @@ func (s *Server) handleSettings(w http.ResponseWriter, r *http.Request) {
 		}
 		if req.ProfilePicsEnabled != nil {
 			pl.ProfilePicsEnabled = *req.ProfilePicsEnabled
+		}
+		if req.SkipUpdateVersion != nil {
+			pl.SkipUpdateVersion = *req.SkipUpdateVersion
 		}
 		if err := s.saveProfiles(pl); err != nil {
 			http.Error(w, fmt.Sprintf("save: %v", err), 500)
@@ -3008,7 +3032,11 @@ func (s *Server) persistScanResultsToList(healthy []string) {
 	}
 	list := findList(pl, pl.SelectedList)
 	if list == nil {
-		return
+		// First scan with no lists yet — seed a Default list so the
+		// UI doesn't show empty after the very first scan completes.
+		pl.ActiveLists = append(pl.ActiveLists, ActiveList{Name: defaultListName})
+		list = &pl.ActiveLists[len(pl.ActiveLists)-1]
+		pl.SelectedList = defaultListName
 	}
 	// Don't shrink a populated list on routine periodic checks.
 	if !overwrite && len(list.Resolvers) > 0 {
