@@ -704,13 +704,16 @@
       font-size: 11px;
       font-weight: 500;
       backdrop-filter: blur(8px);
-      box-shadow: 0 1px 3px rgba(0,0,0,.08);
+      box-shadow: 0 1px 3px rgba(0, 0, 0, .08);
       pointer-events: none;
       opacity: 0;
       transition: opacity 0.25s ease;
       white-space: nowrap;
     }
-    .floating-date.visible { opacity: 0.92; }
+
+    .floating-date.visible {
+      opacity: 0.92;
+    }
 
     .msg-date-sep {
       text-align: center;
@@ -1485,87 +1488,116 @@
       border-bottom: 1px dashed var(--border)
     }
 
-    .tm-post-author {
-      font-weight: 700;
-      color: var(--accent)
-    }
 
-    .tm-post-time {
-      opacity: .85
-    }
-
-    .tm-post-author { font-weight: 700; color: var(--accent) }
     #tmLightbox {
-      position: fixed; inset: 0; z-index: 99999;
-      background: rgba(0,0,0,.92);
-      display: flex; align-items: center; justify-content: center;
+      position: fixed;
+      inset: 0;
+      z-index: 99999;
+      background: rgba(0, 0, 0, .92);
+      display: flex;
+      align-items: center;
+      justify-content: center;
       padding: 20px;
       cursor: zoom-out;
     }
+
     #tmLightbox img {
-      max-width: 100%; max-height: 100%;
+      max-width: 100%;
+      max-height: 100%;
       object-fit: contain;
-      box-shadow: 0 4px 30px rgba(0,0,0,.5);
+      box-shadow: 0 4px 30px rgba(0, 0, 0, .5);
       cursor: default;
     }
+
     .tm-lightbox-close {
       position: absolute;
       top: max(12px, env(safe-area-inset-top));
       inset-inline-end: 16px;
-      width: 40px; height: 40px;
+      width: 40px;
+      height: 40px;
       border-radius: 50%;
       border: none;
-      background: rgba(255,255,255,.15);
+      background: rgba(255, 255, 255, .15);
       color: #fff;
-      font-size: 26px; line-height: 1;
+      font-size: 26px;
+      line-height: 1;
       cursor: pointer;
-      display: flex; align-items: center; justify-content: center;
+      display: flex;
+      align-items: center;
+      justify-content: center;
       backdrop-filter: blur(6px);
     }
-    .tm-lightbox-close:hover { background: rgba(255,255,255,.28); }
+
+    .tm-lightbox-close:hover {
+      background: rgba(255, 255, 255, .28);
+    }
+
     .donate-addr-row {
-      display: flex; align-items: center; gap: 8px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
       background: var(--surface, var(--bg-elevated, var(--bg)));
       border: 1px solid var(--border);
       border-radius: 8px;
       padding: 8px 10px;
       direction: ltr;
     }
+
     .donate-addr {
-      flex: 1; min-width: 0;
+      flex: 1;
+      min-width: 0;
       font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
       font-size: 12px;
       overflow-wrap: anywhere;
       word-break: break-all;
       color: var(--text);
     }
-    .donate-thanks { margin-top: 14px; font-size: 13px; color: var(--text-dim); text-align: center; }
-    .donate-body { font-size: 13px; line-height: 1.7; }
+
+    .donate-thanks {
+      margin-top: 14px;
+      font-size: 13px;
+      color: var(--text-dim);
+      text-align: center;
+    }
+
+    .donate-body {
+      font-size: 13px;
+      line-height: 1.7;
+    }
 
     .tm-scroll-down {
       position: absolute;
       bottom: max(20px, env(safe-area-inset-bottom));
       inset-inline-end: 16px;
-      width: 40px; height: 40px;
+      width: 40px;
+      height: 40px;
       border-radius: 50%;
       border: 1px solid var(--border);
       background: var(--surface2, var(--bg-elevated, var(--bg)));
       color: var(--text);
       font-size: 18px;
       display: none;
-      align-items: center; justify-content: center;
-      box-shadow: 0 2px 10px rgba(0,0,0,.4);
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 2px 10px rgba(0, 0, 0, .4);
       z-index: 10;
       cursor: pointer;
     }
-    .tm-scroll-down.visible { display: flex; }
+
+    .tm-scroll-down.visible {
+      display: flex;
+    }
+
     .tm-scroll-down:hover {
       background: color-mix(in oklab, var(--accent) 12%, var(--surface2, var(--bg)));
     }
+
     .tm-load-older-row {
-      display: flex; justify-content: center;
+      display: flex;
+      justify-content: center;
       margin: 8px 0 14px;
     }
+
     .tm-load-older {
       background: transparent;
       border: 1px solid var(--border);
@@ -1576,18 +1608,27 @@
       cursor: pointer;
       transition: background .15s, border-color .15s;
     }
+
     .tm-load-older:hover {
       background: color-mix(in oklab, var(--accent) 10%, transparent);
       border-color: color-mix(in oklab, var(--accent) 50%, var(--border));
     }
-    .tm-load-older:disabled { opacity: .6; cursor: default; }
+
+    .tm-load-older:disabled {
+      opacity: .6;
+      cursor: default;
+    }
+
     .tm-post-msgid {
-      font-size: 10px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-      color: var(--text-dim); padding: 1px 5px; border-radius: 4px;
+      font-size: 10px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      color: var(--text-dim);
+      padding: 1px 5px;
+      border-radius: 4px;
       background: color-mix(in oklab, var(--text-dim) 12%, transparent);
       user-select: text
     }
-    .tm-post-time { opacity: .85 }
+
     .tm-post-edited {
       font-size: 10px;
       padding: 1px 6px;
@@ -1596,9 +1637,16 @@
       color: var(--text-dim)
     }
 
+    .tm-post-author {
+      font-weight: 700;
+      color: var(--accent)
+    }
+
+    .tm-post-time {
+      opacity: .85
+    }
+
     .tm-post-text {
-      font-size: 14px;
-      line-height: 1.7;
       overflow-wrap: anywhere;
       /* break long URLs / unbroken strings */
       /* Inherit from --font-size (set by the global Settings slider) and
@@ -1606,7 +1654,8 @@
          main-feed messages. */
       font-size: calc(var(--font-size) + 1px);
       line-height: 1.7;
-      overflow-wrap: anywhere;          /* break long URLs / unbroken strings */
+      overflow-wrap: anywhere;
+      /* break long URLs / unbroken strings */
       word-break: break-word
     }
 
@@ -3584,15 +3633,23 @@
 </head>
 
 <body>
-
+  <a href="#messages" class="skip-link" data-i18n="skip_to_messages">Skip to messages</a>
   <!-- First-launch language picker. Visible until lang is set; pure HTML/JS
        so it works on iOS, Android, and the browser without native code. -->
-  <div id="firstRunLangModal" style="display:none;position:fixed;inset:0;z-index:99999;background:#0f1722;color:#fff;align-items:center;justify-content:center;flex-direction:column;padding:24px;font-family:-apple-system,BlinkMacSystemFont,system-ui,sans-serif">
+  <div id="firstRunLangModal"
+    style="display:none;position:fixed;inset:0;z-index:99999;background:#0f1722;color:#fff;align-items:center;justify-content:center;flex-direction:column;padding:24px;font-family:-apple-system,BlinkMacSystemFont,system-ui,sans-serif">
     <div style="font-size:38px;font-weight:700;margin-bottom:6px;letter-spacing:-0.5px">TheFeed</div>
-    <div style="opacity:.6;font-size:14px;margin-bottom:36px;text-align:center">Choose your language &nbsp;·&nbsp; زبان خود را انتخاب کنید</div>
+    <div style="opacity:.6;font-size:14px;margin-bottom:36px;text-align:center">Choose your language &nbsp;·&nbsp; زبان
+      خود را انتخاب کنید</div>
     <div style="display:flex;flex-direction:column;gap:14px;width:100%;max-width:320px">
-      <button onclick="firstRunPickLang('en')" style="background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);color:#fff;border-radius:14px;padding:18px;font-size:18px;font-weight:600;cursor:pointer">English<div style="font-size:12px;font-weight:400;opacity:.7;margin-top:2px">Continue in English</div></button>
-      <button onclick="firstRunPickLang('fa')" style="background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);color:#fff;border-radius:14px;padding:18px;font-size:18px;font-weight:600;cursor:pointer">فارسی<div style="font-size:12px;font-weight:400;opacity:.7;margin-top:2px">ادامه به زبان فارسی</div></button>
+      <button onclick="firstRunPickLang('en')"
+        style="background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);color:#fff;border-radius:14px;padding:18px;font-size:18px;font-weight:600;cursor:pointer">English
+        <div style="font-size:12px;font-weight:400;opacity:.7;margin-top:2px">Continue in English</div>
+      </button>
+      <button onclick="firstRunPickLang('fa')"
+        style="background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);color:#fff;border-radius:14px;padding:18px;font-size:18px;font-weight:600;cursor:pointer">فارسی
+        <div style="font-size:12px;font-weight:400;opacity:.7;margin-top:2px">ادامه به زبان فارسی</div>
+      </button>
     </div>
   </div>
   <script>
@@ -3673,7 +3730,8 @@
         &middot;
         <a href="#" onclick="event.preventDefault();openDonate()" data-i18n="donate">Donate</a>
         &middot;
-        <a href="https://sartoopjj.github.io/thefeed/privacy-policy.html" target="_blank" data-i18n="privacy_policy">Privacy</a>
+        <a href="https://sartoopjj.github.io/thefeed/privacy-policy.html" target="_blank"
+          data-i18n="privacy_policy">Privacy</a>
       </div>
     </nav>
 
@@ -3702,8 +3760,9 @@
             data-i18n-aria="sr_refresh" style="width:40px;height:40px;font-size:20px"><span
               aria-hidden="true">&#8635;</span></button>
           <div class="header-kebab" id="headerKebab">
-            <button class="icon-btn" onclick="toggleKebabMenu(event)" title="More"
-              style="width:40px;height:40px;font-size:20px">&#8942;</button>
+            <button class="icon-btn" onclick="toggleKebabMenu(event)" title="More" aria-label="More options"
+              data-i18n-aria="sr_more_options" style="width:40px;height:40px;font-size:20px"><span
+                aria-hidden="true">&#8942;</span></button>
             <div class="header-kebab-menu" id="headerKebabMenu">
               <button onclick="toggleMsgSearch();closeKebabMenu()" data-i18n="search_messages">Search</button>
               <button onclick="openExportModal();closeKebabMenu()" data-i18n="export_messages">Export</button>
@@ -3744,7 +3803,7 @@
       <div class="progress-panel" id="progressPanel"></div>
       <div class="log-toggle" onclick="toggleLog()"><span>LOG</span><span id="logToggleIcon">&#9654;</span></div>
       <div class="log-panel hidden" id="logPanel"></div>
-    </div>
+  </div>
   </div>
 
   <!-- DONATE MODAL -->
@@ -3758,7 +3817,8 @@
           <li>BNB Chain</li>
         </ul>
       </div>
-      <label style="font-size:12px;color:var(--text-dim);display:block;margin-bottom:4px" data-i18n="wallet_address">Wallet address</label>
+      <label style="font-size:12px;color:var(--text-dim);display:block;margin-bottom:4px"
+        data-i18n="wallet_address">Wallet address</label>
       <div class="donate-addr-row">
         <code id="donateAddr" class="donate-addr">0xe73f022f668c57cce79feccd875ac7332311013a</code>
         <button class="btn btn-flat" onclick="copyDonateAddr()" data-i18n="copy">Copy</button>
@@ -3803,7 +3863,8 @@
       <main id="tmContent" class="tm-content">
         <div class="tm-empty" data-i18n="telemirror_pick_channel">Pick a channel</div>
       </main>
-      <button class="tm-scroll-down" id="tmScrollDownBtn" onclick="tmScrollToBottom()" aria-label="Scroll to latest" title="Scroll to latest">&#8595;</button>
+      <button class="tm-scroll-down" id="tmScrollDownBtn" onclick="tmScrollToBottom()" aria-label="Scroll to latest"
+        title="Scroll to latest">&#8595;</button>
     </div>
   </div>
   <!-- END telemirror -->
@@ -4035,11 +4096,9 @@
       <h2 id="profileEditorTitle" data-i18n="new_profile">New Profile</h2>
       <div id="peWarning" class="tg-warning"></div>
       <div class="form-group"><label data-i18n="nickname">Nickname</label><input id="peNick" maxlength="32"
-          placeholder="My Server">
-      <div class="form-group"><label data-i18n="nickname">Nickname</label><input id="peNick" maxlength="32" placeholder="My Server" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
-      </div>
-      <div class="form-group"><label data-i18n="domain">Domain</label><input id="peDomain" placeholder="t.example.com" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
-      </div>
+          placeholder="My Server" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"></div>
+      <div class="form-group"><label data-i18n="domain">Domain</label><input id="peDomain" placeholder="t.example.com"
+          autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"></div>
       <div class="form-group"><label data-i18n="passphrase">Passphrase</label><input type="password" id="peKey"
           placeholder="..."></div>
       <div class="info-note"
@@ -4083,7 +4142,6 @@
       </div>
     </div>
   </div>
-
   <!-- ===== EXPORT MODAL ===== -->
   <div class="modal-overlay" id="exportModal">
     <div class="modal" style="max-width:380px">
@@ -4183,7 +4241,8 @@
       <div
         style="border-top:1px solid var(--border);padding-top:10px;margin-top:10px;display:flex;align-items:center;gap:8px">
         <input type="checkbox" id="bankAutoScan" style="width:auto" checked onchange="toggleBankAutoScan()">
-        <label for="bankAutoScan" style="font-size:12px;cursor:pointer" data-i18n="auto_scan">Automatic hourly resolver
+        <label for="bankAutoScan" style="font-size:12px;cursor:pointer" data-i18n="auto_scan">Automatic hourly
+          resolver
           check</label>
       </div>
       <div class="modal-actions">
@@ -4205,7 +4264,8 @@
       <!-- Collapsible help -->
       <div style="margin-bottom:14px">
         <p id="scannerAboutShort" style="font-size:13px;color:var(--text-dim);line-height:1.5;margin:0">
-          <span data-i18n="scanner_about_short">Scan IP ranges to find DNS resolvers that work with your server.</span>
+          <span data-i18n="scanner_about_short">Scan IP ranges to find DNS resolvers that work with your
+            server.</span>
           <a href="#" id="scannerReadMoreLink"
             onclick="event.preventDefault();document.getElementById('scannerAboutFull').style.display='';this.style.display='none'"
             style="color:var(--accent);text-decoration:none" data-i18n="scanner_read_more">Read more...</a>
@@ -4214,8 +4274,10 @@
           <span data-i18n="scanner_about">This tool scans IP ranges to find DNS servers that can reach your thefeed
             server. Enter CIDRs (like 192.168.1.0/24) or individual IPs, pick a profile, and hit Scan. The app sends a
             small test query to each IP. If the IP answers correctly, it is a working resolver. You can also turn on
-            "Expand /24" — when a working IP is found, the app will automatically check nearby IPs in the same network.
-            Results show response time so you can pick the fastest ones. You can pause, resume, or stop the scan at any
+            "Expand /24" — when a working IP is found, the app will automatically check nearby IPs in the same
+            network.
+            Results show response time so you can pick the fastest ones. You can pause, resume, or stop the scan at
+            any
             time.</span> <a href="#"
             onclick="event.preventDefault();document.getElementById('scannerAboutFull').style.display='none';document.getElementById('scannerReadMoreLink').style.display=''"
             style="color:var(--accent);text-decoration:none" data-i18n="scanner_read_less">Show less</a>
@@ -4231,11 +4293,9 @@
               <button class="btn btn-flat" onclick="document.getElementById('scanTargets').value='';updateScanIpCount()"
                 data-i18n="scanner_clear_targets" style="font-size:12px;padding:4px 10px">&#128465; Clear</button>
               <button class="btn btn-flat" onclick="loadScannerPresets()" style="font-size:12px;padding:4px 10px"><img
-                  class="iran-flag-icon" src="/static/iran-lion-sun.svg" alt="IR"
+                  class="lion-sun-icon" src="/static/lion-sun.svg" alt=""
                   style="height:14px;vertical-align:middle;margin-right:2px"> <span
-                  data-i18n="scanner_load_presets">Load IR Presets</span></button>
-              <button class="btn btn-flat" onclick="document.getElementById('scanTargets').value='';updateScanIpCount()" data-i18n="scanner_clear_targets" style="font-size:12px;padding:4px 10px">&#128465; Clear</button>
-              <button class="btn btn-flat" onclick="loadScannerPresets()" style="font-size:12px;padding:4px 10px"><img class="lion-sun-icon" src="/static/lion-sun.svg" alt="" style="height:14px;vertical-align:middle;margin-right:2px"> <span data-i18n="scanner_load_presets">Load Presets</span></button>
+                  data-i18n="scanner_load_presets">Load Presets</span></button>
             </div>
           </div>
           <textarea id="scanTargets" rows="3" placeholder="5.1.0.0/16&#10;8.8.8.8&#10;1.1.1.1"
@@ -4276,7 +4336,8 @@
           <div class="form-group" style="margin-top:4px">
             <div class="row" style="gap:6px;align-items:center">
               <input type="checkbox" id="scanExpand">
-              <label for="scanExpand" style="font-size:13px" data-i18n="scanner_expand_subnet">Expand /24 — scan nearby
+              <label for="scanExpand" style="font-size:13px" data-i18n="scanner_expand_subnet">Expand /24 — scan
+                nearby
                 IPs when a resolver is found</label>
             </div>
           </div>
@@ -4626,6 +4687,7 @@
         sr_switched_channel: 'تغییر کانال به: ',
         sr_new_messages_suffix: '، پیام جدید',
         sr_msg_at: ' در ',
+        sr_more_options: 'گزینه‌های بیشتر',
       },
       en: {
         search: 'Search...', settings: 'Settings', profiles: 'Profiles',
@@ -4897,6 +4959,7 @@
         sr_switched_channel: 'Switched to channel: ',
         sr_new_messages_suffix: ', new messages',
         sr_msg_at: ' at ',
+        sr_more_options: 'More options',
       }
     };
     // Order: native bridge (iOS/Android) → localStorage → 'fa'.
@@ -4928,6 +4991,7 @@
       document.querySelectorAll('[data-i18n]').forEach(function (el) { el.textContent = t(el.dataset.i18n) });
       document.querySelectorAll('[data-i18n-ph]').forEach(function (el) { el.placeholder = t(el.dataset.i18nPh) });
       document.querySelectorAll('[data-i18n-title]').forEach(function (el) { el.title = t(el.dataset.i18nTitle) });
+      document.querySelectorAll('[data-i18n-aria]').forEach(function (el) { el.setAttribute('aria-label', t(el.dataset.i18nAria)) });
       document.querySelectorAll('[data-i18n-body]').forEach(function (el) { el.innerHTML = t(el.dataset.i18nBody) });
       var lf = document.getElementById('langFa'); if (lf) lf.classList.toggle('active-lang', lang === 'fa');
       var le = document.getElementById('langEn'); if (le) le.classList.toggle('active-lang', lang === 'en');
@@ -5296,12 +5360,11 @@
     }
 
     // ===== SETTINGS =====
-
     function openSettings() {
+      document.getElementById('settingsModal').classList.add('active');
       a11yModalOpen('settingsModal');
       renderLatestVersion();
       applyThemeButtons();
-      document.getElementById('settingsModal').classList.add('active');
       try { initAndroidSettings(); } catch (e) { console.error('initAndroidSettings error:', e); }
       // Reflect current localStorage flag on every open — toggling it
       // away in the prompt itself should be picked up next time
@@ -6243,8 +6306,8 @@
     }
 
     function openProfiles() {
-      a11yModalOpen('profilesModal');
       document.getElementById('profilesModal').classList.add('active');
+      a11yModalOpen('profilesModal');
       document.getElementById('importError').style.display = 'none';
       document.getElementById('importSuccess').style.display = 'none';
       document.getElementById('importUriInput').value = '';
@@ -6521,9 +6584,9 @@
 
     // ===== PROFILE EDITOR =====
     function openProfileEditor(id) {
-      a11yModalOpen('profileEditorModal');
       editingProfileId = id;
       document.getElementById('profileEditorModal').classList.add('active');
+      a11yModalOpen('profileEditorModal');
       document.getElementById('peError').style.display = 'none';
       document.getElementById('peWarning').style.display = 'none';
       if (id) {
@@ -6939,6 +7002,7 @@
       openChat();
       var ch = channels[num - 1]; var name = (ch && (ch.DisplayName || ch.displayName || ch.Name || ch.name)) || 'Channel ' + num;
       document.getElementById('chatName').innerHTML = formatTitleWithFlag(name);
+      a11yAnnounce(t('sr_switched_channel') + name);
       var chHandle = (ch && (ch.Name || ch.name)) || '';
       var isXCh = ch && (ch.ChatType || ch.chatType) === 2;
       var subHandle = (!isXCh && chHandle) ? (chHandle.charAt(0) === '@' ? chHandle : '@' + chHandle) : '';
@@ -8458,7 +8522,7 @@
           + (hasMediaCard ? ' has-media' : '')
           + (isOutgoing ? ' msg-outgoing' : '');
         var youTag = isOutgoing ? '<div class="media-tag you-tag">[YOU]</div>' : '';
-        html += '<div class="' + msgClasses + '" dir="auto" aria-label="' + t('new_messages') + t('sr_msg_at') + timeStr + '">' + youTag + mediaHtml + textHtml + '<div class="msg-meta"><button class="msg-copy-btn" onclick="copyMsg(' + i + ')" aria-label="Copy message ' + id + '">' + t('copy') + '</button><span aria-hidden="true">#' + id + '</span><span aria-hidden="true">' + timeStr + '</span></div></div>';
+        html += '<div class="' + msgClasses + '" dir="auto">' + youTag + mediaHtml + textHtml + '<div class="msg-meta"><button class="msg-copy-btn" onclick="copyMsg(' + i + ')" aria-label="' + escAttr(t('copy')) + ' ' + id + '">' + t('copy') + '</button><span aria-hidden="true">#' + id + '</span><span aria-hidden="true">' + timeStr + '</span></div></div>';
       }
       el.innerHTML = html;
       try { mediaTryRestoreVisibleCards(); } catch (e) { }
@@ -8942,10 +9006,9 @@
         el.style.display = 'none';
       }
     }
-
     function openScanner() {
-      a11yModalOpen('scannerModal');
       document.getElementById('scannerModal').classList.add('active');
+      a11yModalOpen('scannerModal');
       populateScanProfileSelect();
       pollScannerOnce();
     }
@@ -9351,8 +9414,8 @@
       if (!currentMsgTexts.length) { showToast(t('export_no_messages')); return }
       document.getElementById('exportCount').value = Math.min(10, currentMsgTexts.length);
       document.getElementById('exportCount').max = currentMsgTexts.length;
-      a11yModalOpen('exportModal');
       document.getElementById('exportModal').classList.add('active');
+      a11yModalOpen('exportModal');
     }
     function closeExportModal() { a11yModalClose(); document.getElementById('exportModal').classList.remove('active') }
     function doExport() {
@@ -9487,10 +9550,9 @@
       if (tab === 'active') _fetchActiveBoard();
       else _fetchBankBoard();
     }
-
     async function openResolversModal() {
-      a11yModalOpen('resolversModal');
       document.getElementById('resolversModal').classList.add('active');
+      a11yModalOpen('resolversModal');
       // Load autoScan from active profile
       var autoScanEl = document.getElementById('bankAutoScan');
       if (autoScanEl && profiles && profiles.profiles && activeProfileId) {
@@ -9770,7 +9832,7 @@
     }
     var _a11yLive = (function () {
       var el = document.createElement('div');
-      el.setAttribute('aria-live', 'assertive');
+      el.setAttribute('aria-live', 'polite');
       el.setAttribute('aria-atomic', 'true');
       el.style.cssText = 'position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap';
       document.body.appendChild(el);
