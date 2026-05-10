@@ -43,6 +43,7 @@
       --safe-bottom: env(safe-area-inset-bottom);
       --safe-left: env(safe-area-inset-left);
     }
+
     /* Android WebView lays the page out below the system bars and reports
        phantom safe-area insets — zero them out so we don't double-pad. */
     html.is-android-app {
@@ -247,6 +248,7 @@
       padding: 4px 12px 6px;
       flex-wrap: wrap
     }
+
     .sidebar-toolbar .stb {
       flex: 1 1 auto;
       padding: 5px 8px;
@@ -261,19 +263,63 @@
       white-space: nowrap;
       transition: background .15s, color .15s
     }
+
     .sidebar-toolbar .stb:hover {
       background: var(--hover);
       color: var(--text)
     }
+
     .sidebar-toolbar .stb.scanning {
       color: var(--accent);
       border-color: var(--accent)
     }
+
     .sidebar-toolbar .stb .stb-badge {
       font-size: 10px;
       font-weight: 700;
       margin-left: 3px;
       vertical-align: middle
+    }
+
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0
+    }
+
+    .skip-link {
+      position: absolute;
+      top: -40px;
+      left: 0;
+      background: var(--accent);
+      color: #fff;
+      padding: 8px 16px;
+      text-decoration: none;
+      font-size: 13px;
+      z-index: 9999;
+      border-radius: 0 0 8px 0;
+      transition: top .15s
+    }
+
+    .skip-link:focus {
+      top: 0
+    }
+
+    :focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      * {
+        transition-duration: .01ms !important;
+        animation-duration: .01ms !important;
+        animation-iteration-count: 1 !important
+      }
     }
 
     /* ===== CHANNEL LIST ===== */
@@ -327,12 +373,18 @@
       font-weight: 600;
       overflow: hidden
     }
-    .ch-avatar-letter { line-height: 1 }
+
+    .ch-avatar-letter {
+      line-height: 1
+    }
+
     /* Overlays the initial-letter span; img.onerror removes it and
        adds .ch-avatar-noimg so the letter shows through. */
     .ch-avatar-img {
-      position: absolute; inset: 0;
-      width: 100%; height: 100%;
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
       object-fit: cover;
       display: block
     }
@@ -375,7 +427,7 @@
     }
 
     .ch-item.active .ch-sub {
-      color: rgba(255,255,255,.75)
+      color: rgba(255, 255, 255, .75)
     }
 
     /* Auto-update toggle on each channel row. */
@@ -397,19 +449,23 @@
       transition: background .15s, color .15s, border-color .15s;
       opacity: .55;
     }
+
     .ch-item:hover .ch-autoupdate {
       opacity: 1;
     }
+
     .ch-autoupdate.on {
       background: var(--accent);
       color: #fff;
       border-color: var(--accent);
       opacity: 1;
     }
+
     .ch-item.active .ch-autoupdate {
       color: rgba(255, 255, 255, .9);
       border-color: rgba(255, 255, 255, .35);
     }
+
     .ch-item.active .ch-autoupdate.on {
       background: #fff;
       color: var(--accent);
@@ -553,7 +609,11 @@
       gap: 8px;
       align-items: center
     }
-    .msg-search-bar.active { display: flex }
+
+    .msg-search-bar.active {
+      display: flex
+    }
+
     .msg-search-bar input {
       flex: 1;
       padding: 6px 10px;
@@ -564,16 +624,59 @@
       font-size: 13px;
       outline: none
     }
-    .msg-search-bar input:focus { border-color: var(--accent) }
-    .msg-search-bar .search-nav { display: flex; gap: 4px; align-items: center; font-size: 12px; color: var(--text-dim) }
-    .msg-search-bar button { background: none; border: none; color: var(--text-dim); font-size: 16px; cursor: pointer; padding: 4px }
-    .msg-search-bar button:hover { color: var(--text) }
-    .msg .search-highlight { background: rgba(255,200,0,.35); border-radius: 2px; padding: 0 1px }
-    .msg .search-highlight.current { background: rgba(255,200,0,.7) }
+
+    .msg-search-bar input:focus {
+      border-color: var(--accent)
+    }
+
+    .msg-search-bar .search-nav {
+      display: flex;
+      gap: 4px;
+      align-items: center;
+      font-size: 12px;
+      color: var(--text-dim)
+    }
+
+    .msg-search-bar button {
+      background: none;
+      border: none;
+      color: var(--text-dim);
+      font-size: 16px;
+      cursor: pointer;
+      padding: 4px
+    }
+
+    .msg-search-bar button:hover {
+      color: var(--text)
+    }
+
+    .msg .search-highlight {
+      background: rgba(255, 200, 0, .35);
+      border-radius: 2px;
+      padding: 0 1px
+    }
+
+    .msg .search-highlight.current {
+      background: rgba(255, 200, 0, .7)
+    }
 
     /* ===== EXPORT MODAL ===== */
-    .export-row { display: flex; gap: 8px; align-items: center; margin-bottom: 12px }
-    .export-row input[type=number] { width: 80px; padding: 6px 8px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); color: var(--text); font-size: 13px }
+    .export-row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      margin-bottom: 12px
+    }
+
+    .export-row input[type=number] {
+      width: 80px;
+      padding: 6px 8px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--bg);
+      color: var(--text);
+      font-size: 13px
+    }
 
     /* ===== MESSAGES ===== */
     .messages {
@@ -601,13 +704,16 @@
       font-size: 11px;
       font-weight: 500;
       backdrop-filter: blur(8px);
-      box-shadow: 0 1px 3px rgba(0,0,0,.08);
+      box-shadow: 0 1px 3px rgba(0, 0, 0, .08);
       pointer-events: none;
       opacity: 0;
       transition: opacity 0.25s ease;
       white-space: nowrap;
     }
-    .floating-date.visible { opacity: 0.92; }
+
+    .floating-date.visible {
+      opacity: 0.92;
+    }
 
     .msg-date-sep {
       text-align: center;
@@ -845,15 +951,14 @@
     .media-card.downloading .media-progress-bar {
       position: relative;
       overflow: hidden;
-      background-image: linear-gradient(
-        45deg,
-        rgba(0, 0, 0, .12) 25%, transparent 25%,
-        transparent 50%, rgba(0, 0, 0, .12) 50%,
-        rgba(0, 0, 0, .12) 75%, transparent 75%, transparent
-      );
+      background-image: linear-gradient(45deg,
+          rgba(0, 0, 0, .12) 25%, transparent 25%,
+          transparent 50%, rgba(0, 0, 0, .12) 50%,
+          rgba(0, 0, 0, .12) 75%, transparent 75%, transparent);
       background-size: 16px 16px;
       animation: media-prog-stripes 0.8s linear infinite;
     }
+
     .media-card.downloading .media-progress-bar-thin {
       height: 8px;
       margin-top: 6px;
@@ -861,8 +966,13 @@
     }
 
     @keyframes media-prog-stripes {
-      0%   { background-position: 0 0 }
-      100% { background-position: 16px 0 }
+      0% {
+        background-position: 0 0
+      }
+
+      100% {
+        background-position: 16px 0
+      }
     }
 
     .media-file-actions {
@@ -971,14 +1081,24 @@
     .tm-sidebar-btn-ext {
       display: inline-block;
       margin-inline-start: 4px;
-      font-size: 11px; opacity: .65; line-height: 1;
+      font-size: 11px;
+      opacity: .65;
+      line-height: 1;
       vertical-align: baseline
     }
-    .tm-sidebar-btn:hover .tm-sidebar-btn-ext { opacity: 1 }
 
-    .tm-no-scroll { overflow: hidden }
+    .tm-sidebar-btn:hover .tm-sidebar-btn-ext {
+      opacity: 1
+    }
+
+    .tm-no-scroll {
+      overflow: hidden
+    }
+
     .tm-modal {
-      position: fixed; inset: 0; z-index: 9000;
+      position: fixed;
+      inset: 0;
+      z-index: 9000;
       background: var(--bg);
       display: none;
       flex-direction: column;
@@ -988,235 +1108,444 @@
       padding-left: var(--safe-left);
       padding-right: var(--safe-right)
     }
-    .tm-modal.active { display: flex }
+
+    .tm-modal.active {
+      display: flex
+    }
 
     .tm-topbar {
-      display: flex; align-items: center; gap: 12px;
-      padding: 10px 16px; min-height: 56px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 16px;
+      min-height: 56px;
       border-bottom: 1px solid var(--border);
       background: linear-gradient(180deg, var(--bg-elevated, var(--bg)), var(--bg));
-      box-shadow: 0 1px 3px rgba(0,0,0,.06);
+      box-shadow: 0 1px 3px rgba(0, 0, 0, .06);
       flex-shrink: 0
     }
-    .tm-back, .tm-menu {
-      background: none; border: 1px solid transparent; color: var(--text);
-      font-size: 16px; cursor: pointer; padding: 6px 10px; border-radius: 8px;
+
+    .tm-back,
+    .tm-menu {
+      background: none;
+      border: 1px solid transparent;
+      color: var(--text);
+      font-size: 16px;
+      cursor: pointer;
+      padding: 6px 10px;
+      border-radius: 8px;
       transition: background .12s, border-color .12s
     }
-    .tm-back:hover, .tm-menu:hover { background: var(--border); border-color: var(--border) }
-    /* .tm-menu visibility handled inside the same @media block as the sidebar drawer (below). */
-    .tm-menu { display: none }
 
-    .tm-topbar-info { display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0 }
-    .tm-topbar-meta { min-width: 0; flex: 1 }
-    .tm-topbar-name { font-weight: 600; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
-    .tm-topbar-sub { font-size: 11px; color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px }
+    .tm-back:hover,
+    .tm-menu:hover {
+      background: var(--border);
+      border-color: var(--border)
+    }
+
+    /* .tm-menu visibility handled inside the same @media block as the sidebar drawer (below). */
+    .tm-menu {
+      display: none
+    }
+
+    .tm-topbar-info {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex: 1;
+      min-width: 0
+    }
+
+    .tm-topbar-meta {
+      min-width: 0;
+      flex: 1
+    }
+
+    .tm-topbar-name {
+      font-weight: 600;
+      font-size: 15px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis
+    }
+
+    .tm-topbar-sub {
+      font-size: 11px;
+      color: var(--text-dim);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      margin-top: 2px
+    }
 
     .tm-avatar {
       border-radius: 50%;
-      display: inline-flex; align-items: center; justify-content: center;
-      color: #fff; font-weight: 600; font-size: 16px;
-      overflow: hidden; flex-shrink: 0;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+      font-weight: 600;
+      font-size: 16px;
+      overflow: hidden;
+      flex-shrink: 0;
       background: var(--accent);
-      box-shadow: inset 0 0 0 1px rgba(255,255,255,.08), 0 1px 2px rgba(0,0,0,.15);
+      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .08), 0 1px 2px rgba(0, 0, 0, .15);
       position: relative
     }
+
     .tm-avatar img {
-      position: absolute; inset: 0;
-      width: 100%; height: 100%; object-fit: cover; display: block
-    }
-    .tm-avatar-initial {
-      pointer-events: none; user-select: none;
-      display: flex; align-items: center; justify-content: center;
-      width: 100%; height: 100%
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block
     }
 
-    .tm-body { flex: 1; min-height: 0; display: flex; position: relative }
+    .tm-avatar-initial {
+      pointer-events: none;
+      user-select: none;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      height: 100%
+    }
+
+    .tm-body {
+      flex: 1;
+      min-height: 0;
+      display: flex;
+      position: relative
+    }
+
     .tm-sidebar {
-      width: 320px; flex-shrink: 0;
+      width: 320px;
+      flex-shrink: 0;
       border-right: 1px solid var(--border);
       background: var(--bg-elevated, var(--bg));
-      display: flex; flex-direction: column; min-height: 0
+      display: flex;
+      flex-direction: column;
+      min-height: 0
     }
+
     /* Backdrop sits between the sidebar (z:2) and the content. In mobile
        drawer mode it lights up when .tm-sidebar.open is set so tapping
        outside the drawer dismisses it. */
-    .tm-backdrop { display: none }
+    .tm-backdrop {
+      display: none
+    }
 
     /* Mobile drawer. The hamburger menu also shows up here, plus on
        touch devices up to 1024px so phones in landscape and tablets
        in portrait still get the drawer treatment. */
-    @media (max-width: 768px), (pointer: coarse) and (max-width: 1024px) {
-      .tm-menu { display: inline-flex }
-      .tm-sidebar {
-        position: absolute; top: 0; bottom: 0;
-        width: 86%; max-width: 340px;
-        z-index: 2; transition: transform .22s ease;
-        box-shadow: 0 0 0 rgba(0,0,0,.0)
+    @media (max-width: 768px),
+    (pointer: coarse) and (max-width: 1024px) {
+      .tm-menu {
+        display: inline-flex
       }
+
+      .tm-sidebar {
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        width: 86%;
+        max-width: 340px;
+        z-index: 2;
+        transition: transform .22s ease;
+        box-shadow: 0 0 0 rgba(0, 0, 0, .0)
+      }
+
       /* LTR: slide in from the left. */
-      html[dir="ltr"] .tm-sidebar { left: 0; right: auto; transform: translateX(-100%) }
-      html[dir="ltr"] .tm-sidebar.open { transform: translateX(0); box-shadow: 4px 0 24px rgba(0,0,0,.32) }
+      html[dir="ltr"] .tm-sidebar {
+        left: 0;
+        right: auto;
+        transform: translateX(-100%)
+      }
+
+      html[dir="ltr"] .tm-sidebar.open {
+        transform: translateX(0);
+        box-shadow: 4px 0 24px rgba(0, 0, 0, .32)
+      }
+
       /* RTL: slide in from the right (where the channel list belongs). */
-      html[dir="rtl"] .tm-sidebar { right: 0; left: auto; transform: translateX(100%) }
-      html[dir="rtl"] .tm-sidebar.open { transform: translateX(0); box-shadow: -4px 0 24px rgba(0,0,0,.32) }
+      html[dir="rtl"] .tm-sidebar {
+        right: 0;
+        left: auto;
+        transform: translateX(100%)
+      }
+
+      html[dir="rtl"] .tm-sidebar.open {
+        transform: translateX(0);
+        box-shadow: -4px 0 24px rgba(0, 0, 0, .32)
+      }
 
       .tm-backdrop {
         display: block;
-        position: absolute; inset: 0;
-        background: rgba(0,0,0,0);
+        position: absolute;
+        inset: 0;
+        background: rgba(0, 0, 0, 0);
         pointer-events: none;
         transition: background .22s ease;
         z-index: 1
       }
-      .tm-sidebar.open ~ .tm-backdrop {
-        background: rgba(0,0,0,.42);
+
+      .tm-sidebar.open~.tm-backdrop {
+        background: rgba(0, 0, 0, .42);
         pointer-events: auto
       }
     }
+
     .tm-disclaimer {
-      padding: 12px 14px; margin: 10px;
-      font-size: 11px; color: var(--text-dim); line-height: 1.6;
+      padding: 12px 14px;
+      margin: 10px;
+      font-size: 11px;
+      color: var(--text-dim);
+      line-height: 1.6;
       background: var(--bg);
-      border: 1px solid var(--border); border-radius: 10px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
       border-inline-start: 3px solid var(--accent)
     }
+
     .tm-add-row {
-      display: flex; gap: 6px; padding: 0 10px 10px;
+      display: flex;
+      gap: 6px;
+      padding: 0 10px 10px;
       border-bottom: 1px solid var(--border)
     }
+
     .tm-add-row input {
-      flex: 1; padding: 8px 12px; font-size: 13px;
-      background: var(--bg); color: var(--text);
-      border: 1px solid var(--border); border-radius: 8px;
+      flex: 1;
+      padding: 8px 12px;
+      font-size: 13px;
+      background: var(--bg);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 8px;
       font-family: inherit;
       transition: border-color .12s
     }
-    .tm-add-row input:focus { outline: none; border-color: var(--accent) }
-    .tm-add-row .btn { padding: 8px 14px; font-size: 13px; border-radius: 8px }
 
-    .tm-channels-list { flex: 1; overflow-y: auto; padding: 6px }
+    .tm-add-row input:focus {
+      outline: none;
+      border-color: var(--accent)
+    }
+
+    .tm-add-row .btn {
+      padding: 8px 14px;
+      font-size: 13px;
+      border-radius: 8px
+    }
+
+    .tm-channels-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 6px
+    }
+
     .tm-channel-item {
-      display: flex; align-items: center; gap: 10px;
-      padding: 9px 10px; cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 9px 10px;
+      cursor: pointer;
       border-radius: 10px;
       border: 1px solid transparent;
       transition: background .12s, border-color .12s;
       margin-bottom: 2px
     }
-    .tm-channel-item:hover { background: var(--bg); border-color: var(--border) }
+
+    .tm-channel-item:hover {
+      background: var(--bg);
+      border-color: var(--border)
+    }
+
     .tm-channel-item.active {
       background: color-mix(in oklab, var(--accent) 18%, transparent);
       border-color: var(--accent)
     }
-    .tm-channel-item.active .tm-channel-item-name { color: var(--accent) }
-    .tm-channel-item-meta { flex: 1; min-width: 0 }
-    .tm-channel-item-name {
-      font-size: 13px; font-weight: 600;
-      white-space: nowrap; overflow: hidden; text-overflow: ellipsis
+
+    .tm-channel-item.active .tm-channel-item-name {
+      color: var(--accent)
     }
-    .tm-pin { font-size: 9px; opacity: .55; margin-inline-start: 4px }
+
+    .tm-channel-item-meta {
+      flex: 1;
+      min-width: 0
+    }
+
+    .tm-channel-item-name {
+      font-size: 13px;
+      font-weight: 600;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis
+    }
+
+    .tm-pin {
+      font-size: 9px;
+      opacity: .55;
+      margin-inline-start: 4px
+    }
+
     .tm-x {
-      background: none; border: 1px solid transparent; color: inherit;
-      font-size: 16px; cursor: pointer; opacity: .45;
-      padding: 2px 7px; border-radius: 6px;
+      background: none;
+      border: 1px solid transparent;
+      color: inherit;
+      font-size: 16px;
+      cursor: pointer;
+      opacity: .45;
+      padding: 2px 7px;
+      border-radius: 6px;
       transition: background .12s, opacity .12s
     }
-    .tm-x:hover { opacity: 1; background: var(--border) }
+
+    .tm-x:hover {
+      opacity: 1;
+      background: var(--border)
+    }
 
     .tm-content {
-      flex: 1; overflow-y: auto;
+      flex: 1;
+      overflow-y: auto;
       padding: 18px 16px 40px;
       background:
         radial-gradient(circle at 25% 0%, color-mix(in oklab, var(--accent) 6%, transparent), transparent 40%),
         var(--bg);
-      display: flex; flex-direction: column; gap: 12px
+      display: flex;
+      flex-direction: column;
+      gap: 12px
     }
+
     .tm-empty {
-      margin: auto; padding: 32px 24px;
-      text-align: center; color: var(--text-dim); font-size: 13px
+      margin: auto;
+      padding: 32px 24px;
+      text-align: center;
+      color: var(--text-dim);
+      font-size: 13px
     }
 
     /* Channel bio — clearly distinct from posts: dashed border, label header, accent left edge. */
     .tm-channel-bio {
-      max-width: 720px; width: 100%; margin: 0 auto 8px;
+      max-width: 720px;
+      width: 100%;
+      margin: 0 auto 8px;
       background: color-mix(in oklab, var(--accent) 5%, transparent);
       border: 1px dashed color-mix(in oklab, var(--accent) 50%, var(--border));
       border-radius: 12px;
       overflow: hidden
     }
+
     .tm-channel-bio-label {
       padding: 8px 14px;
-      font-size: 11px; font-weight: 700;
-      text-transform: uppercase; letter-spacing: .04em;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .04em;
       color: var(--accent);
       background: color-mix(in oklab, var(--accent) 10%, transparent);
       border-bottom: 1px dashed color-mix(in oklab, var(--accent) 35%, var(--border))
     }
+
     .tm-channel-bio-body {
       padding: 12px 14px;
-      font-size: 13px; line-height: 1.75;
+      font-size: 13px;
+      line-height: 1.75;
       color: var(--text-dim);
-      overflow-wrap: anywhere; word-break: break-word
+      overflow-wrap: anywhere;
+      word-break: break-word
     }
-    .tm-channel-bio-body a { color: var(--accent) }
+
+    .tm-channel-bio-body a {
+      color: var(--accent)
+    }
 
     .tm-post {
-      max-width: 720px; width: 100%; margin: 0 auto;
+      max-width: 720px;
+      width: 100%;
+      margin: 0 auto;
       background: var(--bg-elevated, var(--bg));
       border: 1px solid var(--border);
       border-radius: 14px;
       padding: 12px 16px 10px;
-      box-shadow: 0 1px 3px rgba(0,0,0,.05);
+      box-shadow: 0 1px 3px rgba(0, 0, 0, .05);
       transition: border-color .15s, transform .15s
     }
-    .tm-post:hover { border-color: color-mix(in oklab, var(--accent) 35%, var(--border)) }
+
+    .tm-post:hover {
+      border-color: color-mix(in oklab, var(--accent) 35%, var(--border))
+    }
+
     .tm-post-head {
-      display: flex; align-items: center; gap: 8px;
-      font-size: 11px; color: var(--text-dim);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 11px;
+      color: var(--text-dim);
       margin-bottom: 8px;
       padding-bottom: 6px;
       border-bottom: 1px dashed var(--border)
     }
-    .tm-post-author { font-weight: 700; color: var(--accent) }
+
+
     #tmLightbox {
-      position: fixed; inset: 0; z-index: 99999;
-      background: rgba(0,0,0,.92);
-      display: flex; align-items: center; justify-content: center;
+      position: fixed;
+      inset: 0;
+      z-index: 99999;
+      background: rgba(0, 0, 0, .92);
+      display: flex;
+      align-items: center;
+      justify-content: center;
       padding: 20px;
       cursor: zoom-out;
     }
+
     #tmLightbox img {
-      max-width: 100%; max-height: 100%;
+      max-width: 100%;
+      max-height: 100%;
       object-fit: contain;
-      box-shadow: 0 4px 30px rgba(0,0,0,.5);
+      box-shadow: 0 4px 30px rgba(0, 0, 0, .5);
       cursor: default;
     }
+
     .tm-lightbox-close {
       position: absolute;
       top: max(12px, env(safe-area-inset-top));
       inset-inline-end: 16px;
-      width: 40px; height: 40px;
+      width: 40px;
+      height: 40px;
       border-radius: 50%;
       border: none;
-      background: rgba(255,255,255,.15);
+      background: rgba(255, 255, 255, .15);
       color: #fff;
-      font-size: 26px; line-height: 1;
+      font-size: 26px;
+      line-height: 1;
       cursor: pointer;
-      display: flex; align-items: center; justify-content: center;
+      display: flex;
+      align-items: center;
+      justify-content: center;
       backdrop-filter: blur(6px);
     }
-    .tm-lightbox-close:hover { background: rgba(255,255,255,.28); }
+
+    .tm-lightbox-close:hover {
+      background: rgba(255, 255, 255, .28);
+    }
+
     .donate-addr-row {
-      display: flex; align-items: center; gap: 8px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
       background: var(--surface, var(--bg-elevated, var(--bg)));
       border: 1px solid var(--border);
       border-radius: 8px;
       padding: 8px 10px;
       direction: ltr;
     }
+
     .donate-addr {
-      flex: 1; min-width: 0;
+      flex: 1;
+      min-width: 0;
       font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
       font-size: 12px;
       white-space: nowrap;
@@ -1224,33 +1553,52 @@
       text-overflow: ellipsis;
       color: var(--text);
     }
-    .donate-thanks { margin-top: 14px; font-size: 13px; color: var(--text-dim); text-align: center; }
-    .donate-body { font-size: 13px; line-height: 1.7; }
+
+    .donate-thanks {
+      margin-top: 14px;
+      font-size: 13px;
+      color: var(--text-dim);
+      text-align: center;
+    }
+
+    .donate-body {
+      font-size: 13px;
+      line-height: 1.7;
+    }
 
     .tm-scroll-down {
       position: absolute;
       bottom: max(20px, env(safe-area-inset-bottom));
       inset-inline-end: 16px;
-      width: 40px; height: 40px;
+      width: 40px;
+      height: 40px;
       border-radius: 50%;
       border: 1px solid var(--border);
       background: var(--surface2, var(--bg-elevated, var(--bg)));
       color: var(--text);
       font-size: 18px;
       display: none;
-      align-items: center; justify-content: center;
-      box-shadow: 0 2px 10px rgba(0,0,0,.4);
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 2px 10px rgba(0, 0, 0, .4);
       z-index: 10;
       cursor: pointer;
     }
-    .tm-scroll-down.visible { display: flex; }
+
+    .tm-scroll-down.visible {
+      display: flex;
+    }
+
     .tm-scroll-down:hover {
       background: color-mix(in oklab, var(--accent) 12%, var(--surface2, var(--bg)));
     }
+
     .tm-load-older-row {
-      display: flex; justify-content: center;
+      display: flex;
+      justify-content: center;
       margin: 8px 0 14px;
     }
+
     .tm-load-older {
       background: transparent;
       border: 1px solid var(--border);
@@ -1261,129 +1609,247 @@
       cursor: pointer;
       transition: background .15s, border-color .15s;
     }
+
     .tm-load-older:hover {
       background: color-mix(in oklab, var(--accent) 10%, transparent);
       border-color: color-mix(in oklab, var(--accent) 50%, var(--border));
     }
-    .tm-load-older:disabled { opacity: .6; cursor: default; }
+
+    .tm-load-older:disabled {
+      opacity: .6;
+      cursor: default;
+    }
+
     .tm-post-msgid {
-      font-size: 10px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-      color: var(--text-dim); padding: 1px 5px; border-radius: 4px;
+      font-size: 10px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      color: var(--text-dim);
+      padding: 1px 5px;
+      border-radius: 4px;
       background: color-mix(in oklab, var(--text-dim) 12%, transparent);
       user-select: text
     }
-    .tm-post-time { opacity: .85 }
+
     .tm-post-edited {
-      font-size: 10px; padding: 1px 6px; border-radius: 4px;
-      background: var(--border); color: var(--text-dim)
+      font-size: 10px;
+      padding: 1px 6px;
+      border-radius: 4px;
+      background: var(--border);
+      color: var(--text-dim)
     }
+
+    .tm-post-author {
+      font-weight: 700;
+      color: var(--accent)
+    }
+
+    .tm-post-time {
+      opacity: .85
+    }
+
     .tm-post-text {
+      overflow-wrap: anywhere;
+      /* break long URLs / unbroken strings */
       /* Inherit from --font-size (set by the global Settings slider) and
          add a small bump so telemirror posts read at the same scale as
          main-feed messages. */
       font-size: calc(var(--font-size) + 1px);
       line-height: 1.7;
-      overflow-wrap: anywhere;          /* break long URLs / unbroken strings */
+      overflow-wrap: anywhere;
+      /* break long URLs / unbroken strings */
       word-break: break-word
     }
-    .tm-post-text pre, .tm-post-text code {
+
+    .tm-post-text pre,
+    .tm-post-text code {
       white-space: pre-wrap;
       overflow-wrap: anywhere
     }
+
     .tm-post-text a {
-      color: var(--accent); text-decoration: underline;
+      color: var(--accent);
+      text-decoration: underline;
       text-decoration-color: color-mix(in oklab, var(--accent) 50%, transparent);
       overflow-wrap: anywhere
     }
-    .tm-post-text a:hover { text-decoration-color: currentColor }
+
+    .tm-post-text a:hover {
+      text-decoration-color: currentColor
+    }
+
     .tm-post-media {
       margin-top: 10px;
-      display: grid; gap: 4px
+      display: grid;
+      gap: 4px
     }
+
     /* Single photo: fill width, natural aspect, capped height. */
-    .tm-album-1 { grid-template-columns: 1fr }
-    .tm-album-1 .tm-photo img { max-height: 600px; object-fit: contain; background: #000 }
+    .tm-album-1 {
+      grid-template-columns: 1fr
+    }
+
+    .tm-album-1 .tm-photo img {
+      max-height: 600px;
+      object-fit: contain;
+      background: #000
+    }
+
     /* 2 photos side by side. */
-    .tm-album-2 { grid-template-columns: 1fr 1fr }
-    .tm-album-2 .tm-photo img { aspect-ratio: 1 / 1; object-fit: cover }
+    .tm-album-2 {
+      grid-template-columns: 1fr 1fr
+    }
+
+    .tm-album-2 .tm-photo img {
+      aspect-ratio: 1 / 1;
+      object-fit: cover
+    }
+
     /* 3+ photos: 3-column album. */
-    .tm-album-3 { grid-template-columns: 1fr 1fr 1fr }
-    .tm-album-3 .tm-photo img { aspect-ratio: 1 / 1; object-fit: cover }
+    .tm-album-3 {
+      grid-template-columns: 1fr 1fr 1fr
+    }
+
+    .tm-album-3 .tm-photo img {
+      aspect-ratio: 1 / 1;
+      object-fit: cover
+    }
 
     .tm-photo {
       position: relative;
-      display: block; line-height: 0;
-      border-radius: 10px; overflow: hidden;
+      display: block;
+      line-height: 0;
+      border-radius: 10px;
+      overflow: hidden;
       background: #000;
       border: 1px solid var(--border)
     }
+
     .tm-photo img {
-      width: 100%; height: auto; display: block
+      width: 100%;
+      height: auto;
+      display: block
     }
+
     /* Download badge — fades in on hover; always visible on touch screens. */
     .tm-photo-dl {
-      position: absolute; bottom: 8px; inset-inline-end: 8px;
-      width: 32px; height: 32px;
-      display: inline-flex; align-items: center; justify-content: center;
-      background: rgba(0,0,0,.65); color: #fff;
+      position: absolute;
+      bottom: 8px;
+      inset-inline-end: 8px;
+      width: 32px;
+      height: 32px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(0, 0, 0, .65);
+      color: #fff;
       border-radius: 50%;
-      font-size: 16px; text-decoration: none;
-      opacity: 0; transition: opacity .15s, background .15s;
+      font-size: 16px;
+      text-decoration: none;
+      opacity: 0;
+      transition: opacity .15s, background .15s;
       backdrop-filter: blur(2px)
     }
-    .tm-photo:hover .tm-photo-dl { opacity: 1 }
-    .tm-photo-dl:hover { background: rgba(0,0,0,.85) }
-    @media (hover: none) {
-      .tm-photo-dl { opacity: .85 }
+
+    .tm-photo:hover .tm-photo-dl {
+      opacity: 1
     }
+
+    .tm-photo-dl:hover {
+      background: rgba(0, 0, 0, .85)
+    }
+
+    @media (hover: none) {
+      .tm-photo-dl {
+        opacity: .85
+      }
+    }
+
     .tm-vid {
-      position: relative; display: flex;
-      align-items: center; justify-content: center;
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
       aspect-ratio: 16 / 9;
-      background-size: cover; background-position: center;
-      border-radius: 10px; background-color: var(--border);
+      background-size: cover;
+      background-position: center;
+      border-radius: 10px;
+      background-color: var(--border);
       color: #fff;
-      text-shadow: 0 0 6px rgba(0,0,0,.6);
+      text-shadow: 0 0 6px rgba(0, 0, 0, .6);
       border: 1px solid var(--border)
     }
+
     .tm-vid-play {
-      width: 54px; height: 54px;
-      border-radius: 50%; background: rgba(0,0,0,.5);
+      width: 54px;
+      height: 54px;
+      border-radius: 50%;
+      background: rgba(0, 0, 0, .5);
       backdrop-filter: blur(4px);
-      display: inline-flex; align-items: center; justify-content: center;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
       font-size: 22px;
-      box-shadow: 0 2px 8px rgba(0,0,0,.4)
+      box-shadow: 0 2px 8px rgba(0, 0, 0, .4)
     }
+
     .tm-vid-dur {
-      position: absolute; bottom: 8px; right: 10px;
-      background: rgba(0,0,0,.65);
-      padding: 2px 7px; border-radius: 5px;
+      position: absolute;
+      bottom: 8px;
+      right: 10px;
+      background: rgba(0, 0, 0, .65);
+      padding: 2px 7px;
+      border-radius: 5px;
       font-size: 11px
     }
+
     .tm-post-foot {
-      display: flex; align-items: center; gap: 14px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
       margin-top: 10px;
       padding-top: 6px;
       border-top: 1px dashed var(--border);
-      font-size: 11px; color: var(--text-dim)
+      font-size: 11px;
+      color: var(--text-dim)
     }
-    .tm-views { display: inline-flex; align-items: center; gap: 4px }
+
+    .tm-views {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px
+    }
+
     /* Time at the end of the foot (i18n-friendly with start-end). */
-    .tm-post-foot .tm-post-time { margin-inline-start: auto }
+    .tm-post-foot .tm-post-time {
+      margin-inline-start: auto
+    }
 
     /* Topbar refresh button */
     .tm-refresh {
-      background: none; border: 1px solid transparent; color: var(--text);
-      font-size: 18px; cursor: pointer; padding: 6px 10px; border-radius: 8px;
+      background: none;
+      border: 1px solid transparent;
+      color: var(--text);
+      font-size: 18px;
+      cursor: pointer;
+      padding: 6px 10px;
+      border-radius: 8px;
       transition: background .12s, border-color .12s, transform .15s
     }
-    .tm-refresh:hover { background: var(--border); border-color: var(--border) }
-    .tm-refresh:active { transform: rotate(45deg) }
+
+    .tm-refresh:hover {
+      background: var(--border);
+      border-color: var(--border)
+    }
+
+    .tm-refresh:active {
+      transform: rotate(45deg)
+    }
 
     /* Copy button — text label, sits at the end of post-head. */
     .tm-post-copy {
       margin-inline-start: auto;
-      background: none; border: 1px solid var(--border);
+      background: none;
+      border: 1px solid var(--border);
       color: var(--text-dim);
       cursor: pointer;
       font-size: 11px;
@@ -1391,60 +1857,109 @@
       border-radius: 6px;
       transition: background .12s, color .12s, border-color .12s
     }
-    .tm-post-copy:hover { background: var(--border); color: var(--text); border-color: var(--accent) }
-    .tm-post-copy.tm-copied { color: var(--accent); border-color: var(--accent); background: color-mix(in oklab, var(--accent) 10%, transparent) }
+
+    .tm-post-copy:hover {
+      background: var(--border);
+      color: var(--text);
+      border-color: var(--accent)
+    }
+
+    .tm-post-copy.tm-copied {
+      color: var(--accent);
+      border-color: var(--accent);
+      background: color-mix(in oklab, var(--accent) 10%, transparent)
+    }
 
     /* Generic media tile (voice, audio, document, poll). */
     .tm-media-tile {
-      display: flex; align-items: center; gap: 12px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
       padding: 10px 12px;
       background: var(--bg);
       border: 1px solid var(--border);
       border-radius: 10px;
       min-width: 0
     }
+
     .tm-media-icon {
       flex-shrink: 0;
-      width: 40px; height: 40px;
-      display: inline-flex; align-items: center; justify-content: center;
+      width: 40px;
+      height: 40px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
       border-radius: 50%;
       background: color-mix(in oklab, var(--accent) 18%, transparent);
       font-size: 18px
     }
-    .tm-media-meta { flex: 1; min-width: 0 }
-    .tm-media-title {
-      font-size: 13px; font-weight: 600;
-      white-space: nowrap; overflow: hidden; text-overflow: ellipsis
+
+    .tm-media-meta {
+      flex: 1;
+      min-width: 0
     }
-    .tm-media-sub { font-size: 11px; color: var(--text-dim); margin-top: 2px }
+
+    .tm-media-title {
+      font-size: 13px;
+      font-weight: 600;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis
+    }
+
+    .tm-media-sub {
+      font-size: 11px;
+      color: var(--text-dim);
+      margin-top: 2px
+    }
 
     /* Sticker — small inline image, no border. */
     .tm-sticker {
-      max-width: 200px; line-height: 0
+      max-width: 200px;
+      line-height: 0
     }
+
     .tm-sticker img {
-      max-width: 100%; max-height: 200px; display: block; background: transparent
+      max-width: 100%;
+      max-height: 200px;
+      display: block;
+      background: transparent
     }
 
     /* Reactions row — pills of emoji + count. */
     .tm-post-reactions {
-      display: flex; flex-wrap: wrap; gap: 6px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
       margin-top: 10px
     }
+
     .tm-reaction {
-      display: inline-flex; align-items: center; gap: 4px;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
       padding: 3px 9px;
       background: color-mix(in oklab, var(--accent) 10%, transparent);
       border: 1px solid var(--border);
       border-radius: 999px;
       font-size: 12px
     }
-    .tm-reaction-emoji { font-size: 14px; line-height: 1 }
-    .tm-reaction-count { color: var(--text-dim); font-weight: 600 }
+
+    .tm-reaction-emoji {
+      font-size: 14px;
+      line-height: 1
+    }
+
+    .tm-reaction-count {
+      color: var(--text-dim);
+      font-weight: 600
+    }
 
     /* If our image proxy fails, collapse the wrapper so we don't show
        a permanent broken-image icon. */
-    .tm-photo-failed { display: none }
+    .tm-photo-failed {
+      display: none
+    }
 
     /* Reply quote — clickable, opens source in new tab. */
     .tm-post-reply {
@@ -1454,18 +1969,25 @@
       background: color-mix(in oklab, var(--accent) 6%, transparent);
       border-radius: 4px;
       font-size: 12.5px;
-      max-height: 100px; overflow: hidden
+      max-height: 100px;
+      overflow: hidden
     }
+
     .tm-post-reply-author {
       color: var(--accent);
       font-weight: 600;
       margin-bottom: 2px
     }
+
     .tm-post-reply-text {
       color: var(--text-dim);
       line-height: 1.4
     }
-    .tm-post-reply-text br { display: block; margin-bottom: 2px }
+
+    .tm-post-reply-text br {
+      display: block;
+      margin-bottom: 2px
+    }
 
     /* "Forwarded from X" header. */
     .tm-post-forward {
@@ -1473,17 +1995,26 @@
       color: var(--text-dim);
       margin-bottom: 4px
     }
+
     .tm-post-forward a {
       color: var(--accent);
       text-decoration: none
     }
-    .tm-post-forward a:hover { text-decoration: underline }
+
+    .tm-post-forward a:hover {
+      text-decoration: underline
+    }
 
     /* Poll options under the question. */
     .tm-poll-options {
-      list-style: none; padding: 0; margin: 8px 0 0;
-      display: flex; flex-direction: column; gap: 4px
+      list-style: none;
+      padding: 0;
+      margin: 8px 0 0;
+      display: flex;
+      flex-direction: column;
+      gap: 4px
     }
+
     .tm-poll-options li {
       padding: 4px 8px;
       background: var(--border);
@@ -1491,34 +2022,57 @@
       font-size: 12.5px;
       color: var(--text)
     }
-    .tm-poll-options li::before { content: "○ "; color: var(--text-dim) }
+
+    .tm-poll-options li::before {
+      content: "○ ";
+      color: var(--text-dim)
+    }
 
     /* Confirm dialog rendered inside the telemirror modal so it sits
        on top of the drawer / backdrop / posts at the right stacking. */
     .tm-confirm-overlay {
-      position: absolute; inset: 0;
+      position: absolute;
+      inset: 0;
       z-index: 10;
-      display: flex; align-items: center; justify-content: center;
+      display: flex;
+      align-items: center;
+      justify-content: center;
       padding: 16px;
-      background: rgba(0,0,0,.55);
+      background: rgba(0, 0, 0, .55);
       animation: tm-fade-in .15s ease
     }
-    @keyframes tm-fade-in { from { opacity: 0 } to { opacity: 1 } }
+
+    @keyframes tm-fade-in {
+      from {
+        opacity: 0
+      }
+
+      to {
+        opacity: 1
+      }
+    }
+
     .tm-confirm-box {
-      max-width: 380px; width: 100%;
+      max-width: 380px;
+      width: 100%;
       background: var(--bg-elevated, var(--bg));
       border: 1px solid var(--border);
       border-radius: 14px;
       padding: 18px 20px 14px;
-      box-shadow: 0 12px 32px rgba(0,0,0,.4)
+      box-shadow: 0 12px 32px rgba(0, 0, 0, .4)
     }
+
     .tm-confirm-msg {
       margin: 0 0 14px;
-      font-size: 13px; line-height: 1.7;
+      font-size: 13px;
+      line-height: 1.7;
       color: var(--text)
     }
+
     .tm-confirm-actions {
-      display: flex; gap: 8px; justify-content: flex-end
+      display: flex;
+      gap: 8px;
+      justify-content: flex-end
     }
 
     /* First-visit hint — points the user at the channel list. */
@@ -1534,12 +2088,18 @@
       border: 1px dashed var(--border);
       border-radius: 14px
     }
+
     .tm-first-hint-arrow {
-      font-size: 32px; line-height: 1;
+      font-size: 32px;
+      line-height: 1;
       color: var(--accent);
       margin-bottom: 10px
     }
-    .tm-first-hint-text { white-space: pre-line }
+
+    .tm-first-hint-text {
+      white-space: pre-line
+    }
+
     /* END telemirror */
 
     .media-action {
@@ -1745,7 +2305,7 @@
     .poll-option {
       padding: 6px 10px;
       margin: 4px 0;
-      background: rgba(255,255,255,.06);
+      background: rgba(255, 255, 255, .06);
       border-radius: 6px;
       font-size: 13px
     }
@@ -2930,7 +3490,7 @@
       background: var(--surface);
       border: 1px solid var(--border);
       border-radius: 8px;
-      box-shadow: 0 4px 16px rgba(0,0,0,.2);
+      box-shadow: 0 4px 16px rgba(0, 0, 0, .2);
       min-width: 150px;
       z-index: 100;
       display: none;
@@ -2938,7 +3498,9 @@
       overflow: hidden
     }
 
-    .header-kebab-menu.open { display: flex }
+    .header-kebab-menu.open {
+      display: flex
+    }
 
     .header-kebab-menu button {
       width: 100%;
@@ -2952,9 +3514,12 @@
       text-align: left
     }
 
-    .header-kebab-menu button:hover { background: var(--hover) }
+    .header-kebab-menu button:hover {
+      background: var(--hover)
+    }
 
     @media(max-width:768px) {
+
       /* On mobile, the body's safe-area padding covers iOS notch/home bar.
          Inside, the app fills the remaining space. */
       .app {
@@ -2998,9 +3563,14 @@
         display: flex
       }
 
-      .header-search-btn, .header-export-btn { display: none }
+      .header-search-btn,
+      .header-export-btn {
+        display: none
+      }
 
-      .header-kebab { display: flex }
+      .header-kebab {
+        display: flex
+      }
 
       .msg {
         max-width: 90%
@@ -3041,7 +3611,11 @@
     /* When the on-screen keyboard or browser nav bars pop up on mobile, the
        visual viewport may shrink. Force the app shell to follow it. */
     @supports (height: 100dvh) {
-      html, body { height: 100dvh }
+
+      html,
+      body {
+        height: 100dvh
+      }
     }
 
     ::-webkit-scrollbar {
@@ -3060,15 +3634,23 @@
 </head>
 
 <body>
-
+  <a href="#messages" class="skip-link" data-i18n="skip_to_messages">Skip to messages</a>
   <!-- First-launch language picker. Visible until lang is set; pure HTML/JS
        so it works on iOS, Android, and the browser without native code. -->
-  <div id="firstRunLangModal" style="display:none;position:fixed;inset:0;z-index:99999;background:#0f1722;color:#fff;align-items:center;justify-content:center;flex-direction:column;padding:24px;font-family:-apple-system,BlinkMacSystemFont,system-ui,sans-serif">
+  <div id="firstRunLangModal"
+    style="display:none;position:fixed;inset:0;z-index:99999;background:#0f1722;color:#fff;align-items:center;justify-content:center;flex-direction:column;padding:24px;font-family:-apple-system,BlinkMacSystemFont,system-ui,sans-serif">
     <div style="font-size:38px;font-weight:700;margin-bottom:6px;letter-spacing:-0.5px">TheFeed</div>
-    <div style="opacity:.6;font-size:14px;margin-bottom:36px;text-align:center">Choose your language &nbsp;·&nbsp; زبان خود را انتخاب کنید</div>
+    <div style="opacity:.6;font-size:14px;margin-bottom:36px;text-align:center">Choose your language &nbsp;·&nbsp; زبان
+      خود را انتخاب کنید</div>
     <div style="display:flex;flex-direction:column;gap:14px;width:100%;max-width:320px">
-      <button onclick="firstRunPickLang('en')" style="background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);color:#fff;border-radius:14px;padding:18px;font-size:18px;font-weight:600;cursor:pointer">English<div style="font-size:12px;font-weight:400;opacity:.7;margin-top:2px">Continue in English</div></button>
-      <button onclick="firstRunPickLang('fa')" style="background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);color:#fff;border-radius:14px;padding:18px;font-size:18px;font-weight:600;cursor:pointer">فارسی<div style="font-size:12px;font-weight:400;opacity:.7;margin-top:2px">ادامه به زبان فارسی</div></button>
+      <button onclick="firstRunPickLang('en')"
+        style="background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);color:#fff;border-radius:14px;padding:18px;font-size:18px;font-weight:600;cursor:pointer">English
+        <div style="font-size:12px;font-weight:400;opacity:.7;margin-top:2px">Continue in English</div>
+      </button>
+      <button onclick="firstRunPickLang('fa')"
+        style="background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);color:#fff;border-radius:14px;padding:18px;font-size:18px;font-weight:600;cursor:pointer">فارسی
+        <div style="font-size:12px;font-weight:400;opacity:.7;margin-top:2px">ادامه به زبان فارسی</div>
+      </button>
     </div>
   </div>
   <script>
@@ -3108,7 +3690,7 @@
   <div class="app" id="app">
 
     <!-- SIDEBAR -->
-    <div class="sidebar" id="sidebar">
+    <nav class="sidebar" id="sidebar" aria-label="Channels" data-i18n-aria="sr_channels_nav">
       <div class="sidebar-header">
         <div class="sidebar-header-top">
           <button class="profile-btn" id="profileBtn" onclick="openProfiles()">
@@ -3116,16 +3698,25 @@
             <span class="profile-btn-name" id="profileBtnName" data-i18n="set_up">Set Up</span>
             <span class="profile-btn-arrow"><span class="plus">+</span>&#9660;</span>
           </button>
-          <button class="icon-btn" onclick="openSettings()" title="Settings" data-i18n-title="settings">&#9881;</button>
-          <button class="icon-btn" onclick="jumpToLog()" title="Log" data-i18n-title="sidebar_log" style="font-size:16px">&#128220;</button>
+          <button class="icon-btn" onclick="openSettings()" title="Settings" data-i18n-title="settings"
+            aria-label="Settings" data-i18n-aria="sr_settings"><span aria-hidden="true">&#9881;</span></button>
+          <button class="icon-btn" onclick="jumpToLog()" title="Log" data-i18n-title="sidebar_log"
+            style="font-size:16px" aria-label="Open log" data-i18n-aria="sr_open_log"><span
+              aria-hidden="true">&#128220;</span></button>
         </div>
         <div class="sidebar-toolbar">
-          <button class="stb" id="scannerIconBtn" onclick="openScanner()" data-i18n="scanner_find_resolvers">Find Resolvers</button>
-          <button class="stb" id="resolversSidebarBtn" onclick="openResolversModal()"><span data-i18n="sidebar_resolvers">Resolvers</span> <span class="stb-badge" id="resolversBadge" style="color:var(--error)">0</span></button>
+          <button class="stb" id="scannerIconBtn" onclick="openScanner()" data-i18n="scanner_find_resolvers">Find
+            Resolvers</button>
+          <button class="stb" id="resolversSidebarBtn" onclick="openResolversModal()"><span
+              data-i18n="sidebar_resolvers">Resolvers</span> <span class="stb-badge" id="resolversBadge"
+              style="color:var(--error)">0</span></button>
           <!-- BEGIN telemirror -->
-          <button class="stb tm-sidebar-btn" id="telemirrorSidebarBtn" onclick="openTelemirror()" data-i18n-title="telemirror_btn_title"><span data-i18n="telemirror_btn">Browse channels</span><span class="tm-sidebar-btn-ext" aria-hidden="true">&#8599;</span></button>
+          <button class="stb tm-sidebar-btn" id="telemirrorSidebarBtn" onclick="openTelemirror()"
+            data-i18n-title="telemirror_btn_title"><span data-i18n="telemirror_btn">Browse channels</span><span
+              class="tm-sidebar-btn-ext" aria-hidden="true">&#8599;</span></button>
           <!-- END telemirror -->
         </div>
+        <label for="channelSearch" class="sr-only" data-i18n="sr_channel_search">Search channels</label>
         <input class="sidebar-search" id="channelSearch" type="text" data-i18n-ph="search" placeholder="Search..."
           oninput="filterChannels()">
       </div>
@@ -3140,14 +3731,16 @@
         &middot;
         <a href="#" onclick="event.preventDefault();openDonate()" data-i18n="donate">Donate</a>
         &middot;
-        <a href="https://sartoopjj.github.io/thefeed/privacy-policy.html" target="_blank" data-i18n="privacy_policy">Privacy</a>
+        <a href="https://sartoopjj.github.io/thefeed/privacy-policy.html" target="_blank"
+          data-i18n="privacy_policy">Privacy</a>
       </div>
-    </div>
+    </nav>
 
     <!-- CHAT AREA -->
-    <div class="chat-area">
+    <main class="chat-area" aria-label="Chat" data-i18n-aria="sr_chat_main">
       <div class="chat-header">
-        <button class="back-btn" onclick="openSidebar()">&#8592;</button>
+        <button class="back-btn" onclick="openSidebar()" aria-label="Back to channel list"
+          data-i18n-aria="sr_back_to_channels"><span aria-hidden="true">&#8592;</span></button>
         <div class="chat-header-info">
           <div class="chat-header-name" id="chatName">thefeed</div>
           <div class="chat-header-sub" id="chatSub"></div>
@@ -3156,14 +3749,21 @@
           <span class="next-fetch-label" id="nextFetchTimer"></span><span class="next-fetch-info" id="nextFetchInfoBtn"
             style="display:none" data-i18n-title="next_fetch_info" title="" onclick="showToast(t('next_fetch_info'))"
             tabindex="0">ⓘ</span>
-          <button class="icon-btn header-search-btn" onclick="toggleMsgSearch()" title="Search" data-i18n-title="search_messages"
-            style="width:auto;height:30px;font-size:12px;padding:0 10px;border-radius:8px;border:1px solid var(--border);background:var(--surface)" data-i18n="search_messages">Search</button>
-          <button class="icon-btn header-export-btn" onclick="openExportModal()" title="Export" data-i18n-title="export_messages"
-            style="width:auto;height:30px;font-size:12px;padding:0 10px;border-radius:8px;border:1px solid var(--border);background:var(--surface)" data-i18n="export_messages">Export</button>
-          <button class="icon-btn" id="refreshBtn" onclick="doRefreshUI()" title="Refresh"
-            style="width:40px;height:40px;font-size:20px">&#8635;</button>
+          <button class="icon-btn header-search-btn" onclick="toggleMsgSearch()" title="Search"
+            data-i18n-title="search_messages"
+            style="width:auto;height:30px;font-size:12px;padding:0 10px;border-radius:8px;border:1px solid var(--border);background:var(--surface)"
+            data-i18n="search_messages">Search</button>
+          <button class="icon-btn header-export-btn" onclick="openExportModal()" title="Export"
+            data-i18n-title="export_messages"
+            style="width:auto;height:30px;font-size:12px;padding:0 10px;border-radius:8px;border:1px solid var(--border);background:var(--surface)"
+            data-i18n="export_messages">Export</button>
+          <button class="icon-btn" id="refreshBtn" onclick="doRefreshUI()" title="Refresh" aria-label="Refresh messages"
+            data-i18n-aria="sr_refresh" style="width:40px;height:40px;font-size:20px"><span
+              aria-hidden="true">&#8635;</span></button>
           <div class="header-kebab" id="headerKebab">
-            <button class="icon-btn" onclick="toggleKebabMenu(event)" title="More" style="width:40px;height:40px;font-size:20px">&#8942;</button>
+            <button class="icon-btn" onclick="toggleKebabMenu(event)" title="More" aria-label="More options"
+              data-i18n-aria="sr_more_options" style="width:40px;height:40px;font-size:20px"><span
+                aria-hidden="true">&#8942;</span></button>
             <div class="header-kebab-menu" id="headerKebabMenu">
               <button onclick="toggleMsgSearch();closeKebabMenu()" data-i18n="search_messages">Search</button>
               <button onclick="openExportModal();closeKebabMenu()" data-i18n="export_messages">Export</button>
@@ -3172,7 +3772,8 @@
         </div>
       </div>
       <div class="msg-search-bar" id="msgSearchBar">
-        <input type="text" id="msgSearchInput" data-i18n-ph="search_messages" placeholder="Search messages..." oninput="doMsgSearch()">
+        <input type="text" id="msgSearchInput" data-i18n-ph="search_messages" placeholder="Search messages..."
+          oninput="doMsgSearch()">
         <div class="search-nav">
           <span id="msgSearchCount"></span>
           <button onclick="msgSearchPrev()" title="Previous">&#9650;</button>
@@ -3180,7 +3781,8 @@
           <button onclick="closeMsgSearch()" title="Close">&times;</button>
         </div>
       </div>
-      <div class="messages" id="messages">
+
+      <div class="messages" id="messages" aria-label="Messages" data-i18n-aria="sr_messages_region">
         <div class="empty-state">
           <div class="big-icon">&#128225;</div>
           <p data-i18n="configure_server">Configure a server to start reading</p>
@@ -3189,16 +3791,20 @@
       </div>
       <div class="floating-date" id="floatingDate" dir="auto" hidden></div>
       <div class="send-panel" id="sendPanel">
+        <label for="sendInput" class="sr-only" data-i18n="sr_write_message">Write a message</label>
         <input class="send-input" id="sendInput" data-i18n-ph="write_message" placeholder="Write a message..."
           maxlength="4000">
-        <button class="send-btn" onclick="sendMessage()">&#10148;</button>
+        <button class="send-btn" onclick="sendMessage()" aria-label="Send message" data-i18n-aria="sr_send"><span
+            aria-hidden="true">&#10148;</span></button>
       </div>
-      <button class="scroll-down-btn" id="scrollDownBtn" onclick="scrollToBottom()" title="Jump to latest">&#8595;<span
-          class="scroll-down-badge" id="scrollDownBadge"></span></button>
+      <button class="scroll-down-btn" id="scrollDownBtn" onclick="scrollToBottom()" title="Jump to latest"
+        aria-label="Jump to latest messages" data-i18n-aria="sr_scroll_bottom"><span
+          aria-hidden="true">&#8595;</span><span class="scroll-down-badge" id="scrollDownBadge"></span></button>
+
       <div class="progress-panel" id="progressPanel"></div>
       <div class="log-toggle" onclick="toggleLog()"><span>LOG</span><span id="logToggleIcon">&#9654;</span></div>
       <div class="log-panel hidden" id="logPanel"></div>
-    </div>
+  </div>
   </div>
 
   <!-- DONATE MODAL -->
@@ -3212,7 +3818,8 @@
           <li>BNB Chain</li>
         </ul>
       </div>
-      <label style="font-size:12px;color:var(--text-dim);display:block;margin-bottom:4px" data-i18n="wallet_address">Wallet address</label>
+      <label style="font-size:12px;color:var(--text-dim);display:block;margin-bottom:4px"
+        data-i18n="wallet_address">Wallet address</label>
       <div class="donate-addr-row">
         <code id="donateAddr" class="donate-addr"
               data-full="0xe73f022f668c57cce79feccd875ac7332311013a"
@@ -3241,11 +3848,14 @@
           <div class="tm-topbar-sub" id="tmTopbarSub"></div>
         </div>
       </div>
-      <button class="tm-refresh" onclick="tmRefreshActive()" title="Refresh" data-i18n-title="telemirror_refresh">&#8635;</button>
+      <button class="tm-refresh" onclick="tmRefreshActive()" title="Refresh"
+        data-i18n-title="telemirror_refresh">&#8635;</button>
     </header>
     <div class="tm-body">
       <aside id="tmSidebar" class="tm-sidebar">
-        <p class="tm-disclaimer" data-i18n="telemirror_disclaimer">Experimental backup feature for browsing public Telegram channels. Depends on third-party services and may stop working or be rate-limited. For reliable access, use the core thefeed feature.</p>
+        <p class="tm-disclaimer" data-i18n="telemirror_disclaimer">Experimental backup feature for browsing public
+          Telegram channels. Depends on third-party services and may stop working or be rate-limited. For reliable
+          access, use the core thefeed feature.</p>
         <div class="tm-add-row">
           <input id="tmAddInput" type="text" data-i18n-ph="telemirror_add_ph" placeholder="@username" maxlength="40">
           <button class="btn btn-primary" onclick="telemirrorAdd()" data-i18n="add">Add</button>
@@ -3256,7 +3866,8 @@
       <main id="tmContent" class="tm-content">
         <div class="tm-empty" data-i18n="telemirror_pick_channel">Pick a channel</div>
       </main>
-      <button class="tm-scroll-down" id="tmScrollDownBtn" onclick="tmScrollToBottom()" aria-label="Scroll to latest" title="Scroll to latest">&#8595;</button>
+      <button class="tm-scroll-down" id="tmScrollDownBtn" onclick="tmScrollToBottom()" aria-label="Scroll to latest"
+        title="Scroll to latest">&#8595;</button>
     </div>
   </div>
   <!-- END telemirror -->
@@ -3272,13 +3883,16 @@
            from Settings → Show startup scan prompt. -->
       <div style="display:flex;justify-content:flex-end;margin-bottom:10px">
         <button class="btn btn-flat" id="savedResolversNever" onclick="savedResolversNever()"
-          data-i18n="dont_show_again" style="font-size:11px;padding:4px 10px;color:var(--text-dim)">Don't show again</button>
+          data-i18n="dont_show_again" style="font-size:11px;padding:4px 10px;color:var(--text-dim)">Don't show
+          again</button>
       </div>
       <div class="modal-actions">
         <button class="btn btn-flat" onclick="savedResolversSkip()" data-i18n="saved_resolvers_skip">Skip</button>
-        <button class="btn btn-outline" id="savedResolversRescanBtn" onclick="savedResolversRescan()" data-i18n="saved_resolvers_rescan">Scan
+        <button class="btn btn-outline" id="savedResolversRescanBtn" onclick="savedResolversRescan()"
+          data-i18n="saved_resolvers_rescan">Scan
           Again</button>
-        <button class="btn btn-primary" id="savedResolversUseBtn" onclick="savedResolversUseNow()" data-i18n="saved_resolvers_use">Use
+        <button class="btn btn-primary" id="savedResolversUseBtn" onclick="savedResolversUseNow()"
+          data-i18n="saved_resolvers_use">Use
           Now</button>
       </div>
     </div>
@@ -3316,10 +3930,12 @@
           <label for="cfgProfilePics" data-i18n="profile_pics_enable">Also fetch profile pictures over DNS</label>
         </div>
         <div class="row" style="margin-top:4px;font-size:11px;color:var(--text-dim)">
-          <span data-i18n="profile_pics_dns_note">GitHub relay path is always used automatically. This option additionally pulls avatars over DNS when the relay is unavailable.</span>
+          <span data-i18n="profile_pics_dns_note">GitHub relay path is always used automatically. This option
+            additionally pulls avatars over DNS when the relay is unavailable.</span>
         </div>
         <div class="row" style="margin-top:6px;gap:8px;align-items:center">
-          <button type="button" class="btn btn-flat" id="profilePicsRefreshBtn" onclick="profilePicsRefresh()" data-i18n="profile_pics_refresh">Refresh avatars</button>
+          <button type="button" class="btn btn-flat" id="profilePicsRefreshBtn" onclick="profilePicsRefresh()"
+            data-i18n="profile_pics_refresh">Refresh avatars</button>
           <span id="profilePicsProgress" style="font-size:11px;color:var(--text-dim)"></span>
         </div>
       </div>
@@ -3353,30 +3969,31 @@
             data-i18n="check_github" style="flex:1">Check on GitHub</button>
         </div>
         <div class="settings-info-row">
-          <button class="btn btn-flat btn-sm" onclick="clearCache()"
-            style="color:var(--danger,#e74c3c);width:100%" data-i18n="clear_cache_btn">Clear Cache</button>
+          <button class="btn btn-flat btn-sm" onclick="clearCache()" style="color:var(--danger,#e74c3c);width:100%"
+            data-i18n="clear_cache_btn">Clear Cache</button>
         </div>
       </div>
       <div class="form-group" style="margin-top:12px">
         <label data-i18n="bg_image">Background Image</label>
         <div style="display:flex;gap:6px;align-items:center">
-          <input type="file" id="bgImageInput" accept="image/*" style="flex:1;font-size:12px;color:var(--text)" onchange="applyBgImage()">
-          <button class="btn btn-flat btn-sm" onclick="clearBgImage()" style="color:var(--error)" data-i18n="clear_bg">Clear</button>
+          <input type="file" id="bgImageInput" accept="image/*" style="flex:1;font-size:12px;color:var(--text)"
+            onchange="applyBgImage()">
+          <button class="btn btn-flat btn-sm" onclick="clearBgImage()" style="color:var(--error)"
+            data-i18n="clear_bg">Clear</button>
         </div>
       </div>
       <!-- Android-only: App Password -->
       <div id="androidPasswordSection" class="settings-section" style="display:none">
         <div class="settings-section-title"><span data-i18n="app_password">App Password</span></div>
         <div id="passwordSetSection" style="margin-top:8px">
-          <input type="password" id="appPasswordInput" placeholder=""
-            data-i18n-ph="password_new_ph"
+          <input type="password" id="appPasswordInput" placeholder="" data-i18n-ph="password_new_ph"
             style="width:100%;padding:8px 12px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:13px;box-sizing:border-box;margin-bottom:6px">
-          <input type="password" id="appPasswordConfirm" placeholder=""
-            data-i18n-ph="password_confirm_ph"
+          <input type="password" id="appPasswordConfirm" placeholder="" data-i18n-ph="password_confirm_ph"
             style="width:100%;padding:8px 12px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:13px;box-sizing:border-box">
           <div id="passwordError" style="color:var(--error);font-size:12px;margin-top:4px;display:none"></div>
           <div style="margin-top:8px">
-            <button class="btn btn-primary" onclick="setAppPassword()" style="font-size:12px;padding:6px 14px" data-i18n="password_set">Set Password</button>
+            <button class="btn btn-primary" onclick="setAppPassword()" style="font-size:12px;padding:6px 14px"
+              data-i18n="password_set">Set Password</button>
           </div>
         </div>
         <div id="passwordRemoveSection" style="display:none">
@@ -3385,17 +4002,20 @@
               <span class="password-status-dot"></span>
               <span data-i18n="password_active">Password is active</span>
             </div>
-            <button class="btn btn-flat btn-sm" onclick="showPasswordRemovePrompt()" style="color:var(--error)" data-i18n="password_change_remove">Change / Remove</button>
+            <button class="btn btn-flat btn-sm" onclick="showPasswordRemovePrompt()" style="color:var(--error)"
+              data-i18n="password_change_remove">Change / Remove</button>
           </div>
           <div id="passwordRemovePrompt" style="display:none;margin-top:8px">
-            <input type="password" id="appPasswordCurrent" placeholder=""
-              data-i18n-ph="password_current_ph"
+            <input type="password" id="appPasswordCurrent" placeholder="" data-i18n-ph="password_current_ph"
               style="width:100%;padding:8px 12px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:13px;box-sizing:border-box">
             <div id="passwordRemoveError" style="color:var(--error);font-size:12px;margin-top:4px;display:none"></div>
             <div style="display:flex;gap:6px;margin-top:8px">
-              <button class="btn btn-primary" onclick="changeAppPassword()" style="font-size:12px;padding:6px 14px" data-i18n="password_change">Change</button>
-              <button class="btn btn-flat" onclick="removeAppPassword()" style="font-size:12px;padding:6px 14px;color:var(--error)" data-i18n="password_remove">Remove</button>
-              <button class="btn btn-flat" onclick="hidePasswordRemovePrompt()" style="font-size:12px;padding:6px 14px" data-i18n="cancel">Cancel</button>
+              <button class="btn btn-primary" onclick="changeAppPassword()" style="font-size:12px;padding:6px 14px"
+                data-i18n="password_change">Change</button>
+              <button class="btn btn-flat" onclick="removeAppPassword()"
+                style="font-size:12px;padding:6px 14px;color:var(--error)" data-i18n="password_remove">Remove</button>
+              <button class="btn btn-flat" onclick="hidePasswordRemovePrompt()" style="font-size:12px;padding:6px 14px"
+                data-i18n="cancel">Cancel</button>
             </div>
           </div>
         </div>
@@ -3418,7 +4038,8 @@
         </div>
         <div class="import-row">
           <input id="importUriInput" placeholder="thefeed://..." data-i18n-ph="import_uri_ph">
-          <button class="btn btn-flat btn-sm" type="button" onclick="pasteImportUri()" data-i18n-title="paste" title="Paste" aria-label="Paste" style="font-size:14px">&#128203;</button>
+          <button class="btn btn-flat btn-sm" type="button" onclick="pasteImportUri()" data-i18n-title="paste"
+            title="Paste" aria-label="Paste" style="font-size:14px">&#128203;</button>
           <button class="btn btn-primary btn-sm" onclick="doImportUri()" data-i18n="import">Import</button>
         </div>
         <div id="importError" style="color:var(--error);font-size:12px;display:none;margin-top:6px"></div>
@@ -3440,7 +4061,8 @@
        renders the same URI for cross-device share. -->
   <div class="modal-overlay" id="shareProfileModal">
     <div class="modal" style="max-width:440px">
-      <h2 style="margin-top:0"><span data-i18n="share">Share</span> &middot; <span id="shareModalProfileName" style="color:var(--text-dim);font-weight:400"></span></h2>
+      <h2 style="margin-top:0"><span data-i18n="share">Share</span> &middot; <span id="shareModalProfileName"
+          style="color:var(--text-dim);font-weight:400"></span></h2>
       <div class="form-group">
         <label data-i18n="share_source">Source</label>
         <select id="shareModalSource" onchange="reloadShareModalResolvers()"></select>
@@ -3449,15 +4071,20 @@
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
           <label style="margin:0" data-i18n="select_resolvers_export">Resolvers to include</label>
           <div style="display:flex;gap:4px">
-            <button type="button" class="btn btn-flat" style="font-size:11px;padding:3px 8px" onclick="toggleAllShareModalResolvers(true)" data-i18n="select_all">All</button>
-            <button type="button" class="btn btn-flat" style="font-size:11px;padding:3px 8px" onclick="toggleAllShareModalResolvers(false)" data-i18n="select_none">None</button>
+            <button type="button" class="btn btn-flat" style="font-size:11px;padding:3px 8px"
+              onclick="toggleAllShareModalResolvers(true)" data-i18n="select_all">All</button>
+            <button type="button" class="btn btn-flat" style="font-size:11px;padding:3px 8px"
+              onclick="toggleAllShareModalResolvers(false)" data-i18n="select_none">None</button>
           </div>
         </div>
-        <div id="shareModalResolvers" style="max-height:160px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:6px;font-size:12px;font-family:monospace"></div>
+        <div id="shareModalResolvers"
+          style="max-height:160px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:6px;font-size:12px;font-family:monospace">
+        </div>
       </div>
       <div class="form-group">
         <label data-i18n="share_uri">Share URI</label>
-        <textarea id="shareModalUri" readonly rows="3" style="width:100%;font-family:monospace;font-size:12px;resize:vertical;box-sizing:border-box"></textarea>
+        <textarea id="shareModalUri" readonly rows="3"
+          style="width:100%;font-family:monospace;font-size:12px;resize:vertical;box-sizing:border-box"></textarea>
       </div>
       <div class="modal-actions">
         <button class="btn btn-flat" onclick="closeShareModal()" data-i18n="close">Close</button>
@@ -3471,15 +4098,18 @@
     <div class="modal">
       <h2 id="profileEditorTitle" data-i18n="new_profile">New Profile</h2>
       <div id="peWarning" class="tg-warning"></div>
-      <div class="form-group"><label data-i18n="nickname">Nickname</label><input id="peNick" maxlength="32" placeholder="My Server" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
-      </div>
-      <div class="form-group"><label data-i18n="domain">Domain</label><input id="peDomain" placeholder="t.example.com" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
-      </div>
+      <div class="form-group"><label data-i18n="nickname">Nickname</label><input id="peNick" maxlength="32"
+          placeholder="My Server" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"></div>
+      <div class="form-group"><label data-i18n="domain">Domain</label><input id="peDomain" placeholder="t.example.com"
+          autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"></div>
       <div class="form-group"><label data-i18n="passphrase">Passphrase</label><input type="password" id="peKey"
           placeholder="..."></div>
-      <div class="info-note" style="font-size:12px;line-height:1.5;margin:6px 0 10px;padding:8px 12px;background:var(--card-bg);border-radius:8px;border:1px solid var(--border)">
+      <div class="info-note"
+        style="font-size:12px;line-height:1.5;margin:6px 0 10px;padding:8px 12px;background:var(--card-bg);border-radius:8px;border:1px solid var(--border)">
         <span data-i18n="resolver_bank_note">Resolvers are managed in the shared Resolver Bank.</span>
-        <a href="#" onclick="event.preventDefault();closeProfileEditor();openResolversModal()" style="color:var(--accent);text-decoration:none;margin-inline-start:4px" data-i18n="open_resolver_bank">Open Resolver Bank</a>
+        <a href="#" onclick="event.preventDefault();closeProfileEditor();openResolversModal()"
+          style="color:var(--accent);text-decoration:none;margin-inline-start:4px" data-i18n="open_resolver_bank">Open
+          Resolver Bank</a>
       </div>
       <div class="form-group"><label data-i18n="query_mode">Query Mode</label>
         <select id="peQueryMode">
@@ -3487,12 +4117,13 @@
           <option value="double">Multi-label (hex)</option>
         </select>
       </div>
-        <div class="form-group"><label data-i18n="rate_limit">Concurrent block fetches</label><input type="number"
+      <div class="form-group"><label data-i18n="rate_limit">Concurrent block fetches</label><input type="number"
           id="peRateLimit" value="6" min="0" step="0.1"></div>
-        <div class="form-group"><label data-i18n="scatter">Parallel resolvers per block</label><input type="number" id="peScatter"
-          value="4" min="1" max="5" title="How many resolvers are queried at the same time for one block"></div>
-        <div class="form-group"><label data-i18n="dns_timeout">DNS Query Timeout (seconds)</label><input type="number" id="peTimeout"
-          value="15" min="1" max="60" step="1"></div>
+      <div class="form-group"><label data-i18n="scatter">Parallel resolvers per block</label><input type="number"
+          id="peScatter" value="4" min="1" max="5"
+          title="How many resolvers are queried at the same time for one block"></div>
+      <div class="form-group"><label data-i18n="dns_timeout">DNS Query Timeout (seconds)</label><input type="number"
+          id="peTimeout" value="15" min="1" max="60" step="1"></div>
       <!-- Channel Management (editing only) -->
       <div id="peChannelSection" style="display:none">
         <hr class="section-divider">
@@ -3514,7 +4145,6 @@
       </div>
     </div>
   </div>
-
   <!-- ===== EXPORT MODAL ===== -->
   <div class="modal-overlay" id="exportModal">
     <div class="modal" style="max-width:380px">
@@ -3522,9 +4152,13 @@
       <div class="export-row">
         <label data-i18n="export_count">Number of messages</label>
         <div style="display:flex;align-items:center;gap:8px">
-          <button class="btn btn-outline" onclick="var e=document.getElementById('exportCount');e.value=Math.max(1,parseInt(e.value||1)-1)" style="width:32px;height:32px;padding:0;font-size:18px;border-radius:8px">&minus;</button>
+          <button class="btn btn-outline"
+            onclick="var e=document.getElementById('exportCount');e.value=Math.max(1,parseInt(e.value||1)-1)"
+            style="width:32px;height:32px;padding:0;font-size:18px;border-radius:8px">&minus;</button>
           <input type="number" id="exportCount" value="10" min="1" max="500" style="width:70px;text-align:center">
-          <button class="btn btn-outline" onclick="var e=document.getElementById('exportCount');e.value=Math.min(parseInt(e.max)||500,parseInt(e.value||0)+1)" style="width:32px;height:32px;padding:0;font-size:18px;border-radius:8px">&plus;</button>
+          <button class="btn btn-outline"
+            onclick="var e=document.getElementById('exportCount');e.value=Math.min(parseInt(e.max)||500,parseInt(e.value||0)+1)"
+            style="width:32px;height:32px;padding:0;font-size:18px;border-radius:8px">&plus;</button>
         </div>
       </div>
       <div class="modal-actions">
@@ -3544,10 +4178,9 @@
       <div class="resolver-header">
         <h2 style="margin:0;display:flex;align-items:center;gap:8px">
           <span data-i18n="resolvers_title">Resolver Bank</span>
-          <button type="button" class="title-info-btn" id="resolverBankInfoBtn"
-            onclick="toggleResolverBankInfo()"
-            data-i18n-title="info" title="Info" aria-label="Info"
-            aria-controls="resolverBankInfoPanel" aria-expanded="false">i</button>
+          <button type="button" class="title-info-btn" id="resolverBankInfoBtn" onclick="toggleResolverBankInfo()"
+            data-i18n-title="info" title="Info" aria-label="Info" aria-controls="resolverBankInfoPanel"
+            aria-expanded="false">i</button>
         </h2>
         <!-- Bank chip — populated by renderBankPill(). Lives in the
              header so it doesn't crowd the list-tabs strip. -->
@@ -3555,7 +4188,8 @@
       </div>
       <div class="info-note" id="resolverBankInfoPanel" hidden
         style="font-size:12px;line-height:1.5;margin-bottom:12px;padding:8px 12px;background:var(--card-bg);border-radius:8px;border:1px solid var(--border)">
-        <span data-i18n="resolver_bank_info">Resolvers are DNS servers used to connect to thefeed and fetch data. Use the Scanner to find new resolvers, or add them manually below.</span>
+        <span data-i18n="resolver_bank_info">Resolvers are DNS servers used to connect to thefeed and fetch data. Use
+          the Scanner to find new resolvers, or add them manually below.</span>
       </div>
       <!-- List tabs — every named resolver list plus a "+" tab to
            create new ones. Switching tabs hot-swaps the fetcher's
@@ -3583,30 +4217,40 @@
         <div id="resolverBankListEl" style="max-height:280px;overflow-y:auto;font-size:13px;margin-bottom:10px"></div>
         <!-- Cleanup section -->
         <div style="border-top:1px solid var(--border);padding-top:10px;margin-top:6px">
-          <div style="font-size:13px;font-weight:600;margin-bottom:6px" data-i18n="cleanup_title">Remove Bad Resolvers</div>
+          <div style="font-size:13px;font-weight:600;margin-bottom:6px" data-i18n="cleanup_title">Remove Bad Resolvers
+          </div>
           <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
             <label style="font-size:12px;white-space:nowrap" data-i18n="min_score">Min score:</label>
-            <input type="range" id="bankCleanupSlider" min="0.01" max="0.5" step="0.01" value="0.10" style="flex:1" oninput="previewBankCleanup()">
-            <span id="bankCleanupValue" style="font-size:12px;font-weight:600;min-width:36px;text-align:center">0.10</span>
+            <input type="range" id="bankCleanupSlider" min="0.01" max="0.5" step="0.01" value="0.10" style="flex:1"
+              oninput="previewBankCleanup()">
+            <span id="bankCleanupValue"
+              style="font-size:12px;font-weight:600;min-width:36px;text-align:center">0.10</span>
           </div>
           <div id="bankCleanupPreview" style="font-size:12px;color:var(--text-dim);margin-bottom:8px"></div>
-          <button class="btn btn-danger btn-sm" onclick="doBankCleanup()" data-i18n="remove_bad_resolvers">Remove Bad Resolvers</button>
+          <button class="btn btn-danger btn-sm" onclick="doBankCleanup()" data-i18n="remove_bad_resolvers">Remove Bad
+            Resolvers</button>
         </div>
         <!-- Add resolvers manually -->
         <div style="border-top:1px solid var(--border);padding-top:10px;margin-top:10px">
           <div style="font-size:13px;font-weight:600;margin-bottom:6px" data-i18n="add_resolvers">Add Resolvers</div>
           <div style="display:flex;gap:6px">
-            <textarea id="bankAddResolvers" rows="2" placeholder="8.8.8.8&#10;1.1.1.1" style="flex:1;font-family:monospace;font-size:12px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:6px 8px"></textarea>
-            <button class="btn btn-primary btn-sm" onclick="addResolversToBank()" style="align-self:flex-end" data-i18n="add">Add</button>
+            <textarea id="bankAddResolvers" rows="2" placeholder="8.8.8.8&#10;1.1.1.1"
+              style="flex:1;font-family:monospace;font-size:12px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:6px 8px"></textarea>
+            <button class="btn btn-primary btn-sm" onclick="addResolversToBank()" style="align-self:flex-end"
+              data-i18n="add">Add</button>
           </div>
         </div>
       </div>
-      <div style="border-top:1px solid var(--border);padding-top:10px;margin-top:10px;display:flex;align-items:center;gap:8px">
+      <div
+        style="border-top:1px solid var(--border);padding-top:10px;margin-top:10px;display:flex;align-items:center;gap:8px">
         <input type="checkbox" id="bankAutoScan" style="width:auto" checked onchange="toggleBankAutoScan()">
-        <label for="bankAutoScan" style="font-size:12px;cursor:pointer" data-i18n="auto_scan">Automatic hourly resolver check</label>
+        <label for="bankAutoScan" style="font-size:12px;cursor:pointer" data-i18n="auto_scan">Automatic hourly
+          resolver
+          check</label>
       </div>
       <div class="modal-actions">
-        <button class="btn btn-outline" onclick="openScannerFromBank()" data-i18n="scanner_find_resolvers">&#128269; Find Resolvers</button>
+        <button class="btn btn-outline" onclick="openScannerFromBank()" data-i18n="scanner_find_resolvers">&#128269;
+          Find Resolvers</button>
         <button class="btn btn-outline" onclick="doRescanFromBank()" data-i18n="rescan">Rescan</button>
         <button class="btn btn-outline" onclick="resetScoreboard()" data-i18n="reset_scoreboard">Reset Scores</button>
         <button class="btn btn-outline" onclick="copyResolversList()" data-i18n="copy">Copy</button>
@@ -3623,10 +4267,24 @@
       <!-- Collapsible help -->
       <div style="margin-bottom:14px">
         <p id="scannerAboutShort" style="font-size:13px;color:var(--text-dim);line-height:1.5;margin:0">
-          <span data-i18n="scanner_about_short">Scan IP ranges to find DNS resolvers that work with your server.</span>
-          <a href="#" id="scannerReadMoreLink" onclick="event.preventDefault();document.getElementById('scannerAboutFull').style.display='';this.style.display='none'" style="color:var(--accent);text-decoration:none" data-i18n="scanner_read_more">Read more...</a>
+          <span data-i18n="scanner_about_short">Scan IP ranges to find DNS resolvers that work with your
+            server.</span>
+          <a href="#" id="scannerReadMoreLink"
+            onclick="event.preventDefault();document.getElementById('scannerAboutFull').style.display='';this.style.display='none'"
+            style="color:var(--accent);text-decoration:none" data-i18n="scanner_read_more">Read more...</a>
         </p>
-        <p id="scannerAboutFull" style="display:none;font-size:12px;color:var(--text-dim);line-height:1.6;margin:0"><span data-i18n="scanner_about">This tool scans IP ranges to find DNS servers that can reach your thefeed server. Enter CIDRs (like 192.168.1.0/24) or individual IPs, pick a profile, and hit Scan. The app sends a small test query to each IP. If the IP answers correctly, it is a working resolver. You can also turn on "Expand /24" — when a working IP is found, the app will automatically check nearby IPs in the same network. Results show response time so you can pick the fastest ones. You can pause, resume, or stop the scan at any time.</span> <a href="#" onclick="event.preventDefault();document.getElementById('scannerAboutFull').style.display='none';document.getElementById('scannerReadMoreLink').style.display=''" style="color:var(--accent);text-decoration:none" data-i18n="scanner_read_less">Show less</a></p>
+        <p id="scannerAboutFull" style="display:none;font-size:12px;color:var(--text-dim);line-height:1.6;margin:0">
+          <span data-i18n="scanner_about">This tool scans IP ranges to find DNS servers that can reach your thefeed
+            server. Enter CIDRs (like 192.168.1.0/24) or individual IPs, pick a profile, and hit Scan. The app sends a
+            small test query to each IP. If the IP answers correctly, it is a working resolver. You can also turn on
+            "Expand /24" — when a working IP is found, the app will automatically check nearby IPs in the same
+            network.
+            Results show response time so you can pick the fastest ones. You can pause, resume, or stop the scan at
+            any
+            time.</span> <a href="#"
+            onclick="event.preventDefault();document.getElementById('scannerAboutFull').style.display='none';document.getElementById('scannerReadMoreLink').style.display=''"
+            style="color:var(--accent);text-decoration:none" data-i18n="scanner_read_less">Show less</a>
+        </p>
       </div>
 
       <!-- Config section -->
@@ -3635,20 +4293,28 @@
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
             <label data-i18n="scanner_targets">IPs or CIDRs (one per line)</label>
             <div style="display:flex;gap:4px">
-              <button class="btn btn-flat" onclick="document.getElementById('scanTargets').value='';updateScanIpCount()" data-i18n="scanner_clear_targets" style="font-size:12px;padding:4px 10px">&#128465; Clear</button>
-              <button class="btn btn-flat" onclick="loadScannerPresets()" style="font-size:12px;padding:4px 10px"><img class="lion-sun-icon" src="/static/lion-sun.svg" alt="" style="height:14px;vertical-align:middle;margin-right:2px"> <span data-i18n="scanner_load_presets">Load Presets</span></button>
+              <button class="btn btn-flat" onclick="document.getElementById('scanTargets').value='';updateScanIpCount()"
+                data-i18n="scanner_clear_targets" style="font-size:12px;padding:4px 10px">&#128465; Clear</button>
+              <button class="btn btn-flat" onclick="loadScannerPresets()" style="font-size:12px;padding:4px 10px"><img
+                  class="lion-sun-icon" src="/static/lion-sun.svg" alt=""
+                  style="height:14px;vertical-align:middle;margin-right:2px"> <span
+                  data-i18n="scanner_load_presets">Load Presets</span></button>
             </div>
           </div>
-          <textarea id="scanTargets" rows="3" placeholder="5.1.0.0/16&#10;8.8.8.8&#10;1.1.1.1" style="width:100%;font-family:monospace;font-size:13px" oninput="updateScanIpCount()"></textarea>
+          <textarea id="scanTargets" rows="3" placeholder="5.1.0.0/16&#10;8.8.8.8&#10;1.1.1.1"
+            style="width:100%;font-family:monospace;font-size:13px" oninput="updateScanIpCount()"></textarea>
           <div id="scanIpCount" style="margin-top:4px;font-size:12px;color:var(--text-dim);display:none"></div>
-          <div id="scanPresetTag" style="display:none;margin-top:6px;padding:6px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;font-size:13px;color:var(--text)"></div>
+          <div id="scanPresetTag"
+            style="display:none;margin-top:6px;padding:6px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;font-size:13px;color:var(--text)">
+          </div>
         </div>
         <div class="form-group">
           <label data-i18n="scanner_profile">Profile</label>
           <select id="scanProfile" style="width:100%"></select>
         </div>
         <details style="margin-bottom:12px">
-          <summary style="cursor:pointer;font-size:13px;color:var(--text-dim);user-select:none" data-i18n="scanner_advanced">Advanced options</summary>
+          <summary style="cursor:pointer;font-size:13px;color:var(--text-dim);user-select:none"
+            data-i18n="scanner_advanced">Advanced options</summary>
           <div style="margin-top:10px;display:grid;grid-template-columns:1fr 1fr;gap:10px">
             <div class="form-group">
               <label data-i18n="query_mode">Query Mode</label>
@@ -3673,7 +4339,9 @@
           <div class="form-group" style="margin-top:4px">
             <div class="row" style="gap:6px;align-items:center">
               <input type="checkbox" id="scanExpand">
-              <label for="scanExpand" style="font-size:13px" data-i18n="scanner_expand_subnet">Expand /24 — scan nearby IPs when a resolver is found</label>
+              <label for="scanExpand" style="font-size:13px" data-i18n="scanner_expand_subnet">Expand /24 — scan
+                nearby
+                IPs when a resolver is found</label>
             </div>
           </div>
         </details>
@@ -3686,23 +4354,29 @@
             <strong id="scanStatusLabel">-</strong>
           </div>
           <div style="font-size:13px;color:var(--text-dim)">
-            <span id="scanProgressText">0 / 0</span> &mdash; <span id="scanFoundText">0</span> <span data-i18n="scanner_found">found</span>
+            <span id="scanProgressText">0 / 0</span> &mdash; <span id="scanFoundText">0</span> <span
+              data-i18n="scanner_found">found</span>
           </div>
         </div>
         <div style="height:6px;border-radius:3px;margin-bottom:14px;background:var(--border);overflow:hidden">
-          <div id="scanProgressFill" style="width:0%;height:100%;border-radius:3px;background:var(--accent);transition:width .3s"></div>
+          <div id="scanProgressFill"
+            style="width:0%;height:100%;border-radius:3px;background:var(--accent);transition:width .3s"></div>
         </div>
       </div>
 
       <!-- Results section -->
-      <div id="scannerResults" style="display:none;max-height:220px;overflow-y:auto;margin-bottom:14px;border:1px solid var(--border);border-radius:8px">
+      <div id="scannerResults"
+        style="display:none;max-height:220px;overflow-y:auto;margin-bottom:14px;border:1px solid var(--border);border-radius:8px">
         <table style="width:100%;font-size:13px;border-collapse:collapse">
-          <thead><tr style="background:var(--bg);position:sticky;top:0;z-index:1">
-            <th style="padding:8px;text-align:left;width:32px"><input type="checkbox" id="scanSelectAll" checked onchange="toggleScanSelectAll(this.checked)"></th>
-            <th style="padding:8px;text-align:left">IP</th>
-            <th style="padding:8px;text-align:right" data-i18n="scanner_latency">ms</th>
-            <th style="padding:8px;width:36px"></th>
-          </tr></thead>
+          <thead>
+            <tr style="background:var(--bg);position:sticky;top:0;z-index:1">
+              <th style="padding:8px;text-align:left;width:32px"><input type="checkbox" id="scanSelectAll" checked
+                  onchange="toggleScanSelectAll(this.checked)"></th>
+              <th style="padding:8px;text-align:left">IP</th>
+              <th style="padding:8px;text-align:right" data-i18n="scanner_latency">ms</th>
+              <th style="padding:8px;width:36px"></th>
+            </tr>
+          </thead>
           <tbody id="scanResultsBody"></tbody>
         </table>
       </div>
@@ -3713,7 +4387,8 @@
            prune individually; that path also propagates removals. -->
       <div id="scannerApplySection" style="display:none;margin-bottom:14px">
         <div style="display:flex;gap:8px;flex-wrap:wrap">
-          <button class="btn btn-primary" style="flex:1;min-width:0;padding:10px 0;font-size:14px" onclick="applyScanResults('append')">
+          <button class="btn btn-primary" style="flex:1;min-width:0;padding:10px 0;font-size:14px"
+            onclick="applyScanResults('append')">
             <span data-i18n="scanner_append">Add to bank</span> <span id="scanAppendCount" style="opacity:.7"></span>
           </button>
         </div>
@@ -3721,17 +4396,23 @@
           <button class="btn btn-flat" style="flex:1;padding:8px 0;font-size:13px" onclick="copySelectedScanResults()">
             <span data-i18n="copy">Copy</span> <span id="scanCopyCount" style="opacity:.7"></span>
           </button>
-          <button class="btn btn-flat" style="flex:1;padding:8px 0;font-size:13px" onclick="copyAllScanResults()" data-i18n="scanner_copy_all">Copy All</button>
-          <button class="btn btn-outline" style="flex:1;padding:8px 0;font-size:13px;font-weight:600" onclick="resetScannerUI()" data-i18n="scanner_new_scan">&#8634; New Scan</button>
+          <button class="btn btn-flat" style="flex:1;padding:8px 0;font-size:13px" onclick="copyAllScanResults()"
+            data-i18n="scanner_copy_all">Copy All</button>
+          <button class="btn btn-outline" style="flex:1;padding:8px 0;font-size:13px;font-weight:600"
+            onclick="resetScannerUI()" data-i18n="scanner_new_scan">&#8634; New Scan</button>
         </div>
       </div>
 
       <div class="modal-actions" style="gap:8px;flex-wrap:wrap">
-        <button class="btn btn-flat" onclick="closeScanner()" data-i18n="close" style="padding:10px 20px;font-size:14px">Close</button>
+        <button class="btn btn-flat" onclick="closeScanner()" data-i18n="close"
+          style="padding:10px 20px;font-size:14px">Close</button>
         <div style="flex:1"></div>
-        <button class="btn btn-outline" id="scanPauseBtn" style="display:none;padding:10px 20px;font-size:14px" onclick="toggleScanPause()" data-i18n="scanner_pause">Pause</button>
-        <button class="btn btn-danger" id="scanStopBtn" style="display:none;padding:10px 20px;font-size:14px" onclick="stopScan()" data-i18n="scanner_stop">Stop</button>
-        <button class="btn btn-primary" id="scanStartBtn" onclick="startScan()" data-i18n="scanner_start" style="padding:10px 24px;font-size:14px">Start Scan</button>
+        <button class="btn btn-outline" id="scanPauseBtn" style="display:none;padding:10px 20px;font-size:14px"
+          onclick="toggleScanPause()" data-i18n="scanner_pause">Pause</button>
+        <button class="btn btn-danger" id="scanStopBtn" style="display:none;padding:10px 20px;font-size:14px"
+          onclick="stopScan()" data-i18n="scanner_stop">Stop</button>
+        <button class="btn btn-primary" id="scanStartBtn" onclick="startScan()" data-i18n="scanner_start"
+          style="padding:10px 24px;font-size:14px">Start Scan</button>
       </div>
     </div>
   </div>
@@ -3994,6 +4675,22 @@
         password_wrong: 'رمز عبور اشتباه است',
         password_empty: 'رمز عبور نمی\u200cتواند خالی باشد',
         poll_placeholder: 'نظرسنجی (برای مشاهده تلگرام را باز کنید)',
+        skip_to_messages: 'رفتن به پیام‌ها',
+        sr_settings: 'تنظیمات',
+        sr_open_log: 'باز کردن لاگ',
+        sr_back_to_channels: 'بازگشت به لیست کانال‌ها',
+        sr_refresh: 'بروزرسانی پیام‌ها',
+        sr_send: 'ارسال پیام',
+        sr_scroll_bottom: 'رفتن به آخرین پیام',
+        sr_channels_nav: 'کانال‌ها',
+        sr_chat_main: 'چت',
+        sr_messages_region: 'پیام‌ها',
+        sr_channel_search: 'جستجوی کانال',
+        sr_write_message: 'پیام بنویسید',
+        sr_switched_channel: 'تغییر کانال به: ',
+        sr_new_messages_suffix: '، پیام جدید',
+        sr_msg_at: ' در ',
+        sr_more_options: 'گزینه‌های بیشتر',
       },
       en: {
         search: 'Search...', settings: 'Settings', profiles: 'Profiles',
@@ -4250,6 +4947,22 @@
         password_wrong: 'Wrong password',
         password_empty: 'Password cannot be empty',
         poll_placeholder: 'Poll (open Telegram to view)',
+        skip_to_messages: 'Skip to messages',
+        sr_settings: 'Settings',
+        sr_open_log: 'Open log',
+        sr_back_to_channels: 'Back to channel list',
+        sr_refresh: 'Refresh messages',
+        sr_send: 'Send message',
+        sr_scroll_bottom: 'Jump to latest messages',
+        sr_channels_nav: 'Channels',
+        sr_chat_main: 'Chat',
+        sr_messages_region: 'Messages',
+        sr_channel_search: 'Search channels',
+        sr_write_message: 'Write a message',
+        sr_switched_channel: 'Switched to channel: ',
+        sr_new_messages_suffix: ', new messages',
+        sr_msg_at: ' at ',
+        sr_more_options: 'More options',
       }
     };
     // Order: native bridge (iOS/Android) → localStorage → 'fa'.
@@ -4281,6 +4994,7 @@
       document.querySelectorAll('[data-i18n]').forEach(function (el) { el.textContent = t(el.dataset.i18n) });
       document.querySelectorAll('[data-i18n-ph]').forEach(function (el) { el.placeholder = t(el.dataset.i18nPh) });
       document.querySelectorAll('[data-i18n-title]').forEach(function (el) { el.title = t(el.dataset.i18nTitle) });
+      document.querySelectorAll('[data-i18n-aria]').forEach(function (el) { el.setAttribute('aria-label', t(el.dataset.i18nAria)) });
       document.querySelectorAll('[data-i18n-body]').forEach(function (el) { el.innerHTML = t(el.dataset.i18nBody) });
       var lf = document.getElementById('langFa'); if (lf) lf.classList.toggle('active-lang', lang === 'fa');
       var le = document.getElementById('langEn'); if (le) le.classList.toggle('active-lang', lang === 'en');
@@ -4570,15 +5284,21 @@
         };
       });
     }
-    function showRescanPrompt(count) { return askRescan(count); } // legacy alias
+    function showRescanPrompt(count) { return askRescan(count); }
     function showConfirmDialog(msg, yesText, noText) {
       return new Promise(function (resolve) {
         var overlay = document.createElement('div');
         overlay.className = 'modal-overlay active';
         overlay.innerHTML = '<div class="modal" style="max-width:380px"><p style="font-size:13px;color:var(--text);margin-bottom:16px;line-height:1.6">' + esc(msg) + '</p><div class="modal-actions"><button class="btn btn-flat" id="confirmNo">' + esc(noText || t('cancel')) + '</button><button class="btn btn-primary" id="confirmYes">' + esc(yesText || t('ok')) + '</button></div></div>';
         document.body.appendChild(overlay);
-        document.getElementById('confirmNo').onclick = function () { document.body.removeChild(overlay); resolve(false) };
-        document.getElementById('confirmYes').onclick = function () { document.body.removeChild(overlay); resolve(true) };
+        var done = function (val) {
+          a11yModalClose();
+          document.body.removeChild(overlay);
+          resolve(val);
+        };
+        a11yModalOpen(null, overlay);
+        document.getElementById('confirmNo').onclick = function () { done(false); };
+        document.getElementById('confirmYes').onclick = function () { done(true); };
       });
     }
 
@@ -4607,9 +5327,11 @@
           + '<button class="btn btn-primary" id="inputDialogOk">' + esc(opts.okText || t('ok') || 'OK') + '</button>'
           + '</div></div>';
         document.body.appendChild(overlay);
+        a11yModalOpen(null, overlay);
         var field = document.getElementById('inputDialogField');
         var done = function (val) {
           document.removeEventListener('keydown', onKey);
+          a11yModalClose();
           if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
           resolve(val);
         };
@@ -4641,15 +5363,17 @@
         overlay.className = 'modal-overlay active';
         overlay.innerHTML = '<div class="modal" style="max-width:380px"><p style="font-size:13px;color:var(--text);margin-bottom:16px;line-height:1.6;white-space:pre-line">' + esc(msg) + '</p><div class="modal-actions"><button class="btn btn-primary" id="infoOk">' + esc(okText || t('ok') || 'OK') + '</button></div></div>';
         document.body.appendChild(overlay);
-        document.getElementById('infoOk').onclick = function () { document.body.removeChild(overlay); resolve(true) };
+        a11yModalOpen(null, overlay);
+        document.getElementById('infoOk').onclick = function () { a11yModalClose(); document.body.removeChild(overlay); resolve(true) };
       });
     }
 
     // ===== SETTINGS =====
     function openSettings() {
+      document.getElementById('settingsModal').classList.add('active');
+      a11yModalOpen('settingsModal');
       renderLatestVersion();
       applyThemeButtons();
-      document.getElementById('settingsModal').classList.add('active');
       try { initAndroidSettings(); } catch (e) { console.error('initAndroidSettings error:', e); }
       // Reflect current localStorage flag on every open — toggling it
       // away in the prompt itself should be picked up next time
@@ -4748,7 +5472,7 @@
         });
       } catch (e) { }
     }
-    function closeSettings() { document.getElementById('settingsModal').classList.remove('active') }
+    function closeSettings() { a11yModalClose(); document.getElementById('settingsModal').classList.remove('active') }
     async function saveSettings() {
       var fs = parseInt(document.getElementById('fontSizeSlider').value) || 14;
       var dbg = document.getElementById('cfgDebug').checked;
@@ -5423,9 +6147,9 @@
       var useBtn = document.getElementById('savedResolversUseBtn');
       if (useBtn) useBtn.style.display = hasSaved ? '' : 'none';
       document.getElementById('savedResolversModal').classList.add('active');
+      a11yModalOpen('savedResolversModal');
     }
     function savedResolversSkip() {
-      // "Later" — just close, server already applied saved resolvers and refresh is underway
       document.getElementById('savedResolversModal').classList.remove('active');
       sessionStorage.setItem('thefeed_scan_prompt_shown', '1');
     }
@@ -5555,7 +6279,12 @@
           if (data.channel === selectedChannel && _chatPanelVisible()) await loadMessages(data.channel)
         } else if (snapChannel > 0 && snapChannel === selectedChannel) {
           delete refreshingChannels[snapChannel]; var fb3 = document.getElementById('prog-fetch-ch-' + snapChannel); if (fb3) fb3.remove();
-          if (_chatPanelVisible()) await loadMessages(snapChannel)
+          if (_chatPanelVisible()) {
+            await loadMessages(snapChannel)
+            var msgsEl = document.getElementById('messages');
+            var atBottom = msgsEl && (msgsEl.scrollHeight - msgsEl.scrollTop - msgsEl.clientHeight < 150);
+            if (!atBottom) a11yAnnounce(t('new_messages'));
+          }
         }
         updateSendPanel();
       });
@@ -5587,13 +6316,13 @@
 
     function openProfiles() {
       document.getElementById('profilesModal').classList.add('active');
+      a11yModalOpen('profilesModal');
       document.getElementById('importError').style.display = 'none';
       document.getElementById('importSuccess').style.display = 'none';
       document.getElementById('importUriInput').value = '';
       renderProfilesModal();
     }
-    function closeProfiles() { document.getElementById('profilesModal').classList.remove('active') }
-
+    function closeProfiles() { a11yModalClose(); document.getElementById('profilesModal').classList.remove('active') }
     function buildProfileUri(id, selectedResolvers) {
       if (!profiles || !profiles.profiles) return '';
       var p = profiles.profiles.find(function (x) { return x.id === id });
@@ -5671,10 +6400,11 @@
         src.appendChild(opt);
       });
       document.getElementById('shareProfileModal').classList.add('active');
+      a11yModalOpen('shareProfileModal');
       await reloadShareModalResolvers();
     }
-
     function closeShareModal() {
+      a11yModalClose();
       document.getElementById('shareProfileModal').classList.remove('active');
       shareModalProfileId = '';
     }
@@ -5865,6 +6595,7 @@
     function openProfileEditor(id) {
       editingProfileId = id;
       document.getElementById('profileEditorModal').classList.add('active');
+      a11yModalOpen('profileEditorModal');
       document.getElementById('peError').style.display = 'none';
       document.getElementById('peWarning').style.display = 'none';
       if (id) {
@@ -5904,7 +6635,7 @@
         document.getElementById('peChannelSection').style.display = 'none';
       }
     }
-    function closeProfileEditor() { document.getElementById('profileEditorModal').classList.remove('active'); editingProfileId = null }
+    function closeProfileEditor() { a11yModalClose(); document.getElementById('profileEditorModal').classList.remove('active'); editingProfileId = null }
 
     async function loadEditorChannels() {
       var el = document.getElementById('peChannelList');
@@ -6209,18 +6940,14 @@
           var active = num2 === selectedChannel ? ' active' : '';
           var chNm2 = e.ch.Name || e.ch.name || '';
           var badge = (channelHasNew(e.ch) && num2 !== selectedChannel) ? '<span class="ch-badge">NEW</span>' : '';
-          h += '<div class="ch-item' + active + '" data-name="' + escAttr(handle) + '" data-label="' + escAttr(label) + '" onclick="selectChannel(' + num2 + ')">';
-          // X channels: e.ch.Name is "x/<handle>" (category prefix);
-          // strip before re-attaching the bundle's "x:" prefix.
+          var chA11yLabel = label + (channelHasNew(e.ch) && num2 !== selectedChannel ? t('sr_new_messages_suffix') : '');
+          h += '<div class="ch-item' + active + '" data-name="' + escAttr(handle) + '" data-label="' + escAttr(label) + '" onclick="selectChannel(' + num2 + ')" role="button" tabindex="0" aria-label="' + escAttr(chA11yLabel) + '" aria-pressed="' + (num2 === selectedChannel ? 'true' : 'false') + '" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){selectChannel(' + num2 + ')}">';
           var avatarImg = '';
           var bareHandle = (chNm2 || avatarName || '').replace(/^@/, '').toLowerCase();
           if (isX && bareHandle.indexOf('x/') === 0) bareHandle = bareHandle.substring(2);
           var unameKey = isX ? ('x:' + bareHandle) : bareHandle;
           if (profilePicCache.users[unameKey]) {
-            avatarImg = '<img class="ch-avatar-img" src="/api/profile-pics/'
-              + encodeURIComponent(unameKey)
-              + '" loading="lazy" alt=""'
-              + ' onerror="this.parentNode.classList.add(\'ch-avatar-noimg\');this.remove()">';
+            avatarImg = '<img class="ch-avatar-img" src="/api/profile-pics/' + encodeURIComponent(unameKey) + '" loading="lazy" alt="" onerror="this.parentNode.classList.add(\'ch-avatar-noimg\');this.remove()">';
           }
           h += '<div class="ch-avatar">' + avatarImg + '<span class="ch-avatar-letter">' + esc(avatarText) + '</span></div>';
           var chSubText = !isX ? (handle.charAt(0) === '@' ? handle : '@' + handle) : '';
@@ -6284,6 +7011,7 @@
       openChat();
       var ch = channels[num - 1]; var name = (ch && (ch.DisplayName || ch.displayName || ch.Name || ch.name)) || 'Channel ' + num;
       document.getElementById('chatName').innerHTML = formatTitleWithFlag(name);
+      a11yAnnounce(t('sr_switched_channel') + name);
       var chHandle = (ch && (ch.Name || ch.name)) || '';
       var isXCh = ch && (ch.ChatType || ch.chatType) === 2;
       var subHandle = (!isXCh && chHandle) ? (chHandle.charAt(0) === '@' ? chHandle : '@' + chHandle) : '';
@@ -7803,7 +8531,7 @@
           + (hasMediaCard ? ' has-media' : '')
           + (isOutgoing ? ' msg-outgoing' : '');
         var youTag = isOutgoing ? '<div class="media-tag you-tag">[YOU]</div>' : '';
-        html += '<div class="' + msgClasses + '" dir="auto">' + youTag + mediaHtml + textHtml + '<div class="msg-meta"><button class="msg-copy-btn" onclick="copyMsg(' + i + ')">' + t('copy') + '</button><span>#' + id + '</span><span>' + timeStr + '</span></div></div>';
+        html += '<div class="' + msgClasses + '" dir="auto">' + youTag + mediaHtml + textHtml + '<div class="msg-meta"><button class="msg-copy-btn" onclick="copyMsg(' + i + ')" aria-label="' + escAttr(t('copy')) + ' ' + id + '">' + t('copy') + '</button><span aria-hidden="true">#' + id + '</span><span aria-hidden="true">' + timeStr + '</span></div></div>';
       }
       el.innerHTML = html;
       try { mediaTryRestoreVisibleCards(); } catch (e) { }
@@ -8243,7 +8971,7 @@
         if (meta && meta.textContent.indexOf('#' + id) !== -1) {
           els[i].scrollIntoView({ behavior: 'smooth', block: 'center' });
           els[i].style.outline = '2px solid var(--accent)';
-          setTimeout(function(el) { el.style.outline = '' }, 1500, els[i]);
+          setTimeout(function (el) { el.style.outline = '' }, 1500, els[i]);
           return;
         }
       }
@@ -8288,13 +9016,14 @@
         el.style.display = 'none';
       }
     }
-
     function openScanner() {
       document.getElementById('scannerModal').classList.add('active');
+      a11yModalOpen('scannerModal');
       populateScanProfileSelect();
       pollScannerOnce();
     }
     function closeScanner() {
+      a11yModalClose();
       document.getElementById('scannerModal').classList.remove('active');
       if (scanPollTimer) { clearInterval(scanPollTimer); scanPollTimer = null }
     }
@@ -8373,7 +9102,7 @@
     }
 
     async function stopScan() {
-      try { await fetch('/api/scanner/stop', { method: 'POST' }) } catch (e) {}
+      try { await fetch('/api/scanner/stop', { method: 'POST' }) } catch (e) { }
       if (scanPollTimer) { clearInterval(scanPollTimer); scanPollTimer = null }
       setTimeout(pollScannerOnce, 300);
     }
@@ -8384,7 +9113,7 @@
       try {
         await fetch('/api/scanner/' + (isPaused ? 'resume' : 'pause'), { method: 'POST' });
         pollScannerOnce();
-      } catch (e) {}
+      } catch (e) { }
     }
 
     function showScanRunning() {
@@ -8482,9 +9211,9 @@
         var tr = document.createElement('tr');
         tr.style.borderTop = '1px solid var(--border)';
         tr.innerHTML = '<td style="padding:8px"><input type="checkbox" class="scan-select-cb" data-ip="' + escAttr(r.ip) + '" checked onchange="updateScanSelectedCount()"></td>' +
-                        '<td style="padding:8px;font-family:monospace;font-size:13px">' + esc(r.ip) + '</td>' +
-                        '<td style="padding:8px;text-align:right;font-size:13px;color:var(--text-dim)">' + (r.latencyMs != null ? Math.round(r.latencyMs) + 'ms' : '-') + '</td>' +
-                        '<td style="padding:4px 8px"><button class="btn btn-flat" style="font-size:12px;padding:4px 8px;min-width:0" onclick="navigator.clipboard.writeText(\'' + escAttr(r.ip) + '\');showToast(t(\'copied\'))">&#9776;</button></td>';
+          '<td style="padding:8px;font-family:monospace;font-size:13px">' + esc(r.ip) + '</td>' +
+          '<td style="padding:8px;text-align:right;font-size:13px;color:var(--text-dim)">' + (r.latencyMs != null ? Math.round(r.latencyMs) + 'ms' : '-') + '</td>' +
+          '<td style="padding:4px 8px"><button class="btn btn-flat" style="font-size:12px;padding:4px 8px;min-width:0" onclick="navigator.clipboard.writeText(\'' + escAttr(r.ip) + '\');showToast(t(\'copied\'))">&#9776;</button></td>';
         body.appendChild(tr);
       }
 
@@ -8523,7 +9252,7 @@
             showScanIdle();
           }
         }
-      } catch (e) {}
+      } catch (e) { }
     }
 
     async function applyScanResults(mode) {
@@ -8696,8 +9425,9 @@
       document.getElementById('exportCount').value = Math.min(10, currentMsgTexts.length);
       document.getElementById('exportCount').max = currentMsgTexts.length;
       document.getElementById('exportModal').classList.add('active');
+      a11yModalOpen('exportModal');
     }
-    function closeExportModal() { document.getElementById('exportModal').classList.remove('active') }
+    function closeExportModal() { a11yModalClose(); document.getElementById('exportModal').classList.remove('active') }
     function doExport() {
       var n = parseInt(document.getElementById('exportCount').value) || 10;
       if (n < 1) n = 1;
@@ -8832,6 +9562,7 @@
     }
     async function openResolversModal() {
       document.getElementById('resolversModal').classList.add('active');
+      a11yModalOpen('resolversModal');
       // Load autoScan from active profile
       var autoScanEl = document.getElementById('bankAutoScan');
       if (autoScanEl && profiles && profiles.profiles && activeProfileId) {
@@ -8852,6 +9583,7 @@
       }, 3000);
     }
     function closeResolversModal() {
+      a11yModalClose();
       document.getElementById('resolversModal').classList.remove('active');
       if (resolversRefreshTimer) { clearInterval(resolversRefreshTimer); resolversRefreshTimer = null; }
     }
@@ -9078,6 +9810,49 @@
         if (fn) fn();
       });
     })();
+    // ===== A11Y: MODAL FOCUS MANAGEMENT =====
+    var _a11yFocusStack = [];
+    var _a11yFocusTrapStack = [];
+
+    function a11yModalOpen(overlayId, overlayEl) {
+      var overlay = overlayEl || document.getElementById(overlayId);
+      if (!overlay) return;
+      _a11yFocusStack.push(document.activeElement);
+      var handler = function (e) {
+        if (e.key !== 'Tab') return;
+        var els = Array.from(overlay.querySelectorAll(
+          'button:not([disabled]),[href],input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])'
+        )).filter(function (el) { return el.offsetParent !== null; });
+        if (!els.length) return;
+        if (e.shiftKey && document.activeElement === els[0]) { e.preventDefault(); els[els.length - 1].focus(); }
+        else if (!e.shiftKey && document.activeElement === els[els.length - 1]) { e.preventDefault(); els[0].focus(); }
+      };
+      document.addEventListener('keydown', handler);
+      _a11yFocusTrapStack.push(handler);
+      var heading = overlay.querySelector('h2');
+      if (heading) { heading.setAttribute('tabindex', '-1'); setTimeout(function () { heading.focus(); }, 60); }
+    }
+
+
+    function a11yModalClose() {
+      var handler = _a11yFocusTrapStack.pop();
+      if (handler) document.removeEventListener('keydown', handler);
+      var prev = _a11yFocusStack.pop();
+      if (prev && prev.focus) setTimeout(function () { prev.focus(); }, 30);
+    }
+    var _a11yLive = (function () {
+      var el = document.createElement('div');
+      el.setAttribute('aria-live', 'polite');
+      el.setAttribute('aria-atomic', 'true');
+      el.style.cssText = 'position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap';
+      document.body.appendChild(el);
+      return el;
+    })();
+
+    function a11yAnnounce(msg) {
+      _a11yLive.textContent = '';
+      setTimeout(function () { _a11yLive.textContent = msg; }, 50);
+    }
 
     init();
   </script>
