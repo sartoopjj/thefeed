@@ -34,6 +34,7 @@ type PublicReader struct {
 	fetchInterval time.Duration
 
 	refreshCh chan struct{}
+	limits    map[string]ChannelLimits
 }
 
 // SetFetchInterval overrides the default 10m fetch cadence. Caller must
@@ -49,7 +50,7 @@ func (pr *PublicReader) SetFetchInterval(d time.Duration) {
 }
 
 // NewPublicReader creates a reader for public channels without Telegram login.
-func NewPublicReader(channelUsernames []string, feed *Feed, msgLimit int, baseCh int) *PublicReader {
+func NewPublicReader(channelUsernames []string, feed *Feed, msgLimit int, baseCh int, limits map[string]ChannelLimits) *PublicReader {
 	cleaned := make([]string, len(channelUsernames))
 	for i, u := range channelUsernames {
 		cleaned[i] = strings.TrimPrefix(strings.TrimSpace(u), "@")
@@ -61,18 +62,19 @@ func NewPublicReader(channelUsernames []string, feed *Feed, msgLimit int, baseCh
 		baseCh = 1
 	}
 	return &PublicReader{
-		channels: cleaned,
-		feed:     feed,
-		msgLimit: msgLimit,
-		baseCh:   baseCh,
+		channels:      cleaned,
+		feed:          feed,
+		msgLimit:      msgLimit,
+		baseCh:        baseCh,
 		client: &http.Client{
 			Timeout: 30 * time.Second,
 		},
-		baseURL:   "https://t.me/s",
+		baseURL:       "https://t.me/s",
 		cache:         make(map[string]cachedMessages),
 		cacheTTL:      10 * time.Minute,
 		fetchInterval: 10 * time.Minute,
 		refreshCh:     make(chan struct{}, 1),
+		limits:        limits,
 	}
 }
 
@@ -133,6 +135,12 @@ func (pr *PublicReader) fetchAll(ctx context.Context) {
 	pr.mu.RUnlock()
 	for i, username := range pr.channels {
 		chNum := pr.baseCh + i
+		ctx := ctx
+		if pr.limits != nil {
+			if lim, ok := pr.limits[strings.ToLower(username)]; ok {
+				ctx = WithContextLimits(ctx, lim.MediaSize, lim.AudioSize)
+			}
+		}
 
 		pr.mu.RLock()
 		cached, ok := pr.cache[username]

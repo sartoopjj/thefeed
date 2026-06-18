@@ -38,6 +38,7 @@ type XPublicReader struct {
 	fetchInterval time.Duration
 
 	refreshCh chan struct{}
+	limits    map[string]ChannelLimits
 }
 
 // SetFetchInterval overrides the default 10m fetch cadence.
@@ -58,7 +59,7 @@ var xHandleRe = regexp.MustCompile(`@[A-Za-z0-9_]{1,15}`)
 var xRepostLeadRe = regexp.MustCompile(`(?i)^RT\s+(@[A-Za-z0-9_]{1,15})\s*:\s*`)
 var xRepostByRe = regexp.MustCompile(`(?i)^RT\s+by\s+.+\((@[A-Za-z0-9_]{1,15})\)\s*:\s*`)
 
-func NewXPublicReader(accounts []string, feed *Feed, msgLimit int, baseCh int, instancesCSV string) *XPublicReader {
+func NewXPublicReader(accounts []string, feed *Feed, msgLimit int, baseCh int, instancesCSV string, limits map[string]ChannelLimits) *XPublicReader {
 	cleaned := make([]string, 0, len(accounts))
 	for _, a := range accounts {
 		a = strings.TrimSpace(strings.TrimPrefix(a, "@"))
@@ -91,6 +92,7 @@ func NewXPublicReader(accounts []string, feed *Feed, msgLimit int, baseCh int, i
 		cacheTTL:      10 * time.Minute,
 		fetchInterval: 10 * time.Minute,
 		refreshCh:     make(chan struct{}, 1),
+		limits:        limits,
 	}
 }
 
@@ -189,6 +191,12 @@ func (xr *XPublicReader) fetchAll(ctx context.Context) {
 
 	for i, account := range xr.accounts {
 		chNum := baseCh + i
+		ctx := ctx
+		if xr.limits != nil {
+			if lim, ok := xr.limits[strings.ToLower(account)]; ok {
+				ctx = WithContextLimits(ctx, lim.MediaSize, lim.AudioSize)
+			}
+		}
 
 		xr.mu.RLock()
 		cached, ok := xr.cache[account]

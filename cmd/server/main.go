@@ -44,6 +44,7 @@ func main() {
 	debug := flag.Bool("debug", false, "Log every decoded DNS query")
 	dnsMediaEnabled := flag.Bool("dns-media-enabled", false, "Serve media via DNS (slow relay)")
 	dnsMediaMaxSizeKB := flag.Int("dns-media-max-size", 100, "Per-file cap for the DNS relay in KB (0 = no cap)")
+	dnsAudioMaxSizeKB := flag.Int("dns-audio-max-size", 0, "Per-file cap for audio/voice files in the DNS relay in KB (0 = fallback to dns-media-max-size)")
 	dnsMediaCacheTTLMin := flag.Int("dns-media-cache-ttl", 600, "TTL for DNS-relay cached media, in minutes")
 	dnsMediaCompression := flag.String("dns-media-compression", "gzip", "Compression for DNS-relay media bytes: none|gzip|deflate")
 	chatDomains := flag.String("chat-domains", "", "Comma-separated dedicated sub-domains for the chat messenger (empty = chat off)")
@@ -327,6 +328,11 @@ func main() {
 			*dnsMediaMaxSizeKB = n
 		}
 	}
+	if env := os.Getenv("THEFEED_DNS_AUDIO_MAX_SIZE_KB"); env != "" {
+		if n, err := strconv.Atoi(env); err == nil {
+			*dnsAudioMaxSizeKB = n
+		}
+	}
 	if env := os.Getenv("THEFEED_DNS_MEDIA_CACHE_TTL_MIN"); env != "" {
 		if n, err := strconv.Atoi(env); err == nil {
 			*dnsMediaCacheTTLMin = n
@@ -377,6 +383,7 @@ func main() {
 		Debug:               *debug,
 		DNSMediaEnabled:     *dnsMediaEnabled,
 		DNSMediaMaxSize:     int64(*dnsMediaMaxSizeKB) * 1024,
+		DNSAudioMaxSize:     int64(*dnsAudioMaxSizeKB) * 1024,
 		DNSMediaCacheTTL:    *dnsMediaCacheTTLMin,
 		DNSMediaCompression: *dnsMediaCompression,
 		FetchInterval:       time.Duration(*fetchIntervalMin) * time.Minute,

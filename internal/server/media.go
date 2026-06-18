@@ -9,6 +9,10 @@ import (
 	"fmt"
 	"hash/crc32"
 	"io"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -25,10 +29,11 @@ import (
 // The cache is safe for concurrent use. Hot-path operations (Store, GetBlock)
 // are O(log n) at worst and typically O(1) with the help of two side maps.
 type MediaCache struct {
-	maxFileBytes int64
-	ttl          time.Duration
-	compression  protocol.MediaCompression
-	dnsEnabled   bool // when false, RelayDNS stays unset on the wire
+	maxFileBytes  int64
+	maxAudioBytes int64
+	ttl           time.Duration
+	compression   protocol.MediaCompression
+	dnsEnabled    bool // when false, RelayDNS stays unset on the wire
 
 	logf func(format string, args ...interface{})
 
@@ -70,6 +75,7 @@ type mediaEntry struct {
 // MediaCacheConfig configures a new MediaCache.
 type MediaCacheConfig struct {
 	MaxFileBytes    int64
+	MaxAudioBytes   int64
 	TTL             time.Duration
 	Compression     protocol.MediaCompression
 	Logf            func(format string, args ...interface{})
@@ -93,11 +99,12 @@ func NewMediaCache(cfg MediaCacheConfig) *MediaCache {
 		logf = func(string, ...interface{}) {}
 	}
 	return &MediaCache{
-		maxFileBytes: cfg.MaxFileBytes,
-		ttl:          cfg.TTL,
-		compression:  cfg.Compression,
-		dnsEnabled:   cfg.DNSRelayEnabled,
-		logf:         logf,
+		maxFileBytes:  cfg.MaxFileBytes,
+		maxAudioBytes: cfg.MaxAudioBytes,
+		ttl:           cfg.TTL,
+		compression:   cfg.Compression,
+		dnsEnabled:    cfg.DNSRelayEnabled,
+		logf:          logf,
 		byKey:        make(map[string]*mediaEntry),
 		byChannel:    make(map[uint16]*mediaEntry),
 		byHash:       make(map[uint32]*mediaEntry),
@@ -127,7 +134,9 @@ func (c *MediaCache) Store(cacheKey, tag string, content []byte, mimeType, filen
 // upload. SkipGitHub keeps the DNS allocation but skips the upload —
 // used when many small siblings share one bundled GitHub upload.
 type MediaCacheStoreOptions struct {
-	SkipGitHub bool
+	SkipGitHub            bool
+	MaxFileBytesOverride  *int64
+	MaxAudioBytesOverride *int64
 }
 
 // StoreWithOptions is Store with selective relay control.
@@ -138,8 +147,53 @@ func (c *MediaCache) StoreWithOptions(cacheKey, tag string, content []byte, mime
 	if tag == "" {
 		tag = protocol.MediaFile
 	}
+	if tag == protocol.MediaAudio && os.Getenv("THEFEED_OPUS_TRANSCODE") == "1" {
+		if transcoded, err := c.transcodeToOpus(content); err == nil {
+			content = transcoded
+			mimeType = "audio/ogg"
+			filename = changeExtensionToOpus(filename)
+		} else {
+			c.logf("media: ffmpeg transcoding failed, using original: %v", err)
+		}
+	}
 	size := int64(len(content))
-	if max := c.MaxAcceptableBytes(); max > 0 && size > max {
+
+	dnsLimit := c.maxFileBytes
+	if opts.MaxFileBytesOverride != nil && *opts.MaxFileBytesOverride != -1 {
+		dnsLimit = *opts.MaxFileBytesOverride
+	}
+	audioLimit := c.maxAudioBytes
+	if opts.MaxAudioBytesOverride != nil && *opts.MaxAudioBytesOverride != -1 {
+		audioLimit = *opts.MaxAudioBytesOverride
+	}
+
+	dns := dnsLimit
+	if audioLimit > 0 && isAudioOrVoice(tag, mimeType) {
+		dns = audioLimit
+	}
+
+	var ghMax int64
+	c.mu.RLock()
+	gh := c.gh
+	c.mu.RUnlock()
+	if gh != nil {
+		ghMax = gh.MaxBytes()
+	}
+
+	var max int64
+	if (dns == 0 && c.dnsEnabled) || (gh != nil && ghMax == 0) {
+		max = 0
+	} else if !c.dnsEnabled {
+		max = ghMax
+	} else if gh == nil {
+		max = dns
+	} else if ghMax > dns {
+		max = ghMax
+	} else {
+		max = dns
+	}
+
+	if max > 0 && size > max {
 		atomic.AddUint64(&c.storeRejected, 1)
 		return protocol.MediaMeta{
 			Tag:    tag,
@@ -147,7 +201,11 @@ func (c *MediaCache) StoreWithOptions(cacheKey, tag string, content []byte, mime
 			Relays: nil,
 		}, ErrTooLarge
 	}
-	dnsFits := c.maxFileBytes == 0 || size <= c.maxFileBytes
+
+	if audioLimit > 0 && isAudioOrVoice(tag, mimeType) {
+		dnsLimit = audioLimit
+	}
+	dnsFits := dnsLimit == 0 || size <= dnsLimit
 
 	now := time.Now()
 	hash := crc32.ChecksumIEEE(content)
@@ -538,10 +596,14 @@ func (c *MediaCache) TouchRelayEntries() {
 	}
 }
 
-// MaxAcceptableBytes returns the largest file size any enabled relay would
-// accept. Callers use it as the "should we even fetch this?" gate so that
-// files which fit GitHub but not DNS still get pulled. 0 means "no cap".
-func (c *MediaCache) MaxAcceptableBytes() int64 {
+// isAudioOrVoice returns true if the given tag or mimeType indicates an audio or voice file.
+func isAudioOrVoice(tag, mimeType string) bool {
+	return tag == protocol.MediaAudio || strings.HasPrefix(strings.ToLower(mimeType), "audio/")
+}
+
+// MaxAcceptableBytesFor returns the largest file size any enabled relay would
+// accept for a specific tag and mimeType. 0 means "no cap".
+func (c *MediaCache) MaxAcceptableBytesFor(tag, mimeType string) int64 {
 	if c == nil {
 		return 0
 	}
@@ -549,6 +611,9 @@ func (c *MediaCache) MaxAcceptableBytes() int64 {
 	gh := c.gh
 	c.mu.RUnlock()
 	dns := c.maxFileBytes
+	if c.maxAudioBytes > 0 && isAudioOrVoice(tag, mimeType) {
+		dns = c.maxAudioBytes
+	}
 	var ghMax int64
 	if gh != nil {
 		ghMax = gh.MaxBytes()
@@ -567,6 +632,13 @@ func (c *MediaCache) MaxAcceptableBytes() int64 {
 		return ghMax
 	}
 	return dns
+}
+
+// MaxAcceptableBytes returns the largest file size any enabled relay would
+// accept. Callers use it as the "should we even fetch this?" gate so that
+// files which fit GitHub but not DNS still get pulled. 0 means "no cap".
+func (c *MediaCache) MaxAcceptableBytes() int64 {
+	return c.MaxAcceptableBytesFor("", "")
 }
 
 // splitMediaBlocks compresses the content (when compression != none),
@@ -640,4 +712,80 @@ func DecompressMediaBytes(r io.Reader, compression protocol.MediaCompression) (i
 		return flate.NewReader(r), nil
 	}
 	return nil, fmt.Errorf("unsupported media compression: %d", compression)
+}
+
+func (c *MediaCache) transcodeToOpus(content []byte) ([]byte, error) {
+	ffmpegPath, err := exec.LookPath("ffmpeg")
+	if err != nil {
+		return nil, fmt.Errorf("ffmpeg not found: %w", err)
+	}
+
+	// Write original audio to a temp file.
+	inTemp, err := os.CreateTemp("", "feed_audio_in_*")
+	if err != nil {
+		return nil, fmt.Errorf("failed to create input temp file: %w", err)
+	}
+	inPath := inTemp.Name()
+
+	if _, err := inTemp.Write(content); err != nil {
+		inTemp.Close()
+		os.Remove(inPath)
+		return nil, fmt.Errorf("failed to write input temp file: %w", err)
+	}
+	inTemp.Close()
+	// content slice is no longer needed by this function — the caller
+	// will replace it with the transcoded bytes, allowing GC to reclaim
+	// the original audio memory.
+
+	// Prepare output temp file path.
+	outTemp, err := os.CreateTemp("", "feed_audio_out_*.opus")
+	if err != nil {
+		os.Remove(inPath)
+		return nil, fmt.Errorf("failed to create output temp file: %w", err)
+	}
+	outPath := outTemp.Name()
+	outTemp.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	// Try libopus first (higher quality), fall back to native opus encoder.
+	cmd := exec.CommandContext(ctx, ffmpegPath, "-y", "-i", inPath, "-vn", "-c:a", "libopus", "-b:a", "16k", "-ac", "1", "-ar", "16000", "-vbr", "on", outPath)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		cmdFallback := exec.CommandContext(ctx, ffmpegPath, "-y", "-i", inPath, "-vn", "-c:a", "opus", "-b:a", "16k", "-ac", "1", "-ar", "16000", "-vbr", "on", outPath)
+		outputFallback, errFallback := cmdFallback.CombinedOutput()
+		if errFallback != nil {
+			os.Remove(inPath)
+			os.Remove(outPath)
+			return nil, fmt.Errorf("ffmpeg transcoding failed: %v (libopus output: %s) (opus output: %s)", errFallback, string(output), string(outputFallback))
+		}
+	}
+
+	// Eagerly remove input file — frees disk space immediately.
+	os.Remove(inPath)
+
+	opusBytes, err := os.ReadFile(outPath)
+	// Eagerly remove output file — frees disk space immediately.
+	os.Remove(outPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read output temp file: %w", err)
+	}
+
+	if len(opusBytes) == 0 {
+		return nil, fmt.Errorf("transcoded file is empty")
+	}
+
+	return opusBytes, nil
+}
+
+func changeExtensionToOpus(filename string) string {
+	if filename == "" {
+		return "audio.opus"
+	}
+	ext := filepath.Ext(filename)
+	if ext == "" {
+		return filename + ".opus"
+	}
+	return strings.TrimSuffix(filename, ext) + ".opus"
 }

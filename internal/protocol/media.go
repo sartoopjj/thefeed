@@ -6,6 +6,7 @@ import (
 	"hash/fnv"
 	"strconv"
 	"strings"
+	"unicode"
 )
 
 // Relay indices: each MediaMeta.Relays[N] flags whether the file is
@@ -147,11 +148,13 @@ func SanitiseMediaFilename(s string) string {
 func filterFilenameRunes(s string) string {
 	var b strings.Builder
 	for _, r := range s {
-		switch {
-		case r >= '0' && r <= '9',
-			r >= 'A' && r <= 'Z',
-			r >= 'a' && r <= 'z',
-			r == '.', r == '_', r == '-':
+		if r == unicode.ReplacementChar {
+			continue
+		}
+		if r == ':' || r == '/' || r == '\\' || r == '*' || r == '?' || r == '"' || r == '<' || r == '>' || r == '|' {
+			continue
+		}
+		if unicode.IsPrint(r) {
 			b.WriteRune(r)
 		}
 	}

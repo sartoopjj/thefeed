@@ -83,6 +83,8 @@ type TelegramReader struct {
 	api   *tg.Client
 
 	refreshCh chan struct{} // signals Run() to re-fetch immediately
+
+	limits    map[string]ChannelLimits
 }
 
 // SetFetchInterval overrides the default 10m fetch cadence.
@@ -117,7 +119,7 @@ type cachedMessages struct {
 // and private-channel invite hashes. privateInviteHashes is the list
 // of base64url-ish invite codes (see ParseInviteHash) — empty when no
 // private channels are configured.
-func NewTelegramReader(cfg TelegramConfig, channelUsernames []string, privateInviteHashes []string, feed *Feed, msgLimit int, baseCh int) *TelegramReader {
+func NewTelegramReader(cfg TelegramConfig, channelUsernames []string, privateInviteHashes []string, feed *Feed, msgLimit int, baseCh int, limits map[string]ChannelLimits) *TelegramReader {
 	cleaned := make([]string, len(channelUsernames))
 	for i, u := range channelUsernames {
 		cleaned[i] = strings.TrimPrefix(strings.TrimSpace(u), "@")
@@ -139,6 +141,7 @@ func NewTelegramReader(cfg TelegramConfig, channelUsernames []string, privateInv
 		cacheTTL:      10 * time.Minute,
 		fetchInterval: 10 * time.Minute,
 		refreshCh:     make(chan struct{}, 1),
+		limits:        limits,
 	}
 }
 
@@ -269,6 +272,12 @@ func (tr *TelegramReader) fetchAll(ctx context.Context, api *tg.Client) {
 	tr.mu.RUnlock()
 	for i, username := range tr.channels {
 		chNum := tr.baseCh + i
+		ctx := ctx
+		if tr.limits != nil {
+			if lim, ok := tr.limits[strings.ToLower(username)]; ok {
+				ctx = WithContextLimits(ctx, lim.MediaSize, lim.AudioSize)
+			}
+		}
 
 		tr.mu.RLock()
 		cached, ok := tr.cache[username]
@@ -321,6 +330,12 @@ func (tr *TelegramReader) fetchAll(ctx context.Context, api *tg.Client) {
 	// Cache key is the short hash-derived channel ID.
 	for i, hash := range tr.privates.ordered {
 		chNum := tr.baseCh + len(tr.channels) + i
+		ctx := ctx
+		if tr.limits != nil {
+			if lim, ok := tr.limits[hash]; ok {
+				ctx = WithContextLimits(ctx, lim.MediaSize, lim.AudioSize)
+			}
+		}
 		rp, ok := tr.privates.get(hash)
 		if !ok {
 			// Retry resolve if startup failed.

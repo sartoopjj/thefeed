@@ -8,6 +8,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -35,6 +36,7 @@ type Config struct {
 	// but the wire-format DNS flag is unset for clients.
 	DNSMediaEnabled     bool
 	DNSMediaMaxSize     int64         // per-file cap for the DNS relay (0 = no cap)
+	DNSAudioMaxSize     int64         // per-file cap for audio/voice files in the DNS relay (0 = fallback)
 	DNSMediaCacheTTL    int           // DNS-relay TTL in minutes
 	DNSMediaCompression string        // DNS-relay compression: none|gzip|deflate
 	FetchInterval       time.Duration // 0 = default 10m; floor enforced by main
@@ -85,6 +87,7 @@ type Server struct {
 	telegramChannels []string
 	privateInvites   []string // resolved invite hashes (post-parse)
 	xAccounts        []string
+	limits           map[string]ChannelLimits
 }
 
 // New creates a new Server.
@@ -110,6 +113,23 @@ func New(cfg Config) (*Server, error) {
 			cfg.ChannelsFile, cfg.PrivateChannelsFile, cfg.XAccountsFile)
 	}
 
+	limits := make(map[string]ChannelLimits)
+	if chanLims, err := loadLimitsFromFile(cfg.ChannelsFile, false); err == nil {
+		for k, v := range chanLims {
+			limits[k] = v
+		}
+	}
+	if privLims, err := loadLimitsFromFile(cfg.PrivateChannelsFile, true); err == nil {
+		for k, v := range privLims {
+			limits[k] = v
+		}
+	}
+	if xLims, err := loadLimitsFromFile(cfg.XAccountsFile, false); err == nil {
+		for k, v := range xLims {
+			limits[k] = v
+		}
+	}
+
 	log.Printf("[server] loaded %d Telegram public channels, %d private invites, %d X accounts",
 		len(channels), len(privateInvites), len(xAccounts))
 
@@ -131,6 +151,7 @@ func New(cfg Config) (*Server, error) {
 		telegramChannels: channels,
 		privateInvites:   privateInvites,
 		xAccounts:        xAccounts,
+		limits:           limits,
 	}, nil
 }
 
@@ -247,6 +268,7 @@ func (s *Server) Run(ctx context.Context) error {
 		}
 		mediaCache := NewMediaCache(MediaCacheConfig{
 			MaxFileBytes:    s.cfg.DNSMediaMaxSize,
+			MaxAudioBytes:   s.cfg.DNSAudioMaxSize,
 			TTL:             ttl,
 			Compression:     compression,
 			Logf:            logfMedia,
@@ -280,7 +302,7 @@ func (s *Server) Run(ctx context.Context) error {
 
 	// Handle login-only mode
 	if s.cfg.Telegram.LoginOnly {
-		reader := NewTelegramReader(s.cfg.Telegram, s.telegramChannels, s.privateInvites, s.feed, 15, 1)
+		reader := NewTelegramReader(s.cfg.Telegram, s.telegramChannels, s.privateInvites, s.feed, 15, 1, s.limits)
 		return reader.Run(ctx)
 	}
 
@@ -291,7 +313,7 @@ func (s *Server) Run(ctx context.Context) error {
 			msgLimit = 15
 		}
 		if len(s.telegramChannels) > 0 || len(s.privateInvites) > 0 {
-			reader := NewTelegramReader(s.cfg.Telegram, s.telegramChannels, s.privateInvites, s.feed, msgLimit, 1)
+			reader := NewTelegramReader(s.cfg.Telegram, s.telegramChannels, s.privateInvites, s.feed, msgLimit, 1, s.limits)
 			reader.SetFetchInterval(s.cfg.FetchInterval)
 			s.reader = reader
 			channelCtl = reader
@@ -311,7 +333,7 @@ func (s *Server) Run(ctx context.Context) error {
 		if msgLimit <= 0 {
 			msgLimit = 15
 		}
-		publicReader := NewPublicReader(s.telegramChannels, s.feed, msgLimit, 1)
+		publicReader := NewPublicReader(s.telegramChannels, s.feed, msgLimit, 1, s.limits)
 		publicReader.SetFetchInterval(s.cfg.FetchInterval)
 		channelCtl = publicReader
 		go func() {
@@ -332,7 +354,7 @@ func (s *Server) Run(ctx context.Context) error {
 			msgLimit = 15
 		}
 		// X channel numbers start after all Telegram channels (public + private).
-		xReader = NewXPublicReader(s.xAccounts, s.feed, msgLimit, len(s.telegramChannels)+len(s.privateInvites)+1, s.cfg.XRSSInstances)
+		xReader = NewXPublicReader(s.xAccounts, s.feed, msgLimit, len(s.telegramChannels)+len(s.privateInvites)+1, s.cfg.XRSSInstances, s.limits)
 		xReader.SetFetchInterval(s.cfg.FetchInterval)
 		go func() {
 			log.Println("[x] reader goroutine started")
@@ -370,6 +392,83 @@ func (s *Server) Run(ctx context.Context) error {
 	return dnsServer.ListenAndServe(ctx)
 }
 
+type ChannelLimits struct {
+	MediaSize int64 // bytes, -1 if not set
+	AudioSize int64 // bytes, -1 if not set
+}
+
+type contextLimitsKey struct{}
+
+type Limits struct {
+	MaxFileBytes  int64
+	MaxAudioBytes int64
+}
+
+func WithContextLimits(ctx context.Context, maxFile, maxAudio int64) context.Context {
+	return context.WithValue(ctx, contextLimitsKey{}, Limits{
+		MaxFileBytes:  maxFile,
+		MaxAudioBytes: maxAudio,
+	})
+}
+
+func GetContextLimits(ctx context.Context) (int64, int64, bool) {
+	if ctx == nil {
+		return 0, 0, false
+	}
+	val := ctx.Value(contextLimitsKey{})
+	if val == nil {
+		return 0, 0, false
+	}
+	lims := val.(Limits)
+	return lims.MaxFileBytes, lims.MaxAudioBytes, true
+}
+
+func GetMaxBytesFromContext(ctx context.Context, tag, mimeType string, cache *MediaCache) (int64, bool) {
+	if cache == nil {
+		return 0, false
+	}
+	maxFile, maxAudio, ok := GetContextLimits(ctx)
+	if !ok {
+		return 0, false
+	}
+
+	dns := maxFile
+	if dns == -1 {
+		dns = cache.maxFileBytes
+	}
+
+	dnsAudio := maxAudio
+	if dnsAudio == -1 {
+		dnsAudio = cache.maxAudioBytes
+	}
+
+	if dnsAudio > 0 && isAudioOrVoice(tag, mimeType) {
+		dns = dnsAudio
+	}
+
+	var ghMax int64
+	cache.mu.RLock()
+	gh := cache.gh
+	cache.mu.RUnlock()
+	if gh != nil {
+		ghMax = gh.MaxBytes()
+	}
+
+	if (dns == 0 && cache.dnsEnabled) || (gh != nil && ghMax == 0) {
+		return 0, true
+	}
+	if !cache.dnsEnabled {
+		return ghMax, true
+	}
+	if gh == nil {
+		return dns, true
+	}
+	if ghMax > dns {
+		return ghMax, true
+	}
+	return dns, true
+}
+
 func loadUsernames(path string) ([]string, error) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -391,10 +490,74 @@ func loadUsernames(path string) ([]string, error) {
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue
 		}
-		name := strings.TrimPrefix(line, "@")
-		users = append(users, name)
+		parts := strings.Fields(line)
+		if len(parts) > 0 {
+			name := strings.TrimPrefix(parts[0], "@")
+			users = append(users, name)
+		}
 	}
 	return users, scanner.Err()
+}
+
+func loadLimitsFromFile(path string, isPrivate bool) (map[string]ChannelLimits, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return make(map[string]ChannelLimits), nil
+		}
+		return nil, err
+	}
+	defer f.Close()
+
+	limits := make(map[string]ChannelLimits)
+	scanner := bufio.NewScanner(f)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		parts := strings.Fields(line)
+		if len(parts) == 0 {
+			continue
+		}
+
+		var name string
+		if isPrivate {
+			hash, err := ParseInviteHash(parts[0])
+			if err != nil {
+				continue
+			}
+			name = hash
+		} else {
+			name = strings.TrimPrefix(parts[0], "@")
+			name = strings.TrimPrefix(name, "x/")
+			name = strings.ToLower(name)
+		}
+
+		var mediaSize, audioSize int64 = -1, -1
+		for i := 1; i < len(parts); i++ {
+			if parts[i] == "--dns-media-max-size" && i+1 < len(parts) {
+				val, err := strconv.ParseInt(parts[i+1], 10, 64)
+				if err == nil {
+					mediaSize = val * 1024
+				}
+				i++
+			} else if parts[i] == "--dns-audio-max-size" && i+1 < len(parts) {
+				val, err := strconv.ParseInt(parts[i+1], 10, 64)
+				if err == nil {
+					audioSize = val * 1024
+				}
+				i++
+			}
+		}
+		if mediaSize != -1 || audioSize != -1 {
+			limits[name] = ChannelLimits{
+				MediaSize: mediaSize,
+				AudioSize: audioSize,
+			}
+		}
+	}
+	return limits, scanner.Err()
 }
 
 func prefixXAccounts(accounts []string) []string {
