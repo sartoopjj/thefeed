@@ -485,6 +485,14 @@
       align-items: center
     }
 
+    /* Hidden by default outside the saved view; saved.css (lazy-loaded) flips
+       this to visible via .chat-header.sm-active once Saved Messages opens. */
+    .sm-header-actions {
+      display: none;
+      align-items: center;
+      gap: 2px
+    }
+
     .next-fetch-label {
       font-size: 10px;
       color: var(--text-dim);
@@ -651,3 +659,46 @@
       font-size: 18px;
       color: var(--text-dim)
     }
+/* --- Saved Messages sidebar entry --- */
+/* Lives here, not saved.css: the entry renders on the feed view before the
+   lazily-loaded saved.css exists. */
+.saved-channel-entry {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  color: var(--text);
+  transition: background var(--motion-fast) var(--ease);
+}
+.saved-channel-entry:hover { background: var(--hover); }
+.saved-channel-entry.active { background: var(--hover); }
+
+.saved-entry-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.saved-entry-icon .icon svg { width: 22px; height: 22px; }
+
+.saved-entry-name {
+  flex: 1;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+}
+
+/* "New" dot — shown when something was saved since the view was last opened. */
+.saved-badge {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--accent);
+  flex-shrink: 0;
+}

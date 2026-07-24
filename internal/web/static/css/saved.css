@@ -1,48 +1,8 @@
 @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
 
 /* ===== SAVED MESSAGES ===== */
-
-/* --- Sidebar entry --- */
-.saved-channel-entry {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-3) var(--space-4);
-  border-bottom: 1px solid var(--border);
-  cursor: pointer;
-  color: var(--text);
-  transition: background var(--motion-fast) var(--ease);
-}
-.saved-channel-entry:hover { background: var(--hover); }
-.saved-channel-entry.active { background: var(--hover); }
-
-.saved-entry-icon {
-  width: 44px;
-  height: 44px;
-  border-radius: 50%;
-  background: var(--accent);
-  color: #fff;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-}
-.saved-entry-icon .icon svg { width: 22px; height: 22px; }
-
-.saved-entry-name {
-  flex: 1;
-  font-size: var(--text-sm);
-  font-weight: var(--weight-medium);
-}
-
-/* "New" dot — shown when something was saved since the view was last opened. */
-.saved-badge {
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-  background: var(--accent);
-  flex-shrink: 0;
-}
+/* Sidebar-entry rules live in layout.css — that entry renders on the feed
+   view before this lazily-loaded file exists. */
 
 /* --- Context menu --- */
 .msg-context-menu {
@@ -112,24 +72,8 @@
 [dir="rtl"] .msg-more-btn, .rtl-msg .msg-more-btn { right: auto; left: 6px; }
 @media (hover: none) { .msg-more-btn { display: none; } }
 
-/* ─── Inline save button in msg-meta bar ────────────────────── */
-.msg-save-btn {
-  background: none;
-  border: none;
-  color: var(--text-dim);
-  cursor: pointer;
-  padding: 1px 4px;
-  line-height: 0;
-  flex-shrink: 0;
-  opacity: 0.5;
-  transition: opacity 0.15s, color 0.15s;
-  border-radius: var(--radius-xs);
-  display: inline-flex;
-  align-items: center;
-}
-.msg-save-btn .icon svg { width: 12px; height: 12px; }
-.msg-save-btn:hover { opacity: 1; color: var(--accent); }
-.msg-save-btn-active { opacity: 1; color: var(--accent); }
+/* .msg-save-btn lives in media.css — media.js renders it in the default
+   message list, before this lazily-loaded file exists. */
 
 /* ─── #messages in Saved mode ───────────────────────────────── */
 /* Makes #messages a non-scrolling flex column so children can   */
@@ -340,13 +284,10 @@ html[dir="rtl"] .sm-saved-root, .sm-saved-root[dir="rtl"] { --grad-end: left; }
 .sm-pinned-close:hover { color: var(--text); background: var(--hover); }
 .sm-pinned-close svg { width: 14px; height: 14px; }
 
-/* Saved-view title-bar actions (search toggle + lock). While viewing Saved
-   (.chat-header.sm-active) they replace the feed's header actions. */
-.sm-header-actions {
-  display: none;
-  align-items: center;
-  gap: 2px;
-}
+/* Saved-view title-bar actions (search toggle + lock). Base .sm-header-actions
+   display:none lives in layout.css (eager) since it must apply before this
+   lazy stylesheet loads. While viewing Saved (.chat-header.sm-active) they
+   replace the feed's header actions. */
 /* The feed hides .chat-header-actions on mobile (bottom nav owns those); force
    it back for the saved view so the search/lock buttons show. */
 .chat-header.sm-active .chat-header-actions {

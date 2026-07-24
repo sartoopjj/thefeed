@@ -3,7 +3,7 @@
 
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <meta name="theme-color" content="#17212b">
   <meta name="theme-color" content="#17212b" media="(prefers-color-scheme: dark)">
   <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
@@ -29,13 +29,16 @@
   <link rel="stylesheet" href="/static/css/base.css">
   <link rel="stylesheet" href="/static/css/layout.css">
   <link rel="stylesheet" href="/static/css/messages.css">
+  <!-- telemirror.css stays eager: the Resolver and Settings panes reuse its
+       tm-topbar/tm-back/tm-content layout classes. -->
   <link rel="stylesheet" href="/static/css/telemirror.css">
   <link rel="stylesheet" href="/static/css/chat.css">
   <link rel="stylesheet" href="/static/css/media.css">
   <link rel="stylesheet" href="/static/css/components.css">
   <link rel="stylesheet" href="/static/css/responsive.css">
-  <link rel="stylesheet" href="/static/css/saved.css">
   <link rel="stylesheet" href="/static/css/nav.css">
+  <!-- saved.css loads lazily via loadFeature() (core.js) on first use of
+       Saved Messages, instead of on every page load. -->
 </head>
 
 <body>
@@ -228,9 +231,9 @@
     </div>
 
     <!-- CHAT AREA -->
-    <div class="chat-area">
+    <main class="chat-area">
       <div class="chat-header">
-        <button class="back-btn" onclick="feedBack()" data-icon="arrowLeft"></button>
+        <button class="back-btn" onclick="feedBack()" aria-label="Back" data-icon="arrowLeft"></button>
         <!-- Channel avatar — matches the mirror topbar. Populated on channel
              select; empty (and hidden) on the no-channel placeholder. -->
         <div class="ch-avatar chat-header-avatar ch-avatar-noimg" id="chatHeaderAvatar"></div>
@@ -312,9 +315,9 @@
           <button class="tm-refresh" onclick="tmRefreshActive()" title="Refresh"
             data-i18n-title="telemirror_refresh" data-icon="refresh"></button>
         </header>
-        <main id="tmContent" class="tm-content">
+        <div id="tmContent" class="tm-content">
           <div class="tm-empty" data-i18n="telemirror_pick_channel">Pick a channel</div>
-        </main>
+        </div>
         <button class="tm-scroll-down" id="tmScrollDownBtn" onclick="tmScrollToBottom()" aria-label="Scroll to latest"
           title="Scroll to latest" data-icon="arrowDown"></button>
       </div>
@@ -341,7 +344,7 @@
           <button class="tm-refresh" onclick="copyResolversList()" title="Copy" data-i18n-title="copy"
             data-icon="copy"></button>
         </header>
-        <main id="resolverContent" class="tm-content"></main>
+        <div id="resolverContent" class="tm-content"></div>
       </div>
       <!-- END resolver -->
       <!-- BEGIN settings section -->
@@ -355,10 +358,10 @@
             </div>
           </div>
         </header>
-        <main id="settingsContent" class="tm-content"></main>
+        <div id="settingsContent" class="tm-content"></div>
       </div>
       <!-- END settings section -->
-    </div>
+    </main>
   </div>
 
   <!-- DONATE MODAL -->
@@ -1139,8 +1142,10 @@
 
   <script src="/static/js/icons.js"></script>
   <script src="/static/js/i18n.js"></script>
+  <!-- core.js defines loadFeature() and the openSettings/openSavedMessages/
+       openTelemirror/msgSaveToggle stubs those deferred scripts overwrite
+       once loaded — must load before anything that can trigger them. -->
   <script src="/static/js/core.js"></script>
-  <script src="/static/js/settings.js"></script>
   <script src="/static/js/resolvers.js"></script>
   <script src="/static/js/sse.js"></script>
   <script src="/static/js/profiles.js"></script>
@@ -1150,12 +1155,10 @@
   <script src="/static/js/log.js"></script>
   <script src="/static/js/ui.js"></script>
   <script src="/static/js/scanner.js"></script>
-  <script src="/static/js/saved.js"></script>
   <script src="/static/js/bank.js"></script>
   <script src="/static/js/main.js"></script>
-  <!-- BEGIN telemirror -->
-  <script src="/static/js/telemirror.js"></script>
-  <!-- END telemirror -->
+  <!-- settings.js, saved.js, and telemirror.js load lazily via loadFeature()
+       (core.js) on first use instead of on every page load. -->
   <!-- BEGIN chat -->
   <script src="/static/js/chat.js"></script>
   <!-- END chat -->

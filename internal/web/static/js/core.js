@@ -1,3 +1,249 @@
+// ===== LAZY FEATURE LOADING =====
+// Settings, Saved Messages, and Mirror are not needed on the default Feed
+// view, so their JS/CSS load on first use instead of eagerly on every page
+// load. Each stub below is overwritten once the real script executes (its
+// top-level `function name(){}` / `window.name = ...` clobbers this stub),
+// so the recursive call after load reaches the real implementation.
+var __featurePromise = {};
+function loadFeature(name, jsSrc, cssHref, cb) {
+  if (!__featurePromise[name]) {
+    var css = !cssHref ? Promise.resolve() : new Promise(function (resolve) {
+      var l = document.createElement('link');
+      l.rel = 'stylesheet'; l.href = cssHref;
+      l.onload = resolve; l.onerror = resolve;
+      document.head.appendChild(l);
+    });
+    var js = new Promise(function (resolve, reject) {
+      var s = document.createElement('script');
+      s.src = jsSrc; s.onload = resolve; s.onerror = reject;
+      document.body.appendChild(s);
+    });
+    __featurePromise[name] = Promise.all([css, js]).then(function () {
+      // The loaded script's top-level declarations clobber nav.js's
+      // setActiveTab wrappers around the stubs — re-wrap (idempotent).
+      if (typeof wrapNav === 'function') wrapNav();
+    });
+  }
+  __featurePromise[name].then(cb);
+}
+function loadSaved(cb) { loadFeature('saved', '/static/js/saved.js', '/static/css/saved.css', cb); }
+function openSettings(adopt) {
+  loadFeature('settings', '/static/js/settings.js', null, function () { openSettings(adopt); });
+}
+function openSavedMessages() {
+  loadSaved(function () { openSavedMessages(); });
+}
+function openTelemirror(adopt) {
+  // telemirror.css is eager (index.html): its tm-* layout classes are shared
+  // with the Resolver and Settings panes.
+  loadFeature('telemirror', '/static/js/telemirror.js', null, function () { openTelemirror(adopt); });
+}
+function msgSaveToggle(id, btn) {
+  loadSaved(function () { msgSaveToggle(id, btn); });
+}
+
+// ===== PROFILE PICTURES =====
+// Cached lowercase usernames so renderChannels can decide whether
+// to overlay an <img> over the initial-letter circle. Lives here (not
+// settings.js, which loads lazily): renderChannels and the SSE handler
+// need it on every page load.
+var profilePicCache = { enabled: false, users: {} };
+// SSE throttle state — server fires one event per stored avatar.
+var profilePicsReloadTimer = null;
+var profilePicsLastReloadAt = 0;
+
+function loadProfilePicState() {
+  // no-store so SSE reloads see fresh data, not a cached entry.
+  return fetch('/api/profile-pics', { cache: 'no-store' }).then(function (r) { return r.ok ? r.json() : null; }).then(function (d) {
+    if (!d) return;
+    profilePicCache.enabled = !!d.enabled;
+    profilePicCache.users = {};
+    (d.users || []).forEach(function (u) { profilePicCache.users[u.toLowerCase()] = true; });
+    try { renderChannels(); } catch (e) { }
+  }).catch(function () { });
+}
+
+// checkGitHubUpdate hits /api/update/github (which reads the latest
+// GitHub Release tag for sartoopjj/thefeed) and prompts the user
+// with a download link tailored to their platform.
+// `manual=true` shows a toast on "no update", `manual=false` stays silent.
+async function checkGitHubUpdate(manual) {
+  try {
+    var r = await fetch('/api/update/github');
+    if (!r.ok) {
+      if (manual) showToast(t('update_check_failed') || 'Update check failed');
+      return;
+    }
+    var data = await r.json();
+    if (!data || !data.latest) return;
+    latestVersion = data.latest;
+    renderLatestVersion();
+    if (data.hasUpdate && data.downloadURL) {
+      if (!manual) {
+        // Server-stored skip survives per-port localStorage wipes.
+        var skipped = '';
+        try {
+          var sx = new XMLHttpRequest();
+          sx.open('GET', '/api/settings', false);
+          sx.send();
+          if (sx.status === 200) skipped = JSON.parse(sx.responseText).skipUpdateVersion || '';
+        } catch (e) { }
+        if (!skipped) skipped = localStorage.getItem('thefeed_skip_gh_update_' + normalizeVersion(data.latest)) === '1' ? data.latest : '';
+        if (normalizeVersion(skipped) === normalizeVersion(data.latest)) return;
+      }
+      showUpdateDialog(data.latest, data.downloadURL);
+    } else if (manual) {
+      showToast((t('version_up_to_date') || 'Up to date: {v}').replace('{v}', data.latest));
+    }
+  } catch (e) {
+    if (manual) showToast(e.message || t('update_check_failed') || 'Update check failed');
+  }
+}
+
+function showUpdateDialog(newVersion, url) {
+  var msg = (t('update_available') || 'New version available: {v}').replace('{v}', newVersion);
+  var hint = t('update_download_hint') || 'Download the new version below.';
+  var dl = t('update_download_btn') || 'Download';
+  var later = t('update_later_btn') || 'Later';
+  var skip = t('update_skip_btn') || "Don't show again";
+  var skipKey = 'thefeed_skip_gh_update_' + normalizeVersion(newVersion);
+  var overlay = document.createElement('div');
+  overlay.className = 'modal-overlay active';
+  overlay.innerHTML = '<div class="modal" style="max-width:380px">'
+    + '<h2 style="margin-top:0">' + esc(msg) + '</h2>'
+    + '<p style="font-size:13px;color:var(--text-dim);margin-bottom:12px;line-height:1.6">' + esc(hint) + '</p>'
+    + '<p style="font-size:11px;color:var(--text-dim);margin-bottom:16px;word-break:break-all"><code>' + esc(url) + '</code></p>'
+    + '<div class="modal-actions" style="flex-wrap:wrap;gap:6px">'
+    + '  <button class="btn btn-flat" id="updateSkip">' + esc(skip) + '</button>'
+    + '  <button class="btn btn-flat" id="updateLater">' + esc(later) + '</button>'
+    + '  <button class="btn btn-primary" id="updateDownload">' + esc(dl) + '</button>'
+    + '</div></div>';
+  document.body.appendChild(overlay);
+  var dismiss = function () { if (overlay.parentNode) overlay.parentNode.removeChild(overlay); };
+  var persistSkip = function () {
+    try { localStorage.setItem(skipKey, '1'); } catch (e) { }
+    fetch('/api/settings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ skipUpdateVersion: newVersion })
+    }).catch(function () { });
+  };
+  document.getElementById('updateLater').onclick = dismiss;
+  document.getElementById('updateSkip').onclick = function () { persistSkip(); dismiss(); };
+  document.getElementById('updateDownload').onclick = function () {
+    runUpdateDownload(newVersion, overlay);
+  };
+}
+
+// runUpdateDownload swaps the update dialog's body for a progress
+// bar, streams the asset through /api/update/download, and on
+// completion triggers a same-page Save As via a Blob URL.
+async function runUpdateDownload(newVersion, overlay) {
+  var modal = overlay && overlay.querySelector('.modal');
+  var progressHTML = ''
+    + '<h2 style="margin-top:0">' + esc((t('update_downloading') || 'Downloading {v}…').replace('{v}', newVersion)) + '</h2>'
+    + '<div style="background:var(--bg-soft,#222);height:10px;border-radius:5px;overflow:hidden;margin-bottom:8px">'
+    + '  <div id="updateProgressBar" style="background:var(--accent,#4caf50);height:100%;width:0%;transition:width .2s"></div>'
+    + '</div>'
+    + '<div id="updateProgressText" style="font-size:12px;color:var(--text-dim);text-align:center">0 / ?</div>'
+    + '<div class="modal-actions" style="margin-top:14px;justify-content:flex-end">'
+    + '  <button class="btn btn-flat" id="updateCancel">' + esc(t('cancel') || 'Cancel') + '</button>'
+    + '</div>';
+  if (modal) modal.innerHTML = progressHTML;
+
+  var controller = new AbortController();
+  document.getElementById('updateCancel').onclick = function () {
+    controller.abort();
+    if (overlay && overlay.parentNode) overlay.parentNode.removeChild(overlay);
+  };
+
+  var bar = document.getElementById('updateProgressBar');
+  var txt = document.getElementById('updateProgressText');
+
+  var fmtBytes = function (n) {
+    if (n < 1024) return n + ' B';
+    if (n < 1024 * 1024) return (n / 1024).toFixed(1) + ' KB';
+    return (n / 1024 / 1024).toFixed(2) + ' MB';
+  };
+
+  try {
+    var resp = await fetch('/api/update/download?version=' + encodeURIComponent(newVersion), {
+      signal: controller.signal,
+    });
+    if (!resp.ok) {
+      var errText = await resp.text();
+      throw new Error(errText || ('HTTP ' + resp.status));
+    }
+    var total = parseInt(resp.headers.get('Content-Length') || '0', 10);
+    var filename = resp.headers.get('X-Download-Filename') || ('thefeed-' + newVersion);
+
+    var blob;
+    if (resp.body && resp.body.getReader) {
+      var reader = resp.body.getReader();
+      var chunks = [];
+      var received = 0;
+      while (true) {
+        var step = await reader.read();
+        if (step.done) break;
+        chunks.push(step.value);
+        received += step.value.length;
+        if (total > 0) {
+          var pct = Math.min(100, (received / total) * 100);
+          if (bar) bar.style.width = pct.toFixed(1) + '%';
+          if (txt) txt.textContent = fmtBytes(received) + ' / ' + fmtBytes(total)
+            + ' (' + pct.toFixed(0) + '%)';
+        } else {
+          if (txt) txt.textContent = fmtBytes(received);
+        }
+      }
+      blob = new Blob(chunks, { type: 'application/octet-stream' });
+    } else {
+      // Fallback for old WebViews without ReadableStream. No
+      // progress — just wait for the whole response, then save.
+      if (txt) txt.textContent = (t('update_downloading_no_progress') || 'Downloading (no progress on this browser)…');
+      if (bar) bar.style.width = '100%';
+      blob = await resp.blob();
+    }
+
+    if (androidBridge && androidBridge.saveMedia) {
+      // Android WebView ignores <a download> for blob URLs — route
+      // through the native bridge so the file lands in Downloads/.
+      if (txt) txt.textContent = (t('update_saving') || 'Saving to Downloads…');
+      var b64 = await blobToBase64(blob);
+      androidBridge.saveMedia(b64, 'application/octet-stream', filename);
+    } else {
+      var blobURL = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      a.href = blobURL;
+      a.download = filename;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(function () { URL.revokeObjectURL(blobURL); }, 60000);
+    }
+
+    if (txt) txt.textContent = (t('update_saved') || 'Saved') + ': ' + filename;
+    try {
+      var sk = 'thefeed_skip_gh_update_' + normalizeVersion(newVersion);
+      localStorage.setItem(sk, '1');
+    } catch (e) { }
+    fetch('/api/settings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ skipUpdateVersion: newVersion })
+    }).catch(function () { });
+
+    setTimeout(function () {
+      if (overlay && overlay.parentNode) overlay.parentNode.removeChild(overlay);
+    }, 1500);
+  } catch (e) {
+    if (e && e.name === 'AbortError') return;
+    if (txt) {
+      txt.style.color = 'var(--danger,#e53935)';
+      txt.textContent = (t('update_download_failed') || 'Download failed') + ': ' + (e.message || e);
+    }
+    showToast((t('update_download_failed') || 'Download failed') + ': ' + (e.message || e));
+  }
+}
+
 // ===== STATE =====
 var selectedChannel = 0, channels = [], eventSource = null, autoRefreshTimer = null, telegramLoggedIn = false, logVisible = false;
 var _selectGen = 0;
@@ -138,7 +384,7 @@ function openSidebar() {
 // foreign state and never clear chat-open, leaving the user stuck in a channel.
 // Direct removal always returns to the list.
 function feedBack() {
-  if (viewingSaved) closeSavedMessages();
+  if (typeof viewingSaved !== 'undefined' && viewingSaved) closeSavedMessages();
   else openSidebar();
 }
 window.feedBack = feedBack;

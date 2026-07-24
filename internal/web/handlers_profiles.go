@@ -66,19 +66,32 @@ func (s *Server) handleProfiles(w http.ResponseWriter, r *http.Request) {
 
 		switch req.Action {
 		case "create":
-			req.Profile.ID = generateID()
-			if req.Profile.Nickname == "" {
-				req.Profile.Nickname = req.Profile.Config.Domain
+			// Re-importing an identical config (same domain + key) must not
+			// duplicate the profile — repeated imports of the same URI or
+			// default config are common when the first click looks like it
+			// did nothing. Resolvers still merge into the shared bank below.
+			dup := false
+			for _, p := range pl.Profiles {
+				if p.Config.Domain == req.Profile.Config.Domain && p.Config.Key == req.Profile.Config.Key {
+					dup = true
+					break
+				}
 			}
 			// Move resolvers to the shared bank.
 			if len(req.Profile.Config.Resolvers) > 0 {
 				addToBank(pl, req.Profile.Config.Resolvers)
 				req.Profile.Config.Resolvers = nil
 			}
-			pl.Profiles = append(pl.Profiles, req.Profile)
-			if len(pl.Profiles) == 1 {
-				pl.Active = req.Profile.ID
-				needsReinit = true
+			if !dup {
+				req.Profile.ID = generateID()
+				if req.Profile.Nickname == "" {
+					req.Profile.Nickname = req.Profile.Config.Domain
+				}
+				pl.Profiles = append(pl.Profiles, req.Profile)
+				if len(pl.Profiles) == 1 {
+					pl.Active = req.Profile.ID
+					needsReinit = true
+				}
 			}
 
 		case "update":

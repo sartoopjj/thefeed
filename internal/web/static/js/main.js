@@ -128,7 +128,11 @@ document.addEventListener('keydown', function (e) {
   if (e.key === 'Enter' && document.activeElement === document.getElementById('sendInput')) { e.preventDefault(); sendMessage() }
   if (e.key === 'Enter' && document.activeElement === document.getElementById('peAddChannelInput')) { e.preventDefault(); addChannelEditor() }
   if (e.key === 'Enter' && document.activeElement === document.getElementById('msgSearchInput')) { e.preventDefault(); msgSearchNext() }
-  if (e.key === 'Escape') { closeSettings(); closeProfiles(); closeProfileEditor(); closeScanner(); closeMsgSearch(); closeExportModal(); closeResolversModal(); closeTelemirror() }
+  if (e.key === 'Escape') {
+    if (typeof closeSettings === 'function') closeSettings();
+    closeProfiles(); closeProfileEditor(); closeScanner(); closeMsgSearch(); closeExportModal(); closeResolversModal();
+    if (typeof closeTelemirror === 'function') closeTelemirror();
+  }
 });
 mobileQuery.addEventListener('change', function () {
   var app = document.getElementById('app');

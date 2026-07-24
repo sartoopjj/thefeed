@@ -6,6 +6,7 @@ require (
 	github.com/gotd/td v0.142.0
 	github.com/miekg/dns v1.1.72
 	github.com/refraction-networking/utls v1.6.7
+	github.com/tdewolff/minify/v2 v2.24.13
 	go.etcd.io/bbolt v1.4.3
 	golang.org/x/crypto v0.50.0
 	golang.org/x/mobile v0.0.0-20260410095206-2cfb76559b7b
@@ -35,6 +36,7 @@ require (
 	github.com/ogen-go/ogen v1.19.0 // indirect
 	github.com/segmentio/asm v1.2.1 // indirect
 	github.com/shopspring/decimal v1.4.0 // indirect
+	github.com/tdewolff/parse/v2 v2.8.12 // indirect
 	go.opentelemetry.io/otel v1.41.0 // indirect
 	go.opentelemetry.io/otel/metric v1.41.0 // indirect
 	go.opentelemetry.io/otel/trace v1.41.0 // indirect

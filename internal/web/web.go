@@ -478,8 +478,17 @@ func (s *Server) Serve(ln net.Listener) error { return s.serve(ln) }
 func (s *Server) serve(ln net.Listener) error {
 	mux := http.NewServeMux()
 
-	staticSub, _ := fs.Sub(staticFS, "static")
-	mux.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.FS(staticSub))))
+	// no-cache (not no-store): the browser still keeps a copy but must
+	// revalidate with the server every time via If-Modified-Since. Without
+	// this, embedded assets served under a fixed URL (/static/js/core.js
+	// etc.) can be served stale from heuristic cache after a rebuild —
+	// e.g. an old core.js paired with a newer nav.js — breaking the page
+	// in ways that don't reproduce on a fresh load.
+	staticHandler := http.StripPrefix("/static/", http.FileServer(http.FS(staticMinFS)))
+	mux.Handle("/static/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "no-cache")
+		staticHandler.ServeHTTP(w, r)
+	}))
 
 	mux.HandleFunc("/api/status", s.handleStatus)
 	mux.HandleFunc("/api/config", s.handleConfig)
@@ -693,12 +702,13 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	data, err := staticFS.ReadFile("static/index.html")
+	data, err := fs.ReadFile(staticMinFS, "index.html")
 	if err != nil {
 		http.Error(w, "internal error", 500)
 		return
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-cache")
 	w.Write(data)
 }
 
