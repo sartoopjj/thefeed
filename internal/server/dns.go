@@ -828,7 +828,10 @@ func loadChannelsFromFile(path string) ([]string, error) {
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue
 		}
-		channels = append(channels, strings.TrimPrefix(line, "@"))
+		parts := strings.Fields(line)
+		if len(parts) > 0 {
+			channels = append(channels, strings.TrimPrefix(parts[0], "@"))
+		}
 	}
 	return channels, scanner.Err()
 }
