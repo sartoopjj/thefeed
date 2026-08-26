@@ -20,8 +20,13 @@
     <string>$(MARKETING_VERSION)</string>
     <key>CFBundleVersion</key>
     <string>$(CURRENT_PROJECT_VERSION)</string>
+    <!-- The app implements its own end-to-end encryption (X25519, Ed25519,
+         AES-256-GCM) and an encrypted DNS transport, so it is not covered by
+         Apple's exemptions. Declaring true means App Store Connect asks the
+         export-compliance questions per build; see tmp/appstore/05 for the
+         answers. -->
     <key>ITSAppUsesNonExemptEncryption</key>
-    <false/>
+    <true/>
     <key>LSRequiresIPhoneOS</key>
     <true/>
     <key>UILaunchScreen</key>

@@ -189,11 +189,27 @@ Key flags (also settable via env vars, e.g. `THEFEED_DOMAIN`, `THEFEED_KEY`, `TH
 | `--fetch-interval` | `10` | Fetch cycle in minutes (min 3) |
 | `--allow-manage` | `false` | Allow remote send / channel management (leave off unless trusted) |
 | `--padding` | `32` | Max random padding bytes (anti-DPI; 0 = off) |
-| `--x-rss-instances` | `nitter.net,…` | Comma-separated X RSS base URLs |
+| `--x-rss-instances` | `nitter.net,…` | Comma-separated X RSS base URLs — see the warning below |
 | `--dns-media-enabled` | `false` | Serve media over the slow DNS relay |
 | `--github-relay-enabled` | `false` | Serve media over the fast GitHub relay (needs `--github-relay-token` / `-repo`) |
 | `--report` | | Render the terminal dashboard and exit |
 | `--version` | | Show version and exit |
+
+> **⚠ X (Twitter) posts are currently broken.** X content is fetched through
+> Nitter, and the Nitter project has been **archived** — its public instances now
+> answer with "Instance has been rate limited"
+> ([zedeus/nitter#1442](https://github.com/zedeus/nitter/issues/1442)). Until a
+> working source exists, the X section of the feed stops updating. Point
+> `--x-rss-instances` at an instance you know still works, or leave X unused.
+> **Server-side only** — Telegram channels, Mirror, the messenger and every
+> client are unaffected.
+>
+> **Self-hosting Nitter still works.** The archived code runs fine: clone the
+> repo, create session tokens from a real X account (scripts and instructions
+> are in the Nitter repo/wiki), run it with Docker + Redis, and point
+> `--x-rss-instances` at it (e.g. `http://127.0.0.1:8080` — only the thefeed
+> server reads it, so it needs no domain or TLS). Keep the instance **private**:
+> the project was archived after legal pressure aimed at public instances.
 
 Full media-relay flags are in [How it works → Media relays](#media-relays).
 

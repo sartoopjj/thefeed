@@ -196,11 +196,22 @@ thefeed-server --data-dir /srv/thefeed --report --report-refresh 5s   # 实时
 | `--fetch-interval` | `10` | 抓取周期（分钟，最小 3） |
 | `--allow-manage` | `false` | 允许远程发送 / 频道管理（非可信勿开） |
 | `--padding` | `32` | 最大随机填充字节（抗 DPI；0 = 关闭） |
-| `--x-rss-instances` | `nitter.net,…` | 逗号分隔的 X RSS 基址 |
+| `--x-rss-instances` | `nitter.net,…` | 逗号分隔的 X RSS 基址 —— 见下方警告 |
 | `--dns-media-enabled` | `false` | 通过慢速 DNS 中继提供媒体 |
 | `--github-relay-enabled` | `false` | 通过快速 GitHub 中继提供媒体（需 `--github-relay-token` / `-repo`） |
 | `--report` | | 渲染终端仪表板后退出 |
 | `--version` | | 显示版本后退出 |
+
+> **⚠ X（Twitter）帖子目前无法使用。** X 内容通过 Nitter 抓取，而 Nitter 项目已被
+> **归档**，其公共实例现在一律返回 "Instance has been rate limited"
+> （[zedeus/nitter#1442](https://github.com/zedeus/nitter/issues/1442)）。在出现可用
+> 来源之前，信息流的 X 部分不再更新。请把 `--x-rss-instances` 指向你确认仍可用的实例，
+> 或者不使用 X。**仅影响服务端** —— Telegram 频道、Mirror、信使和所有客户端均不受影响。
+>
+> **自建 Nitter 仍然可行。** 已归档的代码依旧能跑：克隆仓库，用一个真实的 X 账号生成
+> session 令牌（脚本和说明在 Nitter 仓库/wiki 里），用 Docker + Redis 运行，再把
+> `--x-rss-instances` 指向它（例如 `http://127.0.0.1:8080` —— 只有 thefeed 服务端读取它，
+> 无需域名和 TLS）。请保持实例**私有**：该项目正是因针对公共实例的法律压力而归档的。
 
 完整的媒体中继参数见 [工作原理 → 媒体中继](#media-relays)。
 
