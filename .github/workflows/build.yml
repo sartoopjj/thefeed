@@ -1,6 +1,7 @@
 name: Build
 
 on:
+  workflow_dispatch:
   push:
     tags: ['v*']
   # Manual test builds. Artifacts only — the release job is gated on a tag
