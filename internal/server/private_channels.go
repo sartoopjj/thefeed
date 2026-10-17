@@ -119,7 +119,11 @@ func LoadPrivateInvites(path string) ([]string, error) {
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue
 		}
-		hash, err := ParseInviteHash(line)
+		parts := strings.Fields(line)
+		if len(parts) == 0 {
+			continue
+		}
+		hash, err := ParseInviteHash(parts[0])
 		if err != nil {
 			log.Printf("[server] private_channels.txt:%d: %v", lineNum, err)
 			continue

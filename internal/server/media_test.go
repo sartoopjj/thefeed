@@ -2,8 +2,12 @@ package server
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"hash/crc32"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -323,3 +327,202 @@ func TestMediaCacheMetadataRoundTrip(t *testing.T) {
 		t.Fatalf("caption = %q", caption)
 	}
 }
+
+func TestMediaCacheAudioTranscode(t *testing.T) {
+	t.Setenv("THEFEED_OPUS_TRANSCODE", "1")
+	// 1. Test fallback with invalid/garbage bytes
+	cache := newTestCache(0, time.Hour)
+	garbage := []byte("not-real-audio-data-at-all")
+	meta, err := cache.Store("garbage-audio", protocol.MediaAudio, garbage, "audio/mp3", "test.mp3")
+	if err != nil {
+		t.Fatalf("Store garbage audio: %v", err)
+	}
+	// It should have fallen back to original bytes and filename
+	if meta.Filename != "test.mp3" {
+		t.Errorf("expected fallback filename 'test.mp3', got %q", meta.Filename)
+	}
+	if meta.Size != int64(len(garbage)) {
+		t.Errorf("expected fallback size %d, got %d", len(garbage), meta.Size)
+	}
+
+	// 2. Test successful transcoding with a real valid audio file (if ffmpeg is available)
+	_, err = exec.LookPath("ffmpeg")
+	if err != nil {
+		t.Skip("skipping transcode test; ffmpeg not found in PATH")
+	}
+
+	// Generate a tiny mp3 file using ffmpeg
+	tmpMP3, err := os.CreateTemp("", "test_sine_*.mp3")
+	if err != nil {
+		t.Fatalf("failed to create temp mp3: %v", err)
+	}
+	tmpMP3Path := tmpMP3.Name()
+	tmpMP3.Close()
+	defer os.Remove(tmpMP3Path)
+
+	cmd := exec.Command("ffmpeg", "-y", "-f", "lavfi", "-i", "sine=frequency=1000:duration=1", "-acodec", "libmp3lame", tmpMP3Path)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		// If libmp3lame is not available, try generating wav instead
+		t.Logf("mp3 generation failed, trying wav: %v (output: %s)", err, string(out))
+		tmpWav := strings.TrimSuffix(tmpMP3Path, ".mp3") + ".wav"
+		cmdWav := exec.Command("ffmpeg", "-y", "-f", "lavfi", "-i", "sine=frequency=1000:duration=1", tmpWav)
+		if outWav, errWav := cmdWav.CombinedOutput(); errWav != nil {
+			t.Skipf("skipping transcode test; cannot generate source audio: %v (output: %s)", errWav, string(outWav))
+		}
+		tmpMP3Path = tmpWav
+		defer os.Remove(tmpWav)
+	}
+
+	audioBytes, err := os.ReadFile(tmpMP3Path)
+	if err != nil {
+		t.Fatalf("failed to read generated audio: %v", err)
+	}
+
+	// Store the real audio
+	origFilename := filepath.Base(tmpMP3Path)
+	metaAudio, err := cache.Store("real-audio", protocol.MediaAudio, audioBytes, "audio/mpeg", origFilename)
+	if err != nil {
+		t.Fatalf("Store real audio: %v", err)
+	}
+
+	// It should have transcoded to opus
+	expectedFilename := changeExtensionToOpus(origFilename)
+	if metaAudio.Filename != expectedFilename {
+		t.Errorf("expected transcoded filename %q, got %q", expectedFilename, metaAudio.Filename)
+	}
+	if metaAudio.Size == int64(len(audioBytes)) {
+		t.Errorf("expected different size after transcoding, but got same size %d", metaAudio.Size)
+	}
+	// Verify that the retrieved data is not equal to original but exists
+	block, err := cache.GetBlock(metaAudio.Channel, 0)
+	if err != nil {
+		t.Fatalf("failed to get block: %v", err)
+	}
+	if len(block) == 0 {
+		t.Fatalf("retrieved block is empty")
+	}
+}
+
+func TestMediaAudioMaxSize(t *testing.T) {
+	// 1. Fallback behavior (MaxAudioBytes = 0)
+	cacheFallback := NewMediaCache(MediaCacheConfig{
+		MaxFileBytes:    100,
+		MaxAudioBytes:   0,
+		TTL:             time.Hour,
+		DNSRelayEnabled: true,
+	})
+
+	// Non-audio file within limit
+	_, err := cacheFallback.Store("img-small", protocol.MediaImage, make([]byte, 50), "image/jpeg", "test.jpg")
+	if err != nil {
+		t.Errorf("expected success for small image, got error: %v", err)
+	}
+
+	// Non-audio file exceeding limit
+	_, err = cacheFallback.Store("img-large", protocol.MediaImage, make([]byte, 150), "image/jpeg", "test.jpg")
+	if err == nil {
+		t.Errorf("expected error for large image exceeding MaxFileBytes, got nil")
+	}
+
+	// Audio file within limit
+	_, err = cacheFallback.Store("audio-small", protocol.MediaAudio, make([]byte, 50), "audio/mpeg", "test.mp3")
+	if err != nil {
+		t.Errorf("expected success for small audio, got error: %v", err)
+	}
+
+	// Audio file exceeding limit
+	_, err = cacheFallback.Store("audio-large", protocol.MediaAudio, make([]byte, 150), "audio/mpeg", "test.mp3")
+	if err == nil {
+		t.Errorf("expected error for large audio exceeding MaxFileBytes under fallback, got nil")
+	}
+
+	// 2. Specific audio size limit behavior (MaxAudioBytes = 200, MaxFileBytes = 100)
+	cacheCustom := NewMediaCache(MediaCacheConfig{
+		MaxFileBytes:    100,
+		MaxAudioBytes:   200,
+		TTL:             time.Hour,
+		DNSRelayEnabled: true,
+	})
+
+	// Non-audio file within MaxFileBytes (100)
+	_, err = cacheCustom.Store("img-custom-ok", protocol.MediaImage, make([]byte, 80), "image/jpeg", "test.jpg")
+	if err != nil {
+		t.Errorf("expected success for image under MaxFileBytes, got error: %v", err)
+	}
+
+	// Non-audio file exceeding MaxFileBytes (100) but under MaxAudioBytes (200)
+	_, err = cacheCustom.Store("img-custom-too-large", protocol.MediaImage, make([]byte, 150), "image/jpeg", "test.jpg")
+	if err == nil {
+		t.Errorf("expected error for image exceeding MaxFileBytes, got nil")
+	}
+
+	// Audio file exceeding MaxFileBytes (100) but under MaxAudioBytes (200)
+	_, err = cacheCustom.Store("audio-custom-ok", protocol.MediaAudio, make([]byte, 150), "audio/mpeg", "test.mp3")
+	if err != nil {
+		t.Errorf("expected success for audio exceeding MaxFileBytes but under MaxAudioBytes, got error: %v", err)
+	}
+
+	// Audio file by MIME type exceeding MaxFileBytes (100) but under MaxAudioBytes (200)
+	_, err = cacheCustom.Store("audio-mime-ok", protocol.MediaFile, make([]byte, 150), "audio/ogg", "test.ogg")
+	if err != nil {
+		t.Errorf("expected success for file with audio MIME type exceeding MaxFileBytes but under MaxAudioBytes, got error: %v", err)
+	}
+
+	// Audio file exceeding MaxAudioBytes (200)
+	_, err = cacheCustom.Store("audio-custom-too-large", protocol.MediaAudio, make([]byte, 250), "audio/mpeg", "test.mp3")
+	if err == nil {
+		t.Errorf("expected error for audio exceeding MaxAudioBytes, got nil")
+	}
+}
+
+func TestMediaCacheOverrides(t *testing.T) {
+	cache := NewMediaCache(MediaCacheConfig{
+		MaxFileBytes:    100,
+		MaxAudioBytes:   200,
+		TTL:             time.Hour,
+		DNSRelayEnabled: true,
+	})
+
+	// 1. Check default context limits (none)
+	ctx := context.Background()
+	if _, _, ok := GetContextLimits(ctx); ok {
+		t.Error("expected ok=false for empty context")
+	}
+
+	// 2. Check context limit propagation
+	ctx = WithContextLimits(ctx, 50, 60)
+	maxF, maxA, ok := GetContextLimits(ctx)
+	if !ok || maxF != 50 || maxA != 60 {
+		t.Errorf("expected limits (50, 60), got (%d, %d), ok=%v", maxF, maxA, ok)
+	}
+
+	// 3. Check GetMaxBytesFromContext override calculation
+	overrideMax, ok := GetMaxBytesFromContext(ctx, protocol.MediaImage, "image/jpeg", cache)
+	if !ok || overrideMax != 50 {
+		t.Errorf("expected max bytes 50 for image, got %d, ok=%v", overrideMax, ok)
+	}
+	overrideMax, ok = GetMaxBytesFromContext(ctx, protocol.MediaAudio, "audio/mpeg", cache)
+	if !ok || overrideMax != 60 {
+		t.Errorf("expected max bytes 60 for audio, got %d, ok=%v", overrideMax, ok)
+	}
+
+	// 4. Test StoreWithOptions respecting overrides
+	var storeOpts MediaCacheStoreOptions
+	fLimit, aLimit := int64(300), int64(400)
+	storeOpts.MaxFileBytesOverride = &fLimit
+	storeOpts.MaxAudioBytesOverride = &aLimit
+
+	// Without override, image of size 150 would be rejected by cache (global limit 100)
+	_, err := cache.StoreWithOptions("k-overlimit-no-override", protocol.MediaImage, make([]byte, 150), "image/jpeg", "", MediaCacheStoreOptions{})
+	if err == nil {
+		t.Error("expected error for image exceeding global limit without override")
+	}
+
+	// With override (300), image of size 150 should succeed
+	_, err = cache.StoreWithOptions("k-overlimit-override", protocol.MediaImage, make([]byte, 150), "image/jpeg", "", storeOpts)
+	if err != nil {
+		t.Errorf("expected success for image with override limit 300, got error: %v", err)
+	}
+}
+
+
