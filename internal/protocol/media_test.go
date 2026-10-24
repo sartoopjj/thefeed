@@ -132,15 +132,16 @@ func TestParseMediaTextUnknownRelaysIgnored(t *testing.T) {
 
 func TestSanitiseMediaFilename(t *testing.T) {
 	cases := map[string]string{
-		"":                     "",
-		"report.zip":           "report.zip",
-		"path/to/report.zip":   "report.zip",
-		"..":                   "",
-		"a:b\nc.txt":           "abc.txt",
-		"hello":                "hello",
-		"WeIrD-Name_v2.tar.gz": "WeIrD-Name_v2.tar.gz",
-		"\xff\xfe.txt":         "media.txt",
-		"\u062d\u0645\u0644\u0647.zip":             "media.zip",
+		"":                           "",
+		"report.zip":                 "report.zip",
+		"path/to/report.zip":         "report.zip",
+		"..":                         "",
+		"a:b\nc.txt":                 "abc.txt",
+		"hello":                      "hello",
+		"WeIrD-Name_v2.tar.gz":       "WeIrD-Name_v2.tar.gz",
+		"\xff\xfe.txt":               "media.txt",
+		"\u062d\u0645\u0644\u0647.zip": "حمله.zip",
+		"یه نام تست.mp3":             "یه نام تست.mp3",
 	}
 	for in, want := range cases {
 		if got := SanitiseMediaFilename(in); got != want {

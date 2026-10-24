@@ -38,7 +38,7 @@ func (tr *TelegramReader) fetchProfilePhoto(ctx context.Context, api *tg.Client,
 		PhotoID: photoID,
 	}
 	loc.Big = false
-	return tr.downloadTelegramFile(ctx, api, loc, 0)
+	return tr.downloadTelegramFile(ctx, api, loc, 0, 0)
 }
 
 // fetchAllProfilePhotos downloads avatars (public by username,
