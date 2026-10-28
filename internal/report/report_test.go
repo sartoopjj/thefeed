@@ -131,3 +131,52 @@ func TestBarAndSparkline(t *testing.T) {
 		t.Fatalf("sparkline rune count = %d, want 3", len([]rune(s)))
 	}
 }
+
+// The Telegram proxy is reported as two numbers, not one. A session outlives
+// the socket it was using, so "connected users" and "open connections" are
+// different facts; collapsing them overstates what the relay is carrying.
+func TestReportShowsTelegramProxy(t *testing.T) {
+	const logs = `[dns_hourly] {"type":"dns_hourly_report","from":"2026-06-10T09:00:00Z","to":"2026-06-10T10:00:00Z","totalDnsQueries":500,"mtproto":{"sessions":7,"liveTunnels":3,"maxTunnels":50}}
+[dns_hourly] {"type":"dns_hourly_report","from":"2026-06-10T10:00:00Z","to":"2026-06-10T11:00:00Z","totalDnsQueries":600,"mtproto":{"sessions":9,"liveTunnels":4,"maxTunnels":50}}`
+
+	agg, err := parseLines(writeTmpLog(t, logs), time.Time{}, time.Time{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The newest line wins, the way the chat stats do.
+	if got := agg.lastMTProtoStats["sessions"]; got != 9 {
+		t.Fatalf("sessions = %d, want 9", got)
+	}
+	if got := agg.lastMTProtoStats["liveTunnels"]; got != 4 {
+		t.Fatalf("liveTunnels = %d, want 4", got)
+	}
+
+	out := renderDashboard(agg, -1, 10, false)
+	for _, want := range []string{"Telegram proxy", "Connected users", "Open connections", "Cap"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("report missing %q", want)
+		}
+	}
+}
+
+// A server with the proxy switched off must not grow an empty section.
+func TestReportOmitsProxyWhenUnused(t *testing.T) {
+	const logs = `[dns_hourly] {"type":"dns_hourly_report","from":"2026-06-10T09:00:00Z","to":"2026-06-10T10:00:00Z","totalDnsQueries":500}`
+	agg, err := parseLines(writeTmpLog(t, logs), time.Time{}, time.Time{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(renderDashboard(agg, -1, 10, false), "Telegram proxy") {
+		t.Fatal("a server without the proxy grew a proxy section")
+	}
+}
+
+// writeTmpLog drops log text in a file, which is what parseLines reads.
+func writeTmpLog(t *testing.T, body string) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "log.txt")
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}

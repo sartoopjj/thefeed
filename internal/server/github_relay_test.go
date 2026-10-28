@@ -26,9 +26,9 @@ type fakeGitHub struct {
 	deletes int               // contents-api deletions
 
 	// Tree state — dumb counter; we don't model real Git history.
-	headSHA  string
-	treeSHA  string
-	nextSeq  int
+	headSHA string
+	treeSHA string
+	nextSeq int
 }
 
 func (f *fakeGitHub) sha(prefix string) string {
@@ -239,4 +239,3 @@ func TestGitHubRelayStatePersistence(t *testing.T) {
 		t.Fatal("r2 should have loaded the file from statePath")
 	}
 }
-

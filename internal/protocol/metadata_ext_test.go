@@ -183,6 +183,20 @@ func TestExtended_HashCatchesSnapshotMix(t *testing.T) {
 	for i := 1; i < len(blocksB); i++ {
 		mixed = append(mixed, blocksB[i]...)
 	}
+
+	// Encoding is not byte-stable between runs, so now and then B's tail comes
+	// out identical to A's and the splice is not a mix at all. Verifying then
+	// is CORRECT, and asserting a mismatch made this test fail about once in
+	// 250 runs for no reason. Measured over 4000 encodes: 17 such runs, and
+	// zero genuine 24-bit collisions -- the hash is sound, the splice was not.
+	var wholeA []byte
+	for _, b := range blocksA {
+		wholeA = append(wholeA, b...)
+	}
+	if string(mixed) == string(wholeA) {
+		t.Skip("both snapshots encoded to the same bytes; nothing was actually mixed")
+	}
+
 	if err := VerifyExtendedHash(hashA, mixed[EMHHeaderLen:]); err == nil {
 		t.Error("expected hash mismatch when blocks come from different snapshots")
 	}

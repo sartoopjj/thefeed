@@ -6,8 +6,11 @@
 
 // Scanner + Bank are merged into one 'resolver' section (bank-centric, with the
 // scanner reachable from inside it).
-var NAV_TABS = ['feed', 'mirror', 'chat', 'resolver', 'settings'];
-var NAV_TAB_ID = { feed: 'navTabFeed', mirror: 'navTabMirror', chat: 'navTabChat', resolver: 'navTabResolver', settings: 'navTabSettings' };
+var NAV_TABS = ['feed', 'mirror', 'chat', 'tel', 'resolver', 'settings'];
+var NAV_TAB_ID = {
+  feed: 'navTabFeed', mirror: 'navTabMirror', chat: 'navTabChat',
+  tel: 'navTabTel', resolver: 'navTabResolver', settings: 'navTabSettings'
+};
 
 function setActiveTab(tab) {
   NAV_TABS.forEach(function (k) {
@@ -38,6 +41,14 @@ function closeChat() {
   }
 }
 
+// Telegram is reparented into the shell too — close via its html.tel-section
+// state flag, like Mirror/Chat.
+function closeTelSection() {
+  if (document.documentElement.classList.contains('tel-section') && typeof closeTel === 'function') {
+    try { closeTel(); } catch (e) { }
+  }
+}
+
 // Resolver (Scanner+Bank) is reparented into the shell — close via its
 // html.resolver-section state flag, like Mirror/Chat.
 function closeResolver() {
@@ -64,6 +75,7 @@ function closeModalOverlays() {
 function closeOverlays() {
   closeMirror();
   closeChat();
+  closeTelSection();
   closeResolver();
   closeSettingsSec();
   closeModalOverlays();
@@ -78,52 +90,29 @@ function closeSettingsSec() {
 }
 
 function navTo(tab) {
-  // Section tabs (Mirror, Chat): swap in their panes; close the OTHER section
-  // and any modal, but don't toggle the target off if it's already open.
-  // Each section closes the OTHER sections WITHOUT their history.go()
-  // (cross-section popstate cross-talk) and adopts their single history entry.
-  if (tab === 'mirror') {
-    var hadCm = (typeof chatCloseForNav === 'function') ? chatCloseForNav() : false;
-    var hadRm = (typeof resolverCloseForNav === 'function') ? resolverCloseForNav() : false;
-    var hadSm = (typeof settingsCloseForNav === 'function') ? settingsCloseForNav() : false;
+  // Every section tab: tear the others down without their history unwind
+  // (which would cross-talk), then open this one, adopting their entry.
+  var SECTIONS = {
+    mirror: { flag: 'tm-open', open: 'openTelemirror', off: 'tmCloseForNav' },
+    chat: { flag: 'chat-section', open: 'openMessenger', off: 'chatCloseForNav' },
+    tel: { flag: 'tel-section', open: 'openTel', off: 'telCloseForNav' },
+    resolver: { flag: 'resolver-section', open: 'openResolverSection', off: 'resolverCloseForNav' },
+    settings: { flag: 'settings-section', open: 'openSettings', off: 'settingsCloseForNav' }
+  };
+  if (SECTIONS[tab]) {
+    var me = SECTIONS[tab];
+    var adopt = false;
+    Object.keys(SECTIONS).forEach(function (k) {
+      if (k === tab) return;
+      var fn = window[SECTIONS[k].off];
+      if (typeof fn === 'function' && fn()) adopt = true;
+    });
     closeModalOverlays();
-    if (!document.documentElement.classList.contains('tm-open') && typeof openTelemirror === 'function') {
-      openTelemirror(hadCm || hadRm || hadSm);
+    var openFn = window[me.open];
+    if (!document.documentElement.classList.contains(me.flag) && typeof openFn === 'function') {
+      openFn(adopt);
     }
-    setActiveTab('mirror');
-    return;
-  }
-  if (tab === 'chat') {
-    var hadMc = (typeof tmCloseForNav === 'function') ? tmCloseForNav() : false;
-    var hadRc = (typeof resolverCloseForNav === 'function') ? resolverCloseForNav() : false;
-    var hadSc = (typeof settingsCloseForNav === 'function') ? settingsCloseForNav() : false;
-    closeModalOverlays();
-    if (!document.documentElement.classList.contains('chat-section') && typeof openMessenger === 'function') {
-      openMessenger(hadMc || hadRc || hadSc);
-    }
-    setActiveTab('chat');
-    return;
-  }
-  if (tab === 'resolver') {
-    var hadMr = (typeof tmCloseForNav === 'function') ? tmCloseForNav() : false;
-    var hadCr = (typeof chatCloseForNav === 'function') ? chatCloseForNav() : false;
-    var hadSr = (typeof settingsCloseForNav === 'function') ? settingsCloseForNav() : false;
-    closeModalOverlays();
-    if (!document.documentElement.classList.contains('resolver-section') && typeof openResolverSection === 'function') {
-      openResolverSection(hadMr || hadCr || hadSr);
-    }
-    setActiveTab('resolver');
-    return;
-  }
-  if (tab === 'settings') {
-    var hadMs = (typeof tmCloseForNav === 'function') ? tmCloseForNav() : false;
-    var hadCs = (typeof chatCloseForNav === 'function') ? chatCloseForNav() : false;
-    var hadRs = (typeof resolverCloseForNav === 'function') ? resolverCloseForNav() : false;
-    closeModalOverlays();
-    if (!document.documentElement.classList.contains('settings-section') && typeof openSettings === 'function') {
-      openSettings(hadMs || hadCs || hadRs);
-    }
-    setActiveTab('settings');
+    setActiveTab(tab);
     return;
   }
   if (tab === 'feed') {
@@ -302,7 +291,7 @@ function initPullToRefresh() {
 // ----- horizontal swipe navigation between sections -----
 // Sequence the user steps through with a horizontal swipe. Swipe right→left
 // (finger leftward) advances; left→right goes back.
-var NAV_SEQUENCE = ['feed', 'mirror', 'chat', 'resolver', 'settings'];
+var NAV_SEQUENCE = ['feed', 'mirror', 'chat', 'tel', 'resolver', 'settings'];
 
 function _isOpen(id) {
   var el = document.getElementById(id);
@@ -314,6 +303,7 @@ function _isOpen(id) {
 function currentScreen() {
   if (document.documentElement.classList.contains('tm-open')) return 'mirror';
   if (document.documentElement.classList.contains('chat-section')) return 'chat';
+  if (document.documentElement.classList.contains('tel-section')) return 'tel';
   if (document.documentElement.classList.contains('resolver-section')) return 'resolver';
   if (_isOpen('scannerModal') || _isOpen('resolversModal')) return 'resolver';
   if (document.documentElement.classList.contains('settings-section')) return 'settings';
@@ -368,6 +358,7 @@ function initSwipeNav() {
         // Back-swipe returns to the relevant list: chat thread → chat list,
         // mirror channel → mirror list, otherwise the feed.
         if (document.documentElement.classList.contains('chat-thread') && typeof chatBackToList === 'function') chatBackToList();
+        else if (document.documentElement.classList.contains('tel-thread') && typeof telBackToList === 'function') telBackToList();
         else if (document.documentElement.classList.contains('tm-channel') && typeof toggleTmSidebar === 'function') toggleTmSidebar();
         else if (typeof feedBack === 'function') feedBack();
       }
@@ -403,6 +394,8 @@ function wrapNav() {
     }
   });
   _wrapAfter('closeSettings', function () { setActiveTab('feed'); });
+  _wrapAfter('openTel', function () { setActiveTab('tel'); });
+  _wrapAfter('closeTel', function () { setActiveTab('feed'); });
   _wrapAfter('openTelemirror', function () { setActiveTab('mirror'); });
   _wrapAfter('closeTelemirror', function () { setActiveTab('feed'); });
 }

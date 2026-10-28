@@ -441,6 +441,50 @@ setup_config() {
         done
     fi
 
+    # Telegram proxy: carries real MTProto to Telegram's own data centres over
+    # DNS, on its own dedicated sub-domain(s) — never on the feed or messenger
+    # domains. Stored in THEFEED_MTPROTO_DOMAINS; empty = proxy off.
+    local cur_mtp_domains=""
+    $is_update && cur_mtp_domains=$(env_get THEFEED_MTPROTO_DOMAINS)
+    local mtproto_domains="$cur_mtp_domains"
+    local do_collect_md=false
+    echo ""
+    if [[ -n "$cur_mtp_domains" ]]; then
+        echo -e "${yellow}Telegram proxy domains: ${cur_mtp_domains}${plain}"
+        read -rp "Change Telegram proxy domains? [y/N]: " change_md
+        [[ "$change_md" == "y" || "$change_md" == "Y" ]] && do_collect_md=true
+    else
+        echo -e "${yellow}The Telegram proxy lets clients reach Telegram itself through this"
+        echo -e "server when only domestic traffic works. It needs dedicated sub-domain(s)"
+        echo -e "and makes outbound TCP connections to Telegram's data centres.${plain}"
+        read -rp "Enable the Telegram proxy? [y/N]: " add_md
+        [[ "$add_md" == "y" || "$add_md" == "Y" ]] && do_collect_md=true
+    fi
+    if $do_collect_md; then
+        echo -e "${yellow}Enter each Telegram proxy sub-domain (must differ from the feed and messenger domains; empty line to finish):${plain}"
+        mtproto_domains=""
+        while true; do
+            read -rp "  Domain: " mdom
+            mdom="${mdom//[[:space:]]/}"
+            [[ -z "$mdom" ]] && break
+            if [[ "$mdom" == "$domain" ]]; then echo -e "  ${red}Must differ from the main feed domain${plain}"; continue; fi
+            if [[ ",${chat_domains}," == *",${mdom},"* ]]; then echo -e "  ${red}Already a messenger domain${plain}"; continue; fi
+            if [[ -n "$mtproto_domains" ]]; then mtproto_domains="${mtproto_domains},${mdom}"; else mtproto_domains="$mdom"; fi
+            echo -e "  ${green}Added ${mdom}${plain}"
+        done
+    fi
+
+    # Only asked when the proxy is on: a cap matters because each active tunnel
+    # holds a socket to Telegram plus its buffers.
+    local cur_mtp_max=""
+    $is_update && cur_mtp_max=$(env_get THEFEED_MTPROTO_MAX_TUNNELS)
+    local mtproto_max_tunnels="${cur_mtp_max:-0}"
+    if [[ -n "$mtproto_domains" ]]; then
+        read -rp "Max concurrent Telegram proxy users (0 = uncapped) [${cur_mtp_max:-0}]: " mtproto_max_tunnels
+        mtproto_max_tunnels="${mtproto_max_tunnels:-${cur_mtp_max:-0}}"
+        [[ "$mtproto_max_tunnels" =~ ^[0-9]+$ ]] || mtproto_max_tunnels=0
+    fi
+
     local passkey=""
     while true; do
         if [[ -n "$cur_key" ]]; then
@@ -612,6 +656,8 @@ setup_config() {
 THEFEED_DOMAIN=${domain}
 THEFEED_EXTRA_DOMAINS=${extra_domains}
 THEFEED_CHAT_DOMAINS=${chat_domains}
+THEFEED_MTPROTO_DOMAINS=${mtproto_domains}
+THEFEED_MTPROTO_MAX_TUNNELS=${mtproto_max_tunnels}
 THEFEED_KEY=${passkey}
 THEFEED_ALLOW_MANAGE=${allow_manage}
 THEFEED_MSG_LIMIT=${msg_limit}
@@ -689,6 +735,8 @@ ENVEOF
 THEFEED_DOMAIN=${domain}
 THEFEED_EXTRA_DOMAINS=${extra_domains}
 THEFEED_CHAT_DOMAINS=${chat_domains}
+THEFEED_MTPROTO_DOMAINS=${mtproto_domains}
+THEFEED_MTPROTO_MAX_TUNNELS=${mtproto_max_tunnels}
 THEFEED_KEY=${passkey}
 THEFEED_ALLOW_MANAGE=${allow_manage}
 THEFEED_MSG_LIMIT=${msg_limit}

@@ -1,0 +1,1428 @@
+/* ===== TELEGRAM (real Telegram over the DNS tunnel) =====
+   A SECTION in the shell, not a modal: the conversation list renders into
+   #telSidebar (the shared sidebar pane) and the open conversation into #telPane
+   (the content column) — the same reparenting the Mirror and the messenger use,
+   selected by `html.tel-section`. See nav.css for that pattern.
+
+   NO backdrop-filter anywhere: lists scroll behind these floating bars, and a
+   blur re-rasterises every frame and janks on a weak phone. Translucency is
+   plain alpha, which is GPU-cheap.
+
+   Only app tokens are used (no new colours), so light and dark follow the rest
+   of the app for free. */
+
+/* ---- section reparent ------------------------------------------------- */
+
+/* The sheet host is a layout no-op; only its fixed-position children show. */
+.tel-modal-layer {
+  display: contents;
+}
+
+#telSidebar,
+#telPane {
+  display: none;
+}
+
+html.tel-section #channelList,
+html.tel-section .sidebar-header {
+  display: none;
+}
+
+html.tel-section #telSidebar {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  position: relative;
+}
+
+html.tel-section .chat-header,
+html.tel-section #msgSearchBar,
+html.tel-section #messages,
+html.tel-section #sendPanel,
+html.tel-section #scrollDownBtn,
+html.tel-section #progressPanel,
+html.tel-section .chat-area>.log-toggle,
+html.tel-section .chat-area>.log-panel,
+html.tel-section #floatingDate {
+  display: none !important;
+}
+
+#telPane {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  flex-direction: column;
+}
+
+html.tel-section #telPane {
+  display: flex;
+}
+
+/* Desktop two-pane shows the list AND the conversation, each with a countdown.
+   Keep only the conversation's so it isn't on screen twice. */
+html.tel-thread #telSidebar .tel-timer-btn {
+  display: none;
+}
+
+/* ---- topbar ----------------------------------------------------------- */
+/* The same floating rounded capsule as the feed / mirror / messenger bars. */
+
+/* The config the session is on, in the chooser the shield opens. */
+.tel-sheet-item.tel-sheet-on {
+  color: var(--accent);
+}
+
+/* "not confirmed lately" — the config still works, so it reads as a note
+   rather than a warning. */
+.tel-sheet-note {
+  color: var(--text-dim);
+  font-size: var(--text-xs);
+}
+
+/* The link is down and a reconnect is running. The only visible sign of it:
+   the user stays on whatever they were doing. */
+.tel-shield-down .icon svg {
+  color: var(--error);
+  stroke: var(--error);
+}
+
+/* What a message answers: a quoted strip, bordered on the leading edge so it
+   reads as a quote in both directions. */
+.tel-reply {
+  display: block;
+  /* The bubble is a WRAPPING FLEX ROW, so a quote left to itself becomes a
+     flex item and shares the line with the message text. It is a strip above
+     the message, so it takes the whole width. (The message list is a flex
+     COLUMN, where this same declaration would set the height instead -- the
+     two are not interchangeable.) */
+  flex: 0 0 100%;
+  /* Lets the one-line children below actually ellipsis inside a flex item. */
+  min-width: 0;
+  margin-bottom: 4px;
+  padding: 3px 8px;
+  border-inline-start: 2px solid var(--accent);
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  font-size: var(--text-xs);
+  color: var(--text-dim);
+  /* No max-height. Both children are single lines that already trim
+     themselves with an ellipsis, so the strip is exactly as tall as they are.
+     Clamping it to 2.8em cut the second line off halfway down instead -- the
+     quoted text appeared sliced through. */
+}
+
+.tel-reply-who {
+  display: block;
+  color: var(--accent);
+  font-weight: var(--weight-medium);
+  /* One line, like the quoted text under it: a long channel name must trim
+     rather than wrap the strip onto a third line. */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tel-reply-text {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Views and reactions sit with the timestamp, not on a row of their own: a
+   channel post should not grow taller just for carrying counts. */
+.tel-views {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  color: var(--text-dim);
+}
+
+.tel-views .icon svg {
+  width: 13px;
+  height: 13px;
+}
+
+/* A row of its own, under the message. Telegram puts reactions below the
+   content, never inline with the timestamp. */
+.tel-reacts {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  margin-top: 3px;
+  justify-content: flex-start;
+  /* The bubble is a wrapping flex row, so a plain block still shares a line
+     with short text -- which is how a reaction on "hi" ended up beside it
+     rather than under it. A full basis forces the row of its own. */
+  flex: 0 0 100%;
+  width: 100%;
+}
+
+.tel-react {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 5px;
+  border: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.tel-react:hover {
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+/* The one this account picked. Outlined as well as filled, so it still reads
+   as chosen where colour alone does not carry. */
+.tel-react.chosen {
+  background: color-mix(in srgb, var(--accent) 34%, transparent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.tel-react.chosen .tel-react-n {
+  color: var(--text);
+}
+
+.tel-react-n {
+  color: var(--text-dim);
+  font-size: var(--text-2xs);
+}
+
+.tel-topbar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 52px;
+  padding: 0 6px;
+  margin: 8px 8px 2px;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--bg2) 88%, transparent);
+  flex: 0 0 auto;
+}
+
+#telPane .tel-topbar {
+  position: absolute;
+  top: 0;
+  inset-inline: 0;
+  z-index: 6;
+  margin: 8px;
+  background: color-mix(in srgb, var(--bg2) 88%, transparent);
+  box-shadow: var(--shadow-md);
+}
+
+.tel-topbar-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.tel-title {
+  font-size: var(--text-lg);
+  font-weight: var(--weight-semibold);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tel-thread-meta {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.tel-thread-sub {
+  font-size: var(--text-xs);
+  color: var(--text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* The experimental marker. Orange, so it reads as "not like the rest of the
+   app" without looking like an error. */
+.tel-badge {
+  flex: 0 0 auto;
+  font-size: 9px;
+  line-height: 1.4;
+  font-weight: var(--weight-semibold);
+  letter-spacing: .02em;
+  text-transform: uppercase;
+  color: #fff;
+  background: #e8821e;
+  border-radius: var(--radius-pill);
+  padding: 1px 5px;
+}
+
+.tel-back,
+.tel-icon-btn {
+  flex: 0 0 auto;
+  width: 38px;
+  height: 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.tel-back:hover,
+.tel-icon-btn:hover {
+  background: var(--hover);
+}
+
+.tel-icon-btn:disabled {
+  opacity: .45;
+  cursor: default;
+}
+
+.tel-back .icon svg,
+.tel-icon-btn .icon svg {
+  width: 20px;
+  height: 20px;
+}
+
+/* No back-out-of-the-section arrow on desktop: the nav rail is always there. */
+@media (min-width: 769px) {
+  /* The sidebar's back button LEAVES the Telegram section; that is still the
+     only way out on desktop, so it stays. Only the chat pane's back is
+     redundant here, where the list it returns to is already beside it. */
+  #telPane .tel-back {
+    display: none;
+  }
+
+  /* Both panes are on screen at once here, and the strip is rendered in each.
+     One connection, one progress bar: the sidebar keeps it, since it is the
+     one that stays put while the open chat changes. */
+  #telPane .tel-prog-wrap {
+    display: none;
+  }
+}
+
+.tel-icon-btn.spinning .icon {
+  display: inline-flex;
+  animation: tel-spin 1s linear infinite;
+}
+
+@keyframes tel-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Next-automatic-check ring: a depleting dial with the seconds inside, so an
+   automatic fetch over a scarce link is never a surprise. */
+.tel-timer-ring {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--border);
+}
+
+.tel-timer-num {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--bg2);
+  color: var(--text-dim);
+  font-size: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ---- body ------------------------------------------------------------- */
+
+.tel-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  /* The top reserves the strip's room, ALWAYS.
+     The strip floats, so it covers whatever is under it -- and on this
+     transport a fetch is running most of the time, which left the tab filters
+     and the first rows unreachable most of the time. Reserving the room means
+     it floats over nothing: scroll to the top and the controls are there,
+     below it. Reserved unconditionally, because room that comes and goes moves
+     the whole list every time the strip does -- once a minute. */
+  padding: var(--tel-prog-room) 8px calc(78px + var(--safe-bottom));
+}
+
+.tel-hint {
+  font-size: var(--text-sm);
+  color: var(--text-dim);
+  line-height: 1.6;
+}
+
+.tel-empty,
+.tel-pane-empty {
+  padding: 28px 16px;
+  text-align: center;
+  color: var(--text-dim);
+  font-size: var(--text-sm);
+}
+
+.tel-pane-empty {
+  margin: auto;
+}
+
+.tel-banner {
+  padding: 10px 12px;
+  border-radius: var(--radius-xl);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  font-size: var(--text-sm);
+  line-height: 1.6;
+}
+
+.tel-banner-warn {
+  border-color: color-mix(in srgb, #e8821e 60%, var(--border));
+  background: color-mix(in srgb, #e8821e 12%, var(--surface));
+}
+
+.tel-banner-danger {
+  border-color: color-mix(in srgb, var(--error) 60%, var(--border));
+  background: color-mix(in srgb, var(--error) 12%, var(--surface));
+}
+
+/* ---- progress strip --------------------------------------------------- */
+/* Reports EVERY operation: which one, plus the live query count — on a
+   one-query-per-second link that counter is the only proof of life. Collapsed
+   to nothing when idle so it never takes space it isn't using. */
+
+/* Where the strip sits, and how much room is kept clear for it. One pair of
+   values, so the two can never drift apart. */
+:root {
+  --tel-prog-top: 64px;
+  --tel-prog-room: 46px;
+}
+
+.tel-prog-wrap {
+  display: none;
+  flex-direction: column;
+  gap: 4px;
+  flex: 0 0 auto;
+  margin: 2px 14px 0;
+}
+
+.tel-prog-wrap.on {
+  display: flex;
+}
+
+/* The strip FLOATS in both panes, and takes no layout space in either.
+   In the sidebar it used to be an ordinary child between the topbar and the
+   list, so every row dropped by its height the moment it appeared and rose
+   again when it went -- once a minute, on every background check, under the
+   reader's eyes. Compensating the scroll for that was worse: the paint runs
+   constantly, so every rounding error accumulated and the list crept
+   downwards on its own. Not taking the space in the first place is the only
+   version with nothing to go wrong. */
+#telSidebar .tel-prog-wrap,
+#telPane .tel-prog-wrap {
+  position: absolute;
+  top: var(--tel-prog-top);
+  inset-inline: 14px;
+  z-index: 5;
+  /* Floating over the list, so it has to be opaque enough to read against
+     whatever scrolls under it -- it was landing on the sticky date header.
+     Alpha, never a backdrop blur: these run on weak phones. */
+  padding: 5px 10px;
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--bg2) 96%, transparent);
+  box-shadow: var(--shadow-sm);
+}
+
+.tel-prog {
+  height: 3px;
+  border-radius: var(--radius-pill);
+  background: var(--border);
+  overflow: hidden;
+}
+
+/* Indeterminate while the size of an operation is unknown; once a message's
+   framing gives its length, the fill becomes a real proportion. */
+.tel-prog-fill {
+  width: 38%;
+  height: 100%;
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  animation: tel-slide 1.4s var(--ease) infinite;
+}
+
+.tel-prog-wrap.known .tel-prog-fill {
+  animation: none;
+  transition: width var(--motion) var(--ease);
+}
+
+@keyframes tel-slide {
+  0% {
+    transform: translateX(-100%);
+  }
+
+  100% {
+    transform: translateX(280%);
+  }
+}
+
+.tel-prog-label {
+  font-size: var(--text-xs);
+  color: var(--text-dim);
+  /* ONE line, trimmed.
+     The strip floats over room reserved for it, and reserved room has to be a
+     fixed amount -- so the strip has to be a fixed height. Left to wrap, this
+     label ran to four lines in the narrow sidebar, the strip grew to 135px,
+     and it covered the tab filters and the first rows again: the very problem
+     the reservation exists to solve. The words that matter come first, so
+     what is cut is the detail, not the subject. */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+/* ---- setup steps ------------------------------------------------------ */
+
+.tel-step {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.tel-step-head {
+  font-size: var(--text-sm);
+  line-height: 1.7;
+  color: var(--text);
+}
+
+.tel-label {
+  font-size: var(--text-xs);
+  color: var(--text-dim);
+}
+
+.tel-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  background: var(--surface);
+  color: var(--text);
+  font-size: var(--text-base);
+  font-family: inherit;
+}
+
+.tel-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.tel-phone-row {
+  display: flex;
+  gap: 6px;
+}
+
+.tel-dial {
+  flex: 0 0 auto;
+  width: 46%;
+  max-width: 190px;
+}
+
+.tel-btn {
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  color: var(--text);
+  font-size: var(--text-base);
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.tel-btn:hover:not(:disabled) {
+  background: var(--hover);
+}
+
+.tel-btn:disabled {
+  opacity: .5;
+  cursor: default;
+}
+
+.tel-btn-primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+  font-weight: var(--weight-medium);
+}
+
+.tel-btn-primary:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
+
+/* Config picker — one card per config whose server advertises the tunnel. */
+.tel-srv-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.tel-srv {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  background: var(--surface);
+  color: var(--text);
+  text-align: start;
+  cursor: pointer;
+}
+
+.tel-srv:hover:not(:disabled) {
+  background: var(--hover);
+}
+
+.tel-srv:disabled {
+  opacity: .5;
+  cursor: default;
+}
+
+.tel-srv-shield .icon svg {
+  width: 20px;
+  height: 20px;
+  color: var(--success);
+}
+
+.tel-srv-main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.tel-srv-name {
+  font-size: var(--text-base);
+  font-weight: var(--weight-medium);
+}
+
+.tel-srv-dom {
+  font-size: var(--text-xs);
+  color: var(--text-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ---- first-run explainer ---------------------------------------------- */
+
+.tel-intro-screen {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.tel-intro-hero {
+  text-align: center;
+  padding: 6px 8px 2px;
+}
+
+.tel-intro-hero .icon svg {
+  width: 40px;
+  height: 40px;
+  color: var(--accent);
+}
+
+.tel-intro-hero h3 {
+  margin: 6px 0 4px;
+  font-size: var(--text-xl);
+}
+
+.tel-intro-hero p {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--text-dim);
+  line-height: 1.7;
+}
+
+.tel-intro-card {
+  display: flex;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  background: var(--surface);
+}
+
+.tel-intro-ic {
+  flex: 0 0 auto;
+}
+
+.tel-intro-ic .icon svg {
+  width: 20px;
+  height: 20px;
+  color: var(--accent);
+}
+
+.tel-intro-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.tel-intro-text b {
+  font-size: var(--text-base);
+}
+
+.tel-intro-text span {
+  font-size: var(--text-sm);
+  color: var(--text-dim);
+  line-height: 1.65;
+}
+
+/* ---- search ----------------------------------------------------------- */
+/* Searches what is already CACHED, so it costs no queries at all. */
+
+.tel-search-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 0 auto;
+}
+
+#telPane .tel-search-row {
+  position: absolute;
+  top: 62px;
+  inset-inline: 10px;
+  z-index: 6;
+  padding: 4px 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--bg2) 94%, transparent);
+  box-shadow: var(--shadow-sm);
+}
+
+.tel-search-ic .icon svg {
+  width: 17px;
+  height: 17px;
+  color: var(--text-dim);
+}
+
+input.tel-search {
+  flex: 1;
+  min-width: 0;
+  padding: 7px 10px;
+  border-radius: var(--radius-pill);
+}
+
+.tel-icon-btn.active {
+  color: var(--accent);
+  background: var(--hover);
+}
+
+/* The strip floats over the thread, so while it is up the messages start
+   below it -- otherwise the first thing in the list, which is the "load older
+   messages" button, sits underneath it and cannot be read or tapped. */
+/* With the search row in front, the strip and the messages clear it too. */
+html.tel-search-open #telPane .tel-prog-wrap {
+  top: 110px;
+}
+
+html.tel-search-open #telPane .tel-msgs {
+  padding-top: 114px;
+}
+
+/* ---- conversation-type tabs ------------------------------------------- */
+
+.tel-tabs {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding: 2px 0;
+  flex: 0 0 auto;
+}
+
+.tel-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.tel-tab {
+  position: relative;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  color: var(--text-dim);
+  font-size: var(--text-sm);
+  font-family: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.tel-tab:hover {
+  background: var(--hover);
+}
+
+.tel-tab.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.tel-tab-n {
+  font-size: var(--text-2xs);
+  opacity: .75;
+}
+
+/* The "something new in here" marker. */
+.tel-tab-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.tel-tab.active .tel-tab-dot {
+  background: #fff;
+}
+
+/* ---- conversation list ------------------------------------------------ */
+
+.tel-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.tel-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 8px;
+  border-radius: var(--radius-xl);
+  cursor: pointer;
+}
+
+.tel-row:hover {
+  background: var(--hover);
+}
+
+.tel-row.active {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+.tel-avatar {
+  flex: 0 0 auto;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-weight: var(--weight-semibold);
+  overflow: hidden;
+}
+
+/* The picture Telegram sent with the list: about forty pixels, so it is
+   scaled up. Left to the browser's default it looks like a mistake; letting it
+   stay soft reads as a small photo, which is what it is. */
+.tel-avatar-pic {
+  background: var(--bg2);
+}
+
+.tel-avatar-pic img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.tel-row-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.tel-row-top {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+}
+
+.tel-row-title {
+  font-size: var(--text-md);
+  font-weight: var(--weight-medium);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tel-pin .icon svg {
+  width: 13px;
+  height: 13px;
+  color: var(--text-dim);
+}
+
+/* Muted marker on the row, next to the name: Telegram puts it here, and it
+   has to be readable whether or not the conversation has anything unread --
+   the unread badge's colour cannot carry this on its own because a silenced
+   channel often has no badge at all. */
+.tel-row-muted {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+}
+
+.tel-row-muted .icon svg {
+  width: 13px;
+  height: 13px;
+  color: var(--text-dim);
+}
+
+.tel-row-prev {
+  font-size: var(--text-sm);
+  color: var(--text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tel-row-side {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+
+.tel-row-when {
+  font-size: var(--text-2xs);
+  color: var(--text-dim);
+}
+
+/* Accent means "this one wants you"; a muted conversation still counts what
+   arrived, but it is not asking for anything, so it goes grey -- the same
+   distinction Telegram draws. */
+.tel-unread.muted {
+  background: var(--text-dim);
+}
+
+.tel-unread {
+  min-width: 18px;
+  padding: 0 5px;
+  height: 18px;
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  color: #fff;
+  font-size: var(--text-2xs);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* The row's ⋮ appears on hover (desktop) and is always there on touch, where
+   there is no hover to reveal it. */
+/* Visible at rest, not hover-only: a control nobody can see is a control
+   nobody finds, which is exactly what happened to mute. Hover just brings it
+   to full strength. */
+.tel-row-menu {
+  width: 32px;
+  height: 32px;
+  opacity: 0.45;
+}
+
+.tel-row:hover .tel-row-menu,
+.tel-row-menu:focus-visible,
+.tel-row-menu:hover {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .tel-row-menu {
+    opacity: 0.75;
+  }
+}
+
+.tel-more {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 0 2px;
+}
+
+/* New-conversation button, above the floating nav like the messenger's. */
+.tel-fab {
+  position: absolute;
+  inset-inline-end: 14px;
+  bottom: calc(74px + var(--safe-bottom));
+  width: 48px;
+  height: 48px;
+  border: none;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  box-shadow: var(--shadow-md);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 7;
+}
+
+.tel-fab:hover {
+  background: var(--accent-hover);
+}
+
+.tel-fab .icon svg {
+  width: 22px;
+  height: 22px;
+}
+
+/* ---- conversation ----------------------------------------------------- */
+
+.tel-msgs {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  /* Bubble sides are PHYSICAL, like the messenger's: incoming on the left,
+     outgoing on the right, whatever the UI language. align-self follows the
+     container's direction, so it is pinned here; each bubble keeps dir="auto"
+     so its own text still reads the right way round. */
+  direction: ltr;
+  /* Clear the floating topbar above and the floating composer below, so the
+     messages scroll BEHIND both and show through the corner gaps.
+     The topbar's height, and nothing for the strip: messages are not tap
+     targets, so the strip may float over them exactly as the topbar and the
+     composer already do. Reserving its height here instead left a permanent
+     dead band above the first message -- unmissable on a large screen, where
+     it pushed the day's date far down the pane. The sidebar DOES reserve it,
+     because there the strip would cover rows you have to be able to tap. */
+  padding: 68px 12px calc(78px + var(--safe-bottom));
+}
+
+.tel-older {
+  display: flex;
+  justify-content: center;
+  padding: 4px 0 8px;
+}
+
+/* Sticks to the top while its day scrolls past, so you always know which day
+   you are reading -- the feed does the same. Pure CSS: a scroll handler would
+   run on every frame of a list that can be thousands of messages long.
+   Opaque rather than blurred: a backdrop filter over a scrolling list is one
+   of the few things that genuinely stutters on a weak phone. */
+.tel-date-sep {
+  position: sticky;
+  top: 4px;
+  z-index: 2;
+  align-self: center;
+  margin: 6px 0;
+  padding: 2px 10px;
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--bg2) 96%, transparent);
+  box-shadow: var(--shadow-sm);
+  color: var(--text-dim);
+  font-size: var(--text-xs);
+}
+
+/* "New messages", where an unread run begins. The accent colour rather than
+   the date pill's dim grey: it is the one thing on screen the user is being
+   pointed at. */
+.tel-new-sep {
+  /* The list is a COLUMN flex container, so flex-basis would set the height:
+     `flex: 0 0 100%` here made the line as tall as the whole pane. Stretching
+     across is a cross-axis matter, and the span inside is what gets centred. */
+  align-self: stretch;
+  flex: 0 0 auto;
+  margin: 8px 0 2px;
+  text-align: center;
+  color: var(--accent);
+  font-size: var(--text-xs);
+  /* scrollIntoView() aligns to the top of the scroll port, which runs BEHIND
+     the floating topbar -- the list clears it with padding, which the scroll
+     port does not see, so without this the line lands under it. Tracks
+     .tel-msgs' padding-top; the two have to move together. */
+  scroll-margin-top: 76px;
+}
+
+.tel-new-sep span {
+  padding: 2px 12px;
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, transparent);
+}
+
+.tel-msg {
+  max-width: min(78%, 560px);
+  padding: 7px 11px;
+  border-radius: 14px;
+  background: var(--msg-in);
+  font-size: var(--text-base);
+  line-height: 1.5;
+  align-self: flex-start;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 2px 8px;
+  word-break: break-word;
+  /* An incoming bubble is white on the light theme, so it needs an outline to
+     exist at all against the chat wallpaper — the same way the messenger's
+     bubbles are drawn. */
+  border: 1px solid var(--border);
+  border-bottom-left-radius: 4px;
+}
+
+.tel-msg.out {
+  align-self: flex-end;
+  background: var(--msg-out);
+  border-color: transparent;
+  border-bottom-left-radius: 14px;
+  border-bottom-right-radius: 4px;
+}
+
+/* Sender name in a group, shown once per run of messages from one person. */
+.tel-msg-from {
+  flex: 1 0 100%;
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+  color: var(--accent);
+}
+
+/* A message that did not go out stays on screen, marked, and is tappable to
+   try again — losing the text would be worse than any error banner. */
+.tel-msg.failed {
+  border: 1px solid var(--error);
+  cursor: pointer;
+}
+
+.tel-msg-meta {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.tel-tick .icon svg {
+  width: 14px;
+  height: 14px;
+  color: var(--text-dim);
+}
+
+/* Inside a bubble the tick follows the bubble's own text colour, so it stays
+   legible on both themes without hard-coding either one. */
+.tel-msg.out .tel-tick .icon svg {
+  color: color-mix(in srgb, currentColor 60%, transparent);
+}
+
+.tel-tick-read .icon svg,
+.tel-msg.out .tel-tick-read .icon svg {
+  color: var(--accent);
+}
+
+.tel-tick-failed .icon svg,
+.tel-msg.out .tel-tick-failed .icon svg {
+  color: var(--error);
+}
+
+
+
+.tel-msg-text {
+  white-space: pre-wrap;
+  min-width: 0;
+}
+
+.tel-msg-time {
+  font-size: var(--text-2xs);
+  color: var(--text-dim);
+}
+
+/* What was attached, since nothing is downloaded. */
+.tel-media-chip {
+  flex: 1 0 100%;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: var(--text-sm);
+  color: var(--text-dim);
+}
+
+.tel-media-chip .icon svg {
+  width: 15px;
+  height: 15px;
+}
+
+/* A bot's inline keyboard: shown so the message still makes sense. Only the
+   buttons that lead somewhere are live. */
+.tel-btns {
+  flex: 1 0 100%;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.tel-kbd {
+  padding: 5px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--bg2) 70%, transparent);
+  font-size: var(--text-sm);
+  color: var(--text-dim);
+}
+
+a.tel-kbd-url {
+  color: var(--accent);
+  text-decoration: none;
+  cursor: pointer;
+}
+
+a.tel-kbd-url:hover {
+  background: var(--hover);
+}
+
+/* Composer floats over the message list, like the messenger's: the
+   conversation scrolls behind the pills and peeks through the gaps. */
+.tel-compose {
+  position: absolute;
+  inset-inline: 0;
+  bottom: 0;
+  z-index: 6;
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  padding: 8px 10px calc(10px + var(--safe-bottom));
+  background: transparent;
+  pointer-events: none;
+}
+
+.tel-compose-input,
+.tel-send-btn {
+  pointer-events: auto;
+}
+
+/* Channels the user may only read: a line instead of a composer. */
+.tel-compose-input {
+  flex: 1;
+  min-width: 0;
+  max-height: 110px;
+  resize: none;
+  padding: 11px 14px;
+  border: 1px solid var(--border);
+  border-radius: 22px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: var(--text-base);
+  font-family: inherit;
+  line-height: 1.4;
+  box-shadow: var(--shadow-sm);
+}
+
+.tel-compose-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.tel-send-btn {
+  flex: 0 0 auto;
+  width: 44px;
+  height: 44px;
+  border: none;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: var(--shadow-sm);
+}
+
+.tel-send-btn:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
+
+.tel-send-btn:disabled {
+  opacity: .5;
+  cursor: default;
+}
+
+.tel-send-btn .icon svg {
+  width: 20px;
+  height: 20px;
+}
+
+/* ---- sheets ----------------------------------------------------------- */
+
+.tel-sheet-overlay {
+  /* Above the nav bar (80), which otherwise draws over a sheet that sits at
+     the bottom of the screen -- the same fix .chat-sheet-overlay already
+     carries, so the two stay on one level. */
+  position: fixed;
+  inset: 0;
+  z-index: 9990;
+  background: rgba(0, 0, 0, .45);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+.tel-sheet {
+  width: 100%;
+  max-width: 460px;
+  margin: 0 8px calc(8px + var(--safe-bottom));
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-2xl);
+  background: var(--bg2);
+  box-shadow: var(--shadow-lg);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
+.tel-sheet-head {
+  padding: 10px 12px 4px;
+  font-size: var(--text-md);
+  font-weight: var(--weight-semibold);
+}
+
+.tel-sheet-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 4px 8px 8px;
+}
+
+.tel-sheet .tel-hint {
+  padding: 0 12px 8px;
+}
+
+.tel-sheet-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 12px;
+  border: none;
+  border-radius: var(--radius-xl);
+  background: transparent;
+  color: var(--text);
+  font-size: var(--text-md);
+  font-family: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+
+.tel-sheet-item:hover {
+  background: var(--hover);
+}
+
+.tel-sheet-item .icon svg {
+  width: 19px;
+  height: 19px;
+  color: var(--text-dim);
+}
+
+.tel-sheet-item span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tel-sheet-danger {
+  color: var(--error);
+}
+
+.tel-sheet-danger .icon svg {
+  color: var(--error);
+}
+
+.tel-sheet-cancel {
+  justify-content: center;
+  color: var(--text-dim);
+}
+
+/* ---- mobile ----------------------------------------------------------- */
+
+@media (max-width: 768px) {
+
+  /* In a conversation the floating nav would sit on top of the composer. */
+  html.tel-thread .nav-bar {
+    display: none;
+  }
+
+  .tel-msg {
+    max-width: 86%;
+  }
+
+  .tel-dial {
+    width: 42%;
+  }
+}
+
+/* Links take the accent, exactly as the feed's do. Without this they fell
+   back to the browser's default dark blue, which is nearly unreadable on the
+   dark message background. */
+.tel-msg a,
+.tel-msg-text a {
+  color: var(--accent);
+  text-decoration: none;
+  word-break: break-all;
+}
+
+.tel-msg a:hover,
+.tel-msg-text a:hover {
+  text-decoration: underline;
+}
+
+/* A quote you can follow should look like one. */
+.tel-reply {
+  cursor: pointer;
+}
+
+.tel-reply:hover {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+}
+
+/* Flash on arrival after a jump, same timing as the feed's. */
+@keyframes tel-msg-flash {
+  0%, 60% {
+    box-shadow: 0 0 0 2px var(--accent);
+  }
+
+  100% {
+    box-shadow: 0 0 0 2px transparent;
+  }
+}
+
+.tel-msg-flash {
+  animation: tel-msg-flash 2.2s ease-out;
+}

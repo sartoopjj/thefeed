@@ -188,6 +188,7 @@ thefeed-server --data-dir /srv/thefeed --report --report-refresh 5s   # 实时
 | `--key` | | 加密口令 **（必填）** |
 | `--extra-domains` | | 逗号分隔的额外 feed 子域名（分担负载 + 容灾） |
 | `--chat-domains` | | 在这些子域名上启用 [私信](#messenger)（与 feed 分开） |
+| `--mtproto-domains` | | 在这些子域名上启用 [DNS 上的 Telegram](#telegram-over-dns)（与 feed 和私信分开） |
 | `--no-telegram` | `false` | 不登录 Telegram（仅公开频道） |
 | `--api-id` / `--api-hash` / `--phone` | | Telegram 凭据（私有频道） |
 | `--login-only` | `false` | 登录 Telegram、保存 session、退出 |
@@ -239,6 +240,32 @@ thefeed-server ... --chat-domains c.example.com     # 或 THEFEED_CHAT_DOMAINS=c
 [`integrations/hermes/`](integrations/hermes/) 让你通过私信通道与 [Hermes](https://github.com/NousResearch/hermes-agent) AI 智能体聊天，断网时也能联系到它。它是一个 Hermes 技能：把这个文件夹交给你的智能体，它会自行完成配置。它只读取来自你自己地址的消息；陌生人发来的消息既不会得到回复，也不会展示给模型。
 
 请在**你自己的 thefeed 服务器**上运行它：桥接程序会全天候轮询，而应用内置的共享默认服务器是给人用的，不是给机器人用的。如果你没有自己的服务器，默认配置也可以使用。
+
+---
+
+<a id="telegram-over-dns"></a>
+
+## DNS 上的 Telegram（测试版）
+
+同一条隧道的**可选**第二种用途：登录**你自己的 Telegram 账号**，通过服务器使用它——不需要 VPN，也不需要代理应用。它的工作方式与通过 MTProto 代理使用 Telegram 一样，区别只在于传输层换成了 DNS，因此当一个国家的网络被收缩到只剩内网流量时依然可用。用专用子域名启用（需配套的 [NS 记录](#1-dns-records)，与订阅和私信域名分开）：
+
+```bash
+thefeed-server ... --mtproto-domains m.example.com   # 或 THEFEED_MTPROTO_DOMAINS=m.example.com
+```
+
+- **Telegram 自己的协议，未作改动** — MTProto 被封装进普通的 DNS 查询；服务器拆包后把字节转发到 Telegram 的数据中心。授权密钥在客户端生成且从不离开设备，所以中继只搬运密封的数据包，无法读取内容。
+- **需要实现了该功能的服务器** — 普通的 MTProto 代理无法在 DNS 上承载 MTProto。thefeed 的服务器可以；客户端只会在选择列表中提供那些服务器已声明隧道（订阅元数据中的签名位）的配置。
+- **支持的功能**：你的会话、群组、频道和机器人；收发文本；✓/✓✓ 已读标记；群内发送者名字；对已加载内容的搜索；用 @username 发起会话；退出频道或清空会话；未读计数。
+- **不支持的功能**：下载图片、文件、贴纸和语音；通话；发送媒体；论坛话题（合并显示）；点击机器人的回调按钮（会列出来，链接按钮可用）。带附件的消息会显示**是什么**——图片、文件及其名称和大小、贴纸、语音——不会悄无声息地缺失。
+- **刻意只传文本。** 每个字节都是一次 DNS 查询，所以客户端只获取新增内容，并保留已经拿到的部分。
+- **速度由三项设置决定** —— 每秒查询数、超时时间，以及每个查询使用的解析器数量。第一项同时也是同时在途查询数的上限，因此发送窗口随设定速率变化，不会无限增长。消息自身的分帧会说明它需要多少次查询，于是这些查询一起发出，而不是每个往返只发一个；服务器则按任意到达顺序重新拼装。
+- **中继无法管控内容** —— 数据流在你与 Telegram 之间端到端加密，服务器只看到不透明的字节，分不清消息和文件。它能限制的是流量：`--mtproto-down-kb-per-min`（默认每条隧道 512 KB/分钟）会拖慢任何试图拉取文件的客户端，`--mtproto-max-tunnels` 则限制并发数量。
+- **通知**：应用打开时会响铃并提醒。应用退到后台时，可在 ⋮ 菜单中开启后台检查——它会持续消耗查询，因此默认关闭。
+- **需要好的解析器。** 订阅和私信在极慢的解析器上表现好得多；这是整个应用中最吃带宽的部分。
+- **应用凭据** — 在 [my.telegram.org](https://my.telegram.org) 申请你自己的 `api_id` / `api_hash`。如果 Telegram 停用了一对共享凭据，所有用它登录的人会同时被登出。
+- **限制项**：`--mtproto-enabled`、`--mtproto-max-tunnels`、`--mtproto-idle-minutes`、`--mtproto-buffer-kb`、`--mtproto-dial-seconds`。
+
+在客户端中，从底部导航打开 **Telegram**。⋮ 菜单在每个界面都有（配置选择、凭据、日志、退出登录）；✓ / ✓✓ 表示已发送和已读；标题栏的圆环倒计时显示下一次自动检查的时间，每个操作都会显示自己的进度和已消耗的查询数。
 
 ---
 

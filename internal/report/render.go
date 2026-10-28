@@ -167,6 +167,21 @@ func renderDashboard(a *aggregate, accounts, top int, live bool) string {
 		w("  Invalid (excluded)   : %14s\n", comma(a.invalid))
 	}
 
+	// ---- telegram proxy block ----
+	if ms := a.lastMTProtoStats; ms != nil {
+		w("%s\n%sTelegram proxy%s\n", line, cBold, cReset)
+		// Two different numbers on purpose: a session outlives the socket it
+		// was using, so "connected" and "open right now" diverge and the gap
+		// is what says whether people are idling or actually pulling data.
+		w("  Connected users    : %14s\n", comma(ms["sessions"]))
+		w("  Open connections   : %14s\n", comma(ms["liveTunnels"]))
+		if cap := ms["maxTunnels"]; cap > 0 {
+			w("  Cap                : %14s\n", comma(cap))
+		} else {
+			w("  Cap                : %14s   %s(uncapped)%s\n", "-", cDim, cReset)
+		}
+	}
+
 	// ---- chat block ----
 	if a.chat > 0 || a.lastChatStats != nil || accounts >= 0 {
 		w("%s\n%sChat (messenger)%s\n", line, cBold, cReset)

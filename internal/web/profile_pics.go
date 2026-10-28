@@ -191,11 +191,6 @@ type relayFetcher func(ctx context.Context, size int64, crc uint32) ([]byte, err
 // push an SSE event mid-refresh.
 type storedCallback func(username string)
 
-// Refresh is the test entry point (DNS only, no GitHub fetcher).
-func (h *profilePicsHub) Refresh(ctx context.Context, fetcher *client.Fetcher, dnsAllowed bool) error {
-	return h.refresh(ctx, fetcher, dnsAllowed, nil, nil)
-}
-
 // refresh tries the GitHub bundle first, then per-entry DNS for
 // anything still missing. Coalesces concurrent calls.
 func (h *profilePicsHub) refresh(ctx context.Context, fetcher *client.Fetcher, dnsAllowed bool, viaGitHub relayFetcher, onStored storedCallback) error {

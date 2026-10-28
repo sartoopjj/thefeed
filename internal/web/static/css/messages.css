@@ -18,12 +18,15 @@
       z-index: 50;
       padding: 4px 12px;
       border-radius: var(--radius-xl);
-      background: color-mix(in oklab, var(--bg-elevated, var(--bg)) 75%, transparent);
+      /* Alpha, never a backdrop blur: this chip floats over the scrolling
+         message list, so a filter here re-rasterises that list every frame --
+         the one thing that genuinely stutters on a weak phone. Opaque enough
+         to read whatever passes under it instead. */
+      background: color-mix(in oklab, var(--bg-elevated, var(--bg)) 96%, transparent);
       color: var(--text);
       border: 1px solid var(--border);
       font-size: var(--text-2xs);
       font-weight: 500;
-      backdrop-filter: blur(8px);
       box-shadow: 0 1px 3px rgba(0, 0, 0, .08);
       pointer-events: none;
       opacity: 0;

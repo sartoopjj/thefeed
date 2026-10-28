@@ -600,13 +600,6 @@ func (h *chatHub) ensureIdentityLocked() error {
 	return nil
 }
 
-// serverFor returns the per-server client for a server key, or nil.
-func (h *chatHub) serverFor(key string) *perServerChat {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	return h.servers[chatServerKey(key)]
-}
-
 // errChatPollBusy: this server is already being polled, so this cycle skips
 // it. Not a failure -- it must never count toward the backoff.
 var errChatPollBusy = errors.New("chat: poll already running for this server")
@@ -1205,7 +1198,11 @@ func chatStatusKey(err error) string {
 		return "chat_err_no_key"
 	case errors.Is(err, client.ErrChatServerDisabled):
 		return "chat_err_server_disabled"
-	case errors.Is(err, client.ErrChatUnreachable):
+	// No resolver to send over and running out of time both mean the server
+	// could not be reached -- the one thing the user can act on.
+	case errors.Is(err, client.ErrChatUnreachable),
+		errors.Is(err, client.ErrChatNoResolvers),
+		errors.Is(err, context.DeadlineExceeded):
 		return "chat_err_unreachable"
 	case errors.Is(err, client.ErrChatDisabled):
 		return "chat_err_disabled"
@@ -1384,6 +1381,13 @@ func (h *chatHub) probeOneServer(ctx context.Context, ps *perServerChat, enabled
 			res.Checking = true
 			return res, nil
 		}
+		// Belt and braces for the same rule the client now follows: a server
+		// whose signed metadata says it HAS a messenger may never be reported
+		// as having none, whatever a failed ChatInfo fetch suggests. The
+		// verified negative is handled above and returns before this.
+		if advertised && fresh && errors.Is(err, client.ErrChatDisabled) {
+			err = client.ErrChatUnreachable
+		}
 		res.Reason = chatStatusKey(err)
 		h.noteProbeFailure(ps, err, res.Reason)
 		return res, nil
@@ -1432,10 +1436,10 @@ func (s *Server) handleChatAvailability(w http.ResponseWriter, r *http.Request) 
 	}
 
 	// Probes run in the BACKGROUND, detached from this request: waiting for the
-	// slowest server used to hold the whole response past the frontend's abort,
-	// so the UI reported no servers while a working one existed. Each probe
-	// broadcasts its own result as it lands, so a config that answers in 1s
-	// shows up at once and one that needs 40s is still not abandoned.
+	// slowest holds the response past the frontend's abort, and the UI then
+	// reports no servers while a working one exists. Each probe broadcasts its
+	// own result, so one that answers in 1s shows at once and one that needs
+	// 40s is still not abandoned.
 	bg := h.bgContext()
 	forced := r.URL.Query().Get("retry") == "1"
 	out := make([]chatServerResult, len(servers))
@@ -1734,7 +1738,14 @@ func (s *Server) handleChatEnable(w http.ResponseWriter, r *http.Request) {
 				}
 			} else {
 				out["available"] = false
-				out["reason"] = chatStatusKey(err)
+				// Out of time is not refused: the first registration is many
+				// round trips from a cold cache and the retry below usually
+				// lands seconds later. Report "checking", not an error.
+				if sctx.Err() != nil || errors.Is(err, context.DeadlineExceeded) {
+					out["checking"] = true
+				} else {
+					out["reason"] = chatStatusKey(err)
+				}
 				// Keep retrying in the background so a flaky network still registers.
 				go func() {
 					lastErr := err

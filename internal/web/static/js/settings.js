@@ -794,23 +794,33 @@ function fmtBytes(n) {
   return (n / 1024 / 1024 / 1024).toFixed(2) + ' GB';
 }
 
+// Every id the backend reports needs a row in all three maps below. A missing
+// one is not a blank space: the label falls back to the server's English
+// string (so a Persian user reads English), the tile loses its icon, and the
+// bar turns grey. "telegram" was added to the backend without them.
 var _storageLabelMap = {
   'media': 'storage_media',
   'telemirror': 'storage_telemirror',
   'saved-media': 'storage_saved_media',
   'messages': 'storage_messages',
+  'telegram': 'storage_telegram',
 };
 var _storageIconMap = {
   'media': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" style="width:22px;height:22px"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg>',
   'telemirror': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" style="width:22px;height:22px"><path d="m22 2-7 20-4-9-9-4z"/><path d="M22 2 11 13"/></svg>',
   'saved-media': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" style="width:22px;height:22px"><path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"/></svg>',
   'messages': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" style="width:22px;height:22px"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22z"/></svg>',
+  // The Telegram tab's own icon, so the row and the tab read as the same
+  // thing. TeleMirror's plane is a different shape on purpose: that one is
+  // public channels read without an account, this one is the account itself.
+  'telegram': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="width:22px;height:22px"><path d="M21.854 2.147l-10.94 10.939"/><path d="M21.854 2.147L17.5 20.5a.5.5 0 0 1-.927.07l-3.66-7.23-7.23-3.66a.5.5 0 0 1 .07-.927z"/></svg>',
 };
 var _storageColorMap = {
   'media': '#3b82f6',
   'telemirror': '#8b5cf6',
   'saved-media': '#f59e0b',
   'messages': '#10b981',
+  'telegram': '#0ea5e9',
 };
 
 function loadCacheStats() {
@@ -896,6 +906,8 @@ function doBackupExport() {
   if (document.getElementById('bkChat').checked) sections.push('chat');
   if (document.getElementById('bkSaved').checked) sections.push('saved');
   if (document.getElementById('bkMedia').checked) sections.push('savedMedia');
+  if (document.getElementById('bkTelegram').checked) sections.push('telegram');
+  if (document.getElementById('bkTelegramCache').checked) sections.push('telegramCache');
   if (document.getElementById('bkBgImage').checked) sections.push('bgImage');
   if (!sections.length) { showToast(t('backup_select_section') || 'Select at least one section'); return; }
 
@@ -985,6 +997,14 @@ function renderBackupPreview(d) {
   }
   if (d.bgImage) {
     items.push({ id: 'bgImage', label: t('backup_bg') || 'Background Image', detail: fmtBytes(d.bgImage.bytes) });
+  }
+  if (d.telegramCache) {
+    items.push({ id: 'telegramCache', label: t('backup_telegram_cache') || 'Telegram messages',
+      detail: fmtBytes(d.telegramCache.bytes) });
+  }
+  if (d.telegram) {
+    items.push({ id: 'telegram', label: t('backup_telegram') || 'Telegram session',
+      detail: fmtBytes(d.telegram.bytes) + ' — ' + (t('backup_telegram_warn') || '') });
   }
 
   items.forEach(function (it) {

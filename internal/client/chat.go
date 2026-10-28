@@ -32,7 +32,11 @@ var (
 	ErrChatNoServerKey    = errors.New("chat requires a pinned server key (sk)")
 	ErrChatDisabled       = errors.New("chat not enabled on this server")
 	ErrChatServerDisabled = errors.New("chat is turned off by this server")
-	ErrChatUnverified     = errors.New("chat info signature missing or invalid")
+	// ErrChatNoResolvers means there is no healthy DNS resolver to send over.
+	// A sentinel so the UI can say the link is down, rather than reporting the
+	// catch-all "something went wrong" for the one failure a user can act on.
+	ErrChatNoResolvers = errors.New("chat: no active resolvers")
+	ErrChatUnverified  = errors.New("chat info signature missing or invalid")
 	// ErrChatVersion means the server speaks a chat protocol this client can't
 	// (e.g. an old server still on the previous wire) — a stable mismatch, so it
 	// is backed off long and never retried in a tight loop.
@@ -185,8 +189,8 @@ const (
 	chatInfoMaxAge      = 1 * time.Hour
 	chatControlAttempts = 6
 	// chatProbeAttempts: ChatInfo fetch retries; high to ride out a flaky network.
-	chatProbeAttempts = 10
-	chatCellAttempts  = 3
+	chatProbeAttempts   = 10
+	chatCellAttempts    = 3
 	chatMaxUploadRounds = 20
 	chatMaxFinRounds    = 6
 	chatMaxRestarts     = 3
@@ -313,16 +317,10 @@ func (c *ChatClient) EnsureInfo(ctx context.Context) (*protocol.ChatInfo, error)
 
 	block0, err := c.f.fetchBlockAttempts(ctx, protocol.ChatInfoChannel, 0, chatProbeAttempts)
 	if err != nil {
-		if seenBefore {
-			return nil, ErrChatUnreachable
-		}
-		return nil, ErrChatDisabled
+		return nil, ErrChatUnreachable
 	}
 	if len(block0) < 2 {
-		if seenBefore {
-			return nil, ErrChatUnreachable
-		}
-		return nil, ErrChatDisabled
+		return nil, ErrChatUnreachable
 	}
 	totalBlocks := int(binary.BigEndian.Uint16(block0))
 	if totalBlocks < 1 {
@@ -599,7 +597,7 @@ func (c *ChatClient) sendQuery(ctx context.Context, qname string) ([]byte, error
 	}
 	picked := c.f.pickWeightedResolvers(c.f.scatter)
 	if len(picked) == 0 {
-		return nil, fmt.Errorf("chat: no active resolvers")
+		return nil, ErrChatNoResolvers
 	}
 	if c.f.debug {
 		c.f.log("[chat] query qname=%s resolvers=[%s]", qname, strings.Join(picked, ", "))
@@ -1225,10 +1223,9 @@ func (c *ChatClient) Ack(ctx context.Context, peer [protocol.AddressSize]byte, u
 	return nil
 }
 
-// PeerStatus returns (last_accepted ✓, last_delivered ✓✓) for own messages
-// sent to peer.
-// PeerStatus returns ✓/✓✓ counters, serialized with opSeq so it cannot swap
-// the session out from under an in-progress upload.
+// PeerStatus returns (last_accepted ✓, last_delivered ✓✓) for our own
+// messages sent to peer. Serialized with opSeq so it cannot swap the session
+// out from under an in-progress upload.
 func (c *ChatClient) PeerStatus(ctx context.Context, peer [protocol.AddressSize]byte) (accepted, delivered uint32, err error) {
 	c.opSeq.Lock()
 	defer c.opSeq.Unlock()

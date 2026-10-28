@@ -35,6 +35,7 @@
   <link rel="stylesheet" href="/static/css/components.css">
   <link rel="stylesheet" href="/static/css/responsive.css">
   <link rel="stylesheet" href="/static/css/saved.css">
+  <link rel="stylesheet" href="/static/css/tel.css">
   <link rel="stylesheet" href="/static/css/nav.css">
 </head>
 
@@ -121,6 +122,14 @@
         <span class="nav-ic" data-icon="messenger"></span>
         <span class="nav-lb" data-i18n="nav_chat">Chat</span>
         <span class="nav-badge" id="navChatBadge" hidden></span>
+      </button>
+      <button type="button" class="nav-tab nav-tab-tel" id="navTabTel" onclick="navTo('tel')"
+        aria-label="Telegram">
+        <span class="nav-ic" data-icon="navTel"></span>
+        <span class="nav-lb" data-i18n="nav_tel">Telegram</span>
+        <!-- Experimental marker: orange, so it reads as "newest, still moving"
+             rather than as an error or an unread count. -->
+        <span class="nav-tag" data-i18n="tel_badge">Beta</span>
       </button>
       <button type="button" class="nav-tab" id="navTabResolver" onclick="navTo('resolver')" aria-label="Resolver">
         <span class="nav-ic" data-icon="bank"></span>
@@ -225,6 +234,12 @@
            Profiles row + one item per settings group. renderSettingsSidebar(). -->
       <div id="settingsSidebar" class="resolver-sidebar"></div>
       <!-- END settings -->
+      <!-- BEGIN tel -->
+      <!-- Telegram conversation list — a swappable pane in the shared sidebar,
+           shown when the Telegram section is active (html.tel-section). Filled
+           by telRenderSidebar(). -->
+      <div id="telSidebar" class="tel-sidebar"></div>
+      <!-- END tel -->
     </div>
 
     <!-- CHAT AREA -->
@@ -358,8 +373,17 @@
         <main id="settingsContent" class="tm-content"></main>
       </div>
       <!-- END settings section -->
+      <!-- BEGIN tel -->
+      <!-- Telegram conversation pane — the open conversation (or a placeholder)
+           in the shared content column. Filled by telRenderPane(). -->
+      <div id="telPane"></div>
+      <!-- END tel -->
     </div>
   </div>
+
+  <!-- Telegram sheet layer: the section itself lives in the shell (#telSidebar
+       + #telPane); this only hosts its bottom sheets. -->
+  <div id="telModal" class="tel-modal-layer"></div>
 
   <!-- DONATE MODAL -->
   <div class="modal-overlay" id="donateModal" onclick="if(event.target===this)closeDonate()">
@@ -696,6 +720,16 @@
             </label>
             <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text)">
               <input type="checkbox" id="bkMedia"> <span data-i18n="backup_media">Saved Media Files</span>
+            </label>
+            <!-- The Telegram auth key: whoever holds it IS the user on Telegram,
+                 so it is opt-in even though the export is encrypted. -->
+            <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text)">
+              <input type="checkbox" id="bkTelegram"> <span data-i18n="backup_telegram">Telegram session</span>
+            </label>
+            <!-- Separate from the session: bulky, and rebuildable from Telegram,
+                 so wanting one without the other is reasonable. -->
+            <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text)">
+              <input type="checkbox" id="bkTelegramCache"> <span data-i18n="backup_telegram_cache">Telegram messages</span>
             </label>
             <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text)">
               <input type="checkbox" id="bkBgImage"> <span data-i18n="backup_bg">Background Image</span>
@@ -1159,6 +1193,9 @@
   <!-- BEGIN chat -->
   <script src="/static/js/chat.js"></script>
   <!-- END chat -->
+  <!-- BEGIN tel -->
+  <script src="/static/js/tel.js"></script>
+  <!-- END tel -->
   <!-- Nav layer loads last so every open*/close* it wraps already exists. -->
   <script src="/static/js/nav.js"></script>
 </body>

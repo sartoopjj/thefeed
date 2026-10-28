@@ -271,4 +271,3 @@ func TestSetProfilePicsNoMediaCache(t *testing.T) {
 		t.Errorf("entries = %v, want empty", got.Entries)
 	}
 }
-

@@ -35,16 +35,23 @@ const (
 // the sealed bootstrap fails to open (fail-closed) rather than being accepted
 // under another version.
 func ChatSessionKey(own *ecdh.PrivateKey, peerPub []byte, protoVer byte, queryKey [KeySize]byte) ([KeySize]byte, error) {
+	return sessionKey(own, peerPub, chatSessionInfo, protoVer, queryKey)
+}
+
+// sessionKey is the shared eph↔ek derivation. The context string gives each
+// user of the cell layer its own key space: a chat key can never open a tunnel
+// cell, or the reverse, even on the same sub-domain.
+func sessionKey(own *ecdh.PrivateKey, peerPub []byte, context string, protoVer byte, queryKey [KeySize]byte) ([KeySize]byte, error) {
 	var k [KeySize]byte
 	pub, err := ecdh.X25519().NewPublicKey(peerPub)
 	if err != nil {
-		return k, fmt.Errorf("chat: bad session peer key: %w", err)
+		return k, fmt.Errorf("%s: bad session peer key: %w", context, err)
 	}
 	secret, err := own.ECDH(pub)
 	if err != nil {
-		return k, fmt.Errorf("chat: session ecdh: %w", err)
+		return k, fmt.Errorf("%s: session ecdh: %w", context, err)
 	}
-	info := append([]byte(chatSessionInfo), protoVer)
+	info := append([]byte(context), protoVer)
 	info = append(info, queryKey[:]...)
 	_, err = io.ReadFull(hkdf.New(sha256.New, secret, nil, info), k[:])
 	return k, err
@@ -106,4 +113,14 @@ func OpenChat(ksession [KeySize]byte, selector []byte, counter uint32, sealed []
 	pt := make([]byte, ctLen)
 	cipher.NewCTR(block, nonce[:]).XORKeyStream(pt, sealed[:ctLen])
 	return pt, nil
+}
+
+// mtpSessionInfo is the tunnel's key-derivation context. Distinct from
+// chatSessionInfo: the two share the cell encoding, never a key space.
+const mtpSessionInfo = "thefeed-mtproto-session-v1"
+
+// MTPSessionKey derives the tunnel's per-connection session key from the same
+// eph↔ek exchange the messenger uses.
+func MTPSessionKey(own *ecdh.PrivateKey, peerPub []byte, protoVer byte, queryKey [KeySize]byte) ([KeySize]byte, error) {
+	return sessionKey(own, peerPub, mtpSessionInfo, protoVer, queryKey)
 }

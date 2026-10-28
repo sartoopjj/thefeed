@@ -46,6 +46,12 @@ type DNSServer struct {
 	chat        *ChatService
 	chatDomains []string
 
+	// mtproto (optional) relays MTProto over DNS on its own sub-domains.
+	// Separate from chat so an operator can run either alone, and so the two
+	// never share a domain (they share the cell codec, not the key space).
+	mtproto        *MTProtoRelay
+	mtprotoDomains []string
+
 	reportCh   chan reportEvent
 	reportFile *reportFile // optional rotating JSONL sink for the report TUI
 	debug      bool
@@ -61,6 +67,7 @@ type reportEvent struct {
 	domain   string // which configured domain the query arrived on
 	invalid  bool   // GetBlock failed for this query
 	chat     bool   // query landed on a chat sub-domain
+	mtproto  bool   // query landed on an mtproto sub-domain
 }
 
 type hourlyFetchReport struct {
@@ -70,6 +77,7 @@ type hourlyFetchReport struct {
 	versionQueries  int64
 	mediaQueries    int64 // queries that landed in the media-blob channel range
 	chatQueries     int64 // queries that landed on a chat sub-domain
+	mtprotoQueries  int64 // queries that landed on an mtproto sub-domain
 	invalidQueries  int64 // GetBlock returned an error (unknown ch / blk OOR)
 	perChannel      map[uint16]*channelFetchStats
 	perResolver     map[string]int64
@@ -176,6 +184,61 @@ func (s *DNSServer) SetChatService(chat *ChatService) error {
 	return nil
 }
 
+// SetMTProtoRelay attaches the MTProto relay on its dedicated sub-domains.
+// They must not collide with a feed domain or a chat domain: the cell codec is
+// shared, so an overlap would hand a tunnel cell to the messenger (where it
+// cannot open, by design) and vice versa. Call before ListenAndServe.
+func (s *DNSServer) SetMTProtoRelay(relay *MTProtoRelay) error {
+	for _, md := range relay.Domains() {
+		md = strings.TrimSuffix(strings.TrimSpace(md), ".")
+		if md == "" {
+			continue
+		}
+		for _, fd := range s.domains {
+			if strings.EqualFold(md, fd) {
+				return fmt.Errorf("mtproto domain %q conflicts with feed domain %q", md, fd)
+			}
+		}
+		for _, cd := range s.chatDomains {
+			if strings.EqualFold(md, cd) {
+				return fmt.Errorf("mtproto domain %q conflicts with chat domain %q", md, cd)
+			}
+		}
+		for _, existing := range s.mtprotoDomains {
+			if strings.EqualFold(md, existing) {
+				return fmt.Errorf("duplicate mtproto domain %q", md)
+			}
+		}
+		s.mtprotoDomains = append(s.mtprotoDomains, md)
+	}
+	if len(s.mtprotoDomains) == 0 {
+		return fmt.Errorf("no usable mtproto domains")
+	}
+	s.mtproto = relay
+	return nil
+}
+
+// zones returns every domain this server must answer on. A domain missing
+// here is never routed at all: the mux answers REFUSED before handleQuery
+// runs, which is how the tunnel's sub-domains were dead on arrival.
+func (s *DNSServer) zones() []string {
+	out := make([]string, 0, len(s.domains)+len(s.chatDomains)+len(s.mtprotoDomains))
+	out = append(out, s.domains...)
+	out = append(out, s.chatDomains...)
+	out = append(out, s.mtprotoDomains...)
+	return out
+}
+
+// isMTProtoDomain reports whether domain is one of the mtproto sub-domains.
+func (s *DNSServer) isMTProtoDomain(domain string) bool {
+	for _, d := range s.mtprotoDomains {
+		if strings.EqualFold(d, domain) {
+			return true
+		}
+	}
+	return false
+}
+
 // isChatDomain reports whether domain is one of the chat sub-domains.
 func (s *DNSServer) isChatDomain(domain string) bool {
 	for _, d := range s.chatDomains {
@@ -201,6 +264,14 @@ func (s *DNSServer) matchDomain(qname string) (string, bool) {
 		}
 	}
 	for _, d := range s.chatDomains {
+		dl := strings.ToLower(d)
+		if name == dl || strings.HasSuffix(name, "."+dl) {
+			if len(d) > len(matched) {
+				matched = d
+			}
+		}
+	}
+	for _, d := range s.mtprotoDomains {
 		dl := strings.ToLower(d)
 		if name == dl || strings.HasSuffix(name, "."+dl) {
 			if len(d) > len(matched) {
@@ -235,10 +306,7 @@ func (s *DNSServer) SetXReader(xr *XPublicReader) {
 // ListenAndServe starts the DNS server on UDP, shutting down when ctx is cancelled.
 func (s *DNSServer) ListenAndServe(ctx context.Context) error {
 	mux := dns.NewServeMux()
-	for _, d := range s.domains {
-		mux.HandleFunc(d+".", s.handleQuery)
-	}
-	for _, d := range s.chatDomains {
+	for _, d := range s.zones() {
 		mux.HandleFunc(d+".", s.handleQuery)
 	}
 
@@ -326,9 +394,25 @@ func (s *DNSServer) handleQuery(w dns.ResponseWriter, r *dns.Msg) {
 		return
 	}
 
+	// Same story for the tunnel: its cells are whitened, so they are routed by
+	// domain and opened with the cell codec, never DecodeQuery.
+	if s.isMTProtoDomain(domain) {
+		if s.mtproto == nil {
+			m.Rcode = dns.RcodeNameError
+			w.WriteMsg(m)
+			return
+		}
+		s.handleMTProtoQuery(w, m, q, domain)
+		return
+	}
+
 	channel, block, err := protocol.DecodeQuery(s.queryKey, q.Name, domain)
 	if err != nil {
-		log.Printf("[dns] decode query: %v", err)
+		// Include who asked and on which domain: an integrity failure means
+		// the sender used a different passphrase, and the only way to tell a
+		// stale local config from unrelated internet traffic is the source.
+		log.Printf("[dns] decode query from %s dom=%s name=%s: %v",
+			resolverHost(w.RemoteAddr()), domain, q.Name, err)
 		m.Rcode = dns.RcodeNameError
 		w.WriteMsg(m)
 		return
@@ -461,6 +545,28 @@ func (s *DNSServer) handleChatQuery(w dns.ResponseWriter, m *dns.Msg, q dns.Ques
 		log.Printf("[chat] cell sel=%x ctr=%d dom=%s name=%s from=%s", selector, counter, domain, q.Name, resolverHost(w.RemoteAddr()))
 	}
 	resp := s.chat.HandleCell(selector, counter, payload, domain, time.Now())
+	s.writeEncodedResponse(w, m, q.Name, resp)
+}
+
+func (s *DNSServer) handleMTProtoQuery(w dns.ResponseWriter, m *dns.Msg, q dns.Question, domain string) {
+	selector, counter, payload, err := protocol.DecodeChatCell(s.queryKey, q.Name, domain)
+	if err != nil {
+		if s.debug {
+			log.Printf("[mtproto] decode cell: %v", err)
+		}
+		m.Rcode = dns.RcodeNameError
+		w.WriteMsg(m)
+		return
+	}
+	select {
+	case s.reportCh <- reportEvent{mtproto: true, resolver: resolverHost(w.RemoteAddr()), domain: domain}:
+	default:
+	}
+	if s.debug {
+		log.Printf("[mtproto] cell sel=%x ctr=%d dom=%s name=%s from=%s",
+			selector, counter, domain, q.Name, resolverHost(w.RemoteAddr()))
+	}
+	resp := s.mtproto.HandleCell(selector, counter, payload, domain, time.Now())
 	s.writeEncodedResponse(w, m, q.Name, resp)
 }
 
@@ -912,6 +1018,10 @@ func recordReportQuery(rep *hourlyFetchReport, event reportEvent) {
 		rep.chatQueries++
 		return
 	}
+	if event.mtproto {
+		rep.mtprotoQueries++
+		return
+	}
 	channel := event.channel
 	if channel == protocol.MetadataChannel {
 		rep.metadataQueries++
@@ -1019,6 +1129,7 @@ func (s *DNSServer) emitHourlyReport(rep *hourlyFetchReport, final bool) {
 		"totalVersionQueries":  rep.versionQueries,
 		"totalMediaQueries":    rep.mediaQueries,
 		"totalChatQueries":     rep.chatQueries,
+		"totalMtprotoQueries":  rep.mtprotoQueries,
 		"totalInvalidQueries":  rep.invalidQueries,
 		"channels":             entries,
 		"topResolvers":         resolvers,
@@ -1033,6 +1144,17 @@ func (s *DNSServer) emitHourlyReport(rep *hourlyFetchReport, final bool) {
 	}
 	if s.chat != nil {
 		payload["chat"] = s.chat.StatsSnapshot()
+	}
+	if s.mtproto != nil {
+		active, max := s.mtproto.Stats()
+		// sessions = people connected; tunnels = sockets open to Telegram
+		// right now. A session outlives its tunnel, so reporting one number as
+		// the other overstated what the relay was carrying.
+		payload["mtproto"] = map[string]any{
+			"sessions":    active,
+			"liveTunnels": s.mtproto.LiveTunnels(),
+			"maxTunnels":  max,
+		}
 	}
 	b, err := json.Marshal(payload)
 	if err != nil {

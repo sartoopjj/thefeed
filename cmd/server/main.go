@@ -55,6 +55,14 @@ func main() {
 	chatTTLHours := flag.Int("chat-ttl-hours", 72, "Chat: hours before an undelivered message expires")
 	chatAccountTTLDays := flag.Int("chat-account-ttl-days", 0, "Chat: delete idle accounts after N days (0 = never; keeps reports accurate)")
 	chatMaxAccounts := flag.Int("chat-max-accounts", 0, "Chat: cap on stored accounts (0 = unlimited)")
+	mtprotoDomains := flag.String("mtproto-domains", "", "Comma-separated dedicated sub-domains for the MTProto-over-DNS tunnel (empty = tunnel off)")
+	mtprotoEnabled := flag.Bool("mtproto-enabled", true, "Serve the MTProto tunnel when --mtproto-domains is set; false advertises tunnel-but-disabled to clients")
+	mtprotoMaxTunnels := flag.Int("mtproto-max-tunnels", 0, "MTProto: cap on concurrently ACTIVE tunnels, one per user connection (0 = uncapped; the file-descriptor limit is then the real ceiling)")
+	mtprotoIdleMinutes := flag.Int("mtproto-idle-minutes", 5, "MTProto: expire a tunnel after N minutes with no cells (the client re-opens on next use)")
+	mtprotoBufferKB := flag.Int("mtproto-buffer-kb", 32, "MTProto: per-tunnel downstream buffer in KB (paid per concurrent tunnel)")
+	mtprotoDownKBMin := flag.Int("mtproto-down-kb-per-min", 512, "MTProto: per-tunnel downstream throttle in KB/minute (0 = uncapped)")
+	mtprotoDialSeconds := flag.Int("mtproto-dial-seconds", 15, "MTProto: timeout when connecting to a Telegram data centre")
+	mtprotoTestDCs := flag.Bool("mtproto-test-dcs", false, "MTProto: dial Telegram's TEST data centres instead of production")
 	chatSyncSeconds := flag.Int("chat-sync-seconds", 1, "Chat: flush the message store to disk every N seconds (0 = fsync every message: max durability, lower throughput; N>0: higher throughput, a crash may lose ≤N seconds of received messages)")
 	ghEnabled := flag.Bool("github-relay-enabled", false, "Serve media via GitHub (fast relay)")
 	ghToken := flag.String("github-relay-token", "", "GitHub PAT with contents:write on the relay repo")
@@ -242,6 +250,29 @@ func main() {
 	chatIntEnv(chatAccountTTLDays, 0, "THEFEED_CHAT_ACCOUNT_TTL_DAYS")
 	chatIntEnv(chatMaxAccounts, 0, "THEFEED_CHAT_MAX_ACCOUNTS")
 	chatIntEnv(chatSyncSeconds, 1, "THEFEED_CHAT_SYNC_SECONDS")
+	if *mtprotoDomains == "" {
+		*mtprotoDomains = os.Getenv("THEFEED_MTPROTO_DOMAINS")
+	}
+	var mtprotoDomainList []string
+	for _, d := range strings.Split(*mtprotoDomains, ",") {
+		if d = strings.TrimSpace(d); d != "" {
+			mtprotoDomainList = append(mtprotoDomainList, d)
+		}
+	}
+	chatIntEnv(mtprotoMaxTunnels, 0, "THEFEED_MTPROTO_MAX_TUNNELS")
+	chatIntEnv(mtprotoIdleMinutes, 5, "THEFEED_MTPROTO_IDLE_MINUTES")
+	chatIntEnv(mtprotoBufferKB, 32, "THEFEED_MTPROTO_BUFFER_KB")
+	chatIntEnv(mtprotoDownKBMin, 512, "THEFEED_MTPROTO_DOWN_KB_PER_MIN")
+	chatIntEnv(mtprotoDialSeconds, 15, "THEFEED_MTPROTO_DIAL_SECONDS")
+	// THEFEED_MTPROTO_ENABLED=0 turns the tunnel off even with domains set.
+	if v := os.Getenv("THEFEED_MTPROTO_ENABLED"); v == "0" {
+		*mtprotoEnabled = false
+	} else if v == "1" {
+		*mtprotoEnabled = true
+	}
+	if v := os.Getenv("THEFEED_MTPROTO_TEST_DCS"); v == "1" {
+		*mtprotoTestDCs = true
+	}
 	// THEFEED_CHAT_ENABLED=0 turns chat off even with domains configured.
 	if v := os.Getenv("THEFEED_CHAT_ENABLED"); v == "0" {
 		*chatEnabled = false
@@ -396,6 +427,14 @@ func main() {
 		ChatAccountTTLDays:  *chatAccountTTLDays,
 		ChatMaxAccounts:     *chatMaxAccounts,
 		ChatSyncSeconds:     *chatSyncSeconds,
+		MTProtoDomains:      mtprotoDomainList,
+		MTProtoEnabled:      *mtprotoEnabled,
+		MTProtoMaxTunnels:   *mtprotoMaxTunnels,
+		MTProtoIdleTTL:      time.Duration(*mtprotoIdleMinutes) * time.Minute,
+		MTProtoBufferBytes:  *mtprotoBufferKB * 1024,
+		MTProtoDownKBPerMin: *mtprotoDownKBMin,
+		MTProtoDialTimeout:  time.Duration(*mtprotoDialSeconds) * time.Second,
+		MTProtoTestDCs:      *mtprotoTestDCs,
 		GitHubRelay: server.GitHubRelayConfig{
 			Enabled:    *ghEnabled,
 			Token:      *ghToken,

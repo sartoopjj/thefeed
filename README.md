@@ -181,6 +181,7 @@ Key flags (also settable via env vars, e.g. `THEFEED_DOMAIN`, `THEFEED_KEY`, `TH
 | `--key` | | Encryption passphrase **(required)** |
 | `--extra-domains` | | Comma-separated extra feed sub-domains (load spread + resilience) |
 | `--chat-domains` | | Enable the [messenger](#messenger) on these sub-domains (separate from feed) |
+| `--mtproto-domains` | | Enable [Telegram over DNS](#telegram-over-dns-beta) on these sub-domains (separate from feed and chat) |
 | `--no-telegram` | `false` | Run without Telegram login (public channels only) |
 | `--api-id` / `--api-hash` / `--phone` | | Telegram credentials (private channels) |
 | `--login-only` | `false` | Authenticate to Telegram, save session, exit |
@@ -235,6 +236,30 @@ In the client, open **Chat** from the bottom nav. ✓ = stored on the server, �
 [`integrations/hermes/`](integrations/hermes/) lets you chat with a [Hermes](https://github.com/NousResearch/hermes-agent) AI agent over the messenger, so it stays reachable when the internet is cut. It is a Hermes skill: give your agent the folder and it sets itself up. It only ever reads messages from your own address. Strangers who write to it are never answered or shown to the model.
 
 Please run it against **your own thefeed server**: a bridge polls around the clock, and the shared default servers built into the app are meant for people, not bots. A default config still works if you have no server.
+
+---
+
+## Telegram over DNS (beta)
+
+An **optional** second use of the same tunnel: sign in to your **own Telegram account** and use it through the server — no VPN, no proxy app. It behaves like Telegram through an MTProto proxy, except the transport is DNS, so it keeps working when a country's internet has been cut back to domestic traffic. Enable it with dedicated sub-domains (with a matching [NS record](#1-dns-records), separate from the feed and chat domains):
+
+```bash
+thefeed-server ... --mtproto-domains m.example.com   # or THEFEED_MTPROTO_DOMAINS=m.example.com
+```
+
+- **Telegram's own protocol, unchanged** — MTProto is wrapped in ordinary DNS queries; the server unwraps them and relays the bytes to Telegram's data centres. The auth key is generated on the client and never leaves it, so the relay only moves sealed packets and cannot read them.
+- **It needs a server that implements this** — an ordinary MTProto proxy cannot carry MTProto over DNS. thefeed's server can, and a config whose server advertises the tunnel (a signed bit in the feed metadata) is the one the client offers in its picker.
+- **What works**: your conversations, groups, channels and bots; sending and reading text; ✓/✓✓ read marks; sender names in groups; search over what is loaded; starting a chat by @username; leaving or clearing one; unread counts.
+- **What does not**: downloading photos, files, stickers or voice; calls; sending media; forum topics (shown merged); pressing a bot's callback buttons (they are listed, and URL buttons work). A message with an attachment shows **what** it was — photo, file + name and size, sticker, voice — so nothing is silently missing.
+- **Text only, on purpose.** Every byte is a DNS query, so the client fetches only what is new and keeps what it already has.
+- **Speed comes from three settings** — queries per second, timeout, and resolvers per query. The first also caps how many queries are in flight at once, so the send window follows the configured rate and never grows without bound. A message's own framing says how many queries it needs, so they go out together instead of one per round trip, and the relay reassembles them in any order.
+- **The relay cannot police content** — the stream is encrypted end to end with Telegram, so the server sees opaque bytes and cannot tell a message from a file. What it *can* limit is volume: `--mtproto-down-kb-per-min` (512 KB/min per tunnel by default) throttles any client that tries to pull files through it, and `--mtproto-max-tunnels` bounds how many run at once.
+- **Notifications**: while the app is open it rings and notifies. For a backgrounded app, turn on background checking in the ⋮ menu — it costs queries around the clock, so it is off by default.
+- **It needs good resolvers.** The Feed and the Messenger hold up far better on very slow resolvers; this is the most bandwidth-hungry part of the app.
+- **App credentials** — register your own `api_id` / `api_hash` at [my.telegram.org](https://my.telegram.org). If Telegram disables a shared pair, everyone signed in with it is signed out at once.
+- **Limits**: `--mtproto-enabled`, `--mtproto-max-tunnels`, `--mtproto-idle-minutes`, `--mtproto-buffer-kb`, `--mtproto-dial-seconds`.
+
+In the client, open **Telegram** from the bottom nav. The ⋮ menu is on every screen (config picker, credentials, log, sign out); ✓ / ✓✓ mean sent and read; the ring in the title bar counts down to the next automatic check, and every operation reports its progress and the number of queries it has spent.
 
 ---
 

@@ -59,6 +59,21 @@ type Config struct {
 	// crash can lose up to ~N seconds of just-received messages — acceptable
 	// since chat is E2E and senders can resend).
 	ChatSyncSeconds int
+
+	// MTProto (DNS tunnel to Telegram). Configured when MTProtoDomains is
+	// non-empty; MTProtoEnabled turns the relay itself on, mirroring chat so
+	// an operator can advertise "configured but off".
+	MTProtoDomains     []string
+	MTProtoEnabled     bool
+	MTProtoMaxTunnels  int           // 0 = uncapped (fd limit is the real ceiling)
+	MTProtoIdleTTL     time.Duration // expire a tunnel with no cells
+	MTProtoBufferBytes int           // per-tunnel downstream cap
+	// MTProtoDownKBPerMin throttles one tunnel's downstream traffic; 0 is
+	// uncapped. The relay carries opaque bytes, so volume is the only limit it
+	// can apply to a client that pulls files through it.
+	MTProtoDownKBPerMin int
+	MTProtoDialTimeout  time.Duration
+	MTProtoTestDCs      bool // dial Telegram's test DCs
 }
 
 // GitHubRelayConfig configures the GitHub fast relay. Active() requires
@@ -226,6 +241,60 @@ func (s *Server) Run(ctx context.Context) error {
 		}
 	}
 
+	// MTProto tunnel: its own sub-domains, and the SAME x25519 ek the
+	// messenger publishes -- safe because the two derive session keys in
+	// different key spaces (MTPSessionKey vs ChatSessionKey). The metadata bit
+	// is set whenever domains are configured, so a client can mark the config
+	// without probing; the relay is built only when it is actually on.
+	var mtproto *MTProtoRelay
+	if len(s.cfg.MTProtoDomains) > 0 {
+		s.feed.SetMTProtoAvailable(true)
+		if s.cfg.MTProtoEnabled {
+			ek, err := LoadOrCreateServerEncKey(s.cfg.DataDir)
+			if err != nil {
+				return fmt.Errorf("mtproto enc key: %w", err)
+			}
+			mtproto = NewMTProtoRelay(MTProtoConfig{
+				Enabled:         true,
+				Domains:         s.cfg.MTProtoDomains,
+				MaxTunnels:      s.cfg.MTProtoMaxTunnels,
+				IdleTTL:         s.cfg.MTProtoIdleTTL,
+				BufferBytes:     s.cfg.MTProtoBufferBytes,
+				DownBytesPerMin: s.cfg.MTProtoDownKBPerMin * 1024,
+				DialTimeout:     s.cfg.MTProtoDialTimeout,
+				TestDCs:         s.cfg.MTProtoTestDCs,
+				Debug:           s.cfg.Debug,
+				QueryKey:        queryKey,
+				Ek:              ek,
+			})
+			if mtproto == nil {
+				return fmt.Errorf("mtproto relay: not created")
+			}
+			s.feed.SetMTProtoInfoPayload(protocol.EncodeMTPInfo(mtproto.Info()))
+			go mtproto.RunSweeper(ctx)
+			defer mtproto.closeAll()
+			dcs := "production"
+			if s.cfg.MTProtoTestDCs {
+				dcs = "TEST"
+			}
+			_, maxTunnels := mtproto.Stats()
+			log.Printf("[server] mtproto tunnel enabled on %s (dcs=%s max-tunnels=%d idle-ttl=%s buffer=%dB)",
+				strings.Join(s.cfg.MTProtoDomains, ", "), dcs, maxTunnels,
+				s.cfg.MTProtoIdleTTL, s.cfg.MTProtoBufferBytes)
+		} else {
+			// Configured but off: publish a disabled payload so clients say
+			// "tunnel off on this server" instead of probing it.
+			s.feed.SetMTProtoInfoPayload(protocol.EncodeMTPInfo(protocol.MTPInfo{
+				MinVersion: protocol.MTProtoVersion,
+				MaxVersion: protocol.MTProtoVersion,
+				Enabled:    false,
+				Domains:    s.cfg.MTProtoDomains,
+			}))
+			log.Printf("[server] mtproto configured on %s but DISABLED (--mtproto-enabled=false)",
+				strings.Join(s.cfg.MTProtoDomains, ", "))
+		}
+	}
+
 	SetMediaDebugLogs(s.cfg.Debug)
 
 	// Spin up the media cache when at least one relay is enabled. The cache
@@ -359,6 +428,11 @@ func (s *Server) Run(ctx context.Context) error {
 	if chat != nil {
 		if err := dnsServer.SetChatService(chat); err != nil {
 			return fmt.Errorf("chat domains: %w", err)
+		}
+	}
+	if mtproto != nil {
+		if err := dnsServer.SetMTProtoRelay(mtproto); err != nil {
+			return fmt.Errorf("mtproto domains: %w", err)
 		}
 	}
 	if channelCtl != nil {

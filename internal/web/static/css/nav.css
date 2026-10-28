@@ -123,6 +123,36 @@
       display: none;
     }
 
+    /* Experimental marker on the Telegram tab. Orange, so it reads as "newest,
+       still moving" rather than as an error (red) or an unread count (accent).
+       Mirrored by the bigger .tel-badge in that section's own topbar. */
+    .nav-tag {
+      position: absolute;
+      top: 3px;
+      left: 50%;
+      margin-left: 6px;
+      padding: 0 3px;
+      height: 12px;
+      border-radius: 6px;
+      background: #e8821e;
+      color: #fff;
+      font-size: 8px;
+      font-weight: 700;
+      letter-spacing: .02em;
+      text-transform: uppercase;
+      display: flex;
+      align-items: center;
+      border: 1.5px solid var(--bg2);
+      box-sizing: border-box;
+    }
+
+    /* "Telegram" is the longest label in the bar: let it shrink to fit its own
+       tab instead of squeezing the other five. */
+    .nav-tab-tel .nav-lb {
+      font-size: 9px;
+      letter-spacing: -.02em;
+    }
+
     /* Content clears the floating nav so the last row / empty-state isn't
        trapped behind the capsule — the nav is a bottom bar on EVERY width. */
     .channel-list {

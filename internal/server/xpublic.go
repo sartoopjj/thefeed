@@ -519,14 +519,6 @@ func parseRSSDate(v string) uint32 {
 	return uint32(time.Now().Unix())
 }
 
-func stripHTML(src string) string {
-	n, err := html.Parse(strings.NewReader(src))
-	if err != nil {
-		return src
-	}
-	return extractMessageText(n)
-}
-
 // stripXHTML extracts plain text from a Nitter RSS description and adds clear
 // banner markers so users can distinguish original posts from reposts and quotes.
 func stripXHTML(src string) string {

@@ -291,3 +291,31 @@ func TestBackupSelectiveSections(t *testing.T) {
 		t.Fatal("should NOT have saved")
 	}
 }
+
+// A malformed upload must say what is actually wrong.
+//
+// Every way of failing to parse the form -- a truncated upload, the wrong
+// content type, a body that is not a form at all -- used to be reported as
+// "file too large", which sends whoever is debugging it looking for a size
+// limit that is not the reason. A 1 KB backup posted with the wrong content
+// type reported a size problem.
+func TestBackupRestoreReportsTheRealReason(t *testing.T) {
+	s := &Server{dataDir: t.TempDir(), clients: make(map[chan string]struct{})}
+
+	// Not a form at all, and tiny.
+	r := httptest.NewRequest(http.MethodPost, "/api/backup/restore",
+		strings.NewReader("TFBAK1 not-a-form"))
+	r.Header.Set("Content-Type", "application/octet-stream")
+	rec := httptest.NewRecorder()
+	s.handleBackupRestore(rec, r)
+
+	if rec.Code == http.StatusRequestEntityTooLarge {
+		t.Fatalf("a %d-byte body was reported as too large", len("TFBAK1 not-a-form"))
+	}
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status %d, want 400 for an unreadable upload", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), "unreadable") {
+		t.Errorf("body = %q, want it to say the upload could not be read", rec.Body.String())
+	}
+}

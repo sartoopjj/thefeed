@@ -1064,7 +1064,7 @@ async function chatToggleServer(key, on) {
   // Surface a real registration failure rather than leaving the server
   // toggled-on-but-unusable with no explanation.
   if (on && data && data.available === false) {
-    showToast(chatT(data.reason || 'chat_err_unreachable'));
+    showToast(chatT(data.checking ? 'chat_registering' : (data.reason || 'chat_err_unreachable')));
   }
 }
 
@@ -1225,8 +1225,8 @@ async function openChatThread(addr) {
     var app = document.getElementById('app'); if (app) app.classList.add('chat-open');
   }
   await chatRenderThread();
-  // ✓✓ + safety emojis arrive async (it's a DNS round trip). The foreground
-  // timer (started on open) keeps refreshing while the conversation is open.
+  // ✓✓ + safety emojis arrive async (it's a DNS round trip). Later refreshes
+  // ride the backend's poll cadence — see chatOnSSE's 'nextpoll' handler.
   chatFetchPeerStatus(addr);
 }
 
@@ -2049,14 +2049,9 @@ async function chatFetchPeerStatus(addr, server) {
             mb0.insertBefore(sep, mb0.firstChild);
           }
         }
-        var ci = document.getElementById('chatInput');
-        var mb = document.getElementById('chatMsgsBody');
-        var scrolledUp = mb && (mb.scrollHeight - mb.scrollTop - mb.clientHeight > 40);
-        if ((ci && document.activeElement === ci) || scrolledUp) {
-          chatState.renderPending = true;
-        } else {
-          chatRenderThread();
-        }
+        // Safe unconditionally: chatRenderThread reuses the live footer while
+        // the input has focus and keeps a scrolled-up position.
+        chatRenderThread();
       }
     }
   } catch (e) { }
@@ -2112,7 +2107,7 @@ async function sendChatMessage() {
       delete chatState.pendingServer[peerAddr];
       chatBumpActivity();
       // First send to a NEW peer creates the thread server-side: reload so it
-      // appears in the sidebar list (the foreground poll used to do this).
+      // appears in the sidebar list.
       chatLoadThreads();
       // A send proves the server is reachable — probe availability if we don't
       // have it yet so the timer + quota (which need avail.limits) populate
@@ -2239,8 +2234,8 @@ function chatShowProgress(id, done, total, arrow) {
   var bar = document.getElementById(id);
   if (!bar) return;
   // Nothing to show, or already complete → hide instead of leaving a full bar
-  // stuck on screen. An empty-inbox poll reports done==total==1, which used to
-  // stick the "↓ 1/1" bar in the thread list.
+  // stuck on screen. An empty-inbox poll reports done==total==1, which would
+  // otherwise pin "↓ 1/1" to the thread list.
   if (!(total > 0) || done >= total) { chatHideProgress(id); return; }
   bar.classList.add('active');
   var fill = document.getElementById(id + 'Fill');
@@ -2322,6 +2317,14 @@ function chatOnSSE(data) {
       chatState.pollIntervalMs = data.ms;
       chatState.nextPollAt = Date.now() + data.ms;
       if (chatState.open) chatUpdateCountdown();
+    }
+    // ✓✓ needs its own round trip, and the peer fetches our message on one of
+    // ITS poll cycles — later than the post-send probes (0/3/8s). Ride the
+    // backend's cadence rather than add a timer, and only while something is
+    // actually outstanding, so an idle thread costs no query.
+    if (chatState.open && chatState.view === 'thread' && chatState.peer &&
+      (chatState.pendingServers[chatState.peer] || []).length > 0) {
+      chatRefreshStatus(chatState.peer);
     }
     return;
   }

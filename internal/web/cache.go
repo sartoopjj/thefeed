@@ -69,6 +69,11 @@ func (s *Server) handleClearCache(w http.ResponseWriter, r *http.Request) {
 	if s.profilePics != nil {
 		s.profilePics.Clear()
 	}
+	// Conversations go with everything else, but the session stays: "clear
+	// cache" must never mean "sign out".
+	if s.tel != nil {
+		s.tel.store().Forget()
+	}
 	mediaDeleted := 0
 	if s.mediaCache != nil {
 		mediaDeleted = s.mediaCache.Clear()
@@ -123,11 +128,28 @@ func (s *Server) handleCacheStats(w http.ResponseWriter, r *http.Request) {
 		caches = append(caches, cacheEntry{ID: "saved-media", Label: "Saved Media", Bytes: sz})
 		total += sz
 	}
+	// Its own row: these are conversations, not media, and clearing them costs
+	// the queries to fetch them again -- which on this transport is a real
+	// price the user should be able to weigh separately.
+	if s.tel != nil {
+		sz := fileSize(telCachePath(s.tel.dir))
+		caches = append(caches, cacheEntry{ID: "telegram", Label: "Telegram Messages", Bytes: sz})
+		total += sz
+	}
 	writeJSON(w, map[string]any{
 		"total":    total,
 		"budgetMB": budgetMB,
 		"caches":   caches,
 	})
+}
+
+// fileSize is one file's size, or zero when it is not there.
+func fileSize(path string) int64 {
+	st, err := os.Stat(path)
+	if err != nil {
+		return 0
+	}
+	return st.Size()
 }
 
 // handleCacheClearOne clears a single cache by id.
@@ -151,6 +173,12 @@ func (s *Server) handleCacheClearOne(w http.ResponseWriter, r *http.Request) {
 	case "telemirror":
 		if s.telemirror != nil {
 			s.telemirror.ClearCache()
+		}
+	case "telegram":
+		// The cache only. The session is NOT touched: clearing storage must
+		// never sign anyone out.
+		if s.tel != nil {
+			s.tel.store().Forget()
 		}
 	case "messages":
 		cacheDir := filepath.Join(s.dataDir, "cache")

@@ -1,4 +1,5 @@
-.PHONY: all build build-server build-client test clean lint fmt vet \
+.PHONY: all build build-server build-client build-server-dev run-server run-client \
+	print-config print-pubkey report test clean lint fmt vet \
 	ios-bind ios-bind-catalyst ios-build ios-test ios-clean ios-list-sims ios-deps \
 	mac-dmg mac-app mac-clean \
 	push push-tags release setup-remotes
@@ -37,6 +38,94 @@ build-server:
 build-client:
 	@mkdir -p $(BUILD_DIR)
 	go build $(GOFLAGS) -o $(BUILD_DIR)/$(BINARY_CLIENT) ./cmd/client
+
+# Dev build: plain flags on purpose. The release GOFLAGS stamp a fresh DATE on
+# every invocation, so the ldflags differ every time and the whole binary is
+# RELINKED for nothing; -trimpath also puts the objects in a separate build
+# cache from `go build` / `go test`, so nothing is reused. Dropping both makes
+# a repeat local run near-instant.
+build-server-dev:
+	@mkdir -p $(BUILD_DIR)
+	go build -o $(BUILD_DIR)/$(BINARY_SERVER)-dev ./cmd/server
+
+# ---- local development runs (settings come from .env, which is gitignored) ----
+# Most settings are THEFEED_* variables the server reads itself — the same ones
+# docker-compose uses. Only the flags with no env support are passed as
+# arguments. Copy .env.example to .env and fill it in first.
+#
+# THEFEED_* are handed across the sudo boundary explicitly rather than with
+# `sudo -E`, because a default sudoers env_reset would silently drop them.
+# Each array element is a whole KEY=value line, so values with spaces survive.
+# Built as YOU, run as root. `sudo go run` would compile as root inside your
+# own build cache and leave root-owned files there, which then breaks every
+# later non-root build with "permission denied".
+run-server: build-server-dev
+	@test -f .env || { echo "no .env — cp .env.example .env and fill it in"; exit 1; }
+	@# Every value is :-defaulted: this runs under `bash -u`, and .env.example
+	@# ships the Telegram and channel lines commented out, so the documented
+	@# `cp .env.example .env && make run-server` died on "unbound variable"
+	@# before it could even reach the --no-telegram escape below.
+	@bash -euc 'set -a; . ./.env; set +a; \
+		mapfile -t E < <(grep -E "^THEFEED_[A-Z0-9_]+=" .env); \
+		TG_ARGS=(--api-id "$${TELEGRAM_API_ID:-}" --api-hash "$${TELEGRAM_API_HASH:-}" --phone "$${TELEGRAM_PHONE:-}"); \
+		TG_STATE="login"; \
+		if [ -n "$${SERVER_NO_TELEGRAM:-}" ] && [ "$${SERVER_NO_TELEGRAM}" != "0" ]; then \
+			TG_ARGS=(--no-telegram); TG_STATE="off (public channels only)"; \
+		fi; \
+		echo "[run-server] $$THEFEED_DOMAIN  chat=$${THEFEED_CHAT_DOMAINS:-off}  mtproto=$${THEFEED_MTPROTO_DOMAINS:-off}  telegram=$$TG_STATE"; \
+		exec sudo env "$${E[@]}" $(BUILD_DIR)/$(BINARY_SERVER)-dev \
+			--listen "$${LISTEN:-0.0.0.0:53}" \
+			"$${TG_ARGS[@]}" \
+			--channels "$${CHANNELS:-}" \
+			--private-channels "$${PRIVATE_CHANNELS:-}" \
+			--x-accounts "$${X_ACCOUNTS:-}"'
+
+# The client needs no root (it binds a high port) and no THEFEED_* vars.
+run-client:
+	@test -f .env || { echo "no .env — cp .env.example .env and fill it in"; exit 1; }
+	@# Every value is :-defaulted: this runs under `bash -u`, and .env.example
+	@# ships the Telegram and channel lines commented out, so the documented
+	@# `cp .env.example .env && make run-server` died on "unbound variable"
+	@# before it could even reach the --no-telegram escape below.
+	@bash -euc 'set -a; . ./.env; set +a; \
+		echo "[run-client] http://$${CLIENT_HOST:-127.0.0.1}:$${CLIENT_PORT:-8080}  data=$${CLIENT_DATA_DIR:-./thefeeddata}"; \
+		exec go run ./cmd/client \
+			--data-dir "$${CLIENT_DATA_DIR:-./thefeeddata}" \
+			--port "$${CLIENT_PORT:-8080}" \
+			--host "$${CLIENT_HOST:-127.0.0.1}" \
+			-open=$${CLIENT_OPEN:-false}'
+
+# ---- server inspection ----
+# Domain / key / extra-domains come from THEFEED_* in .env, so these need no
+# flags beyond the data directory. `make run-server` writes that directory as
+# root, so each target retries under sudo when it cannot read it as you.
+#
+# DATA_DIR defaults to the server's own default (./data); override in .env.
+define server_cmd
+	@test -f .env || { echo "no .env — cp .env.example .env and fill it in"; exit 1; }
+	@$(MAKE) --no-print-directory build-server-dev
+	@# Every value is :-defaulted: this runs under `bash -u`, and .env.example
+	@# ships the Telegram and channel lines commented out, so the documented
+	@# `cp .env.example .env && make run-server` died on "unbound variable"
+	@# before it could even reach the --no-telegram escape below.
+	@bash -euc 'set -a; . ./.env; set +a; \
+		mapfile -t E < <(grep -E "^THEFEED_[A-Z0-9_]+=" .env); \
+		BIN=$(BUILD_DIR)/$(BINARY_SERVER)-dev; DD="$${DATA_DIR:-./data}"; \
+		env "$${E[@]}" "$$BIN" --data-dir "$$DD" $(1) 2>/dev/null \
+			|| sudo env "$${E[@]}" "$$BIN" --data-dir "$$DD" $(1)'
+endef
+
+# The thefeed:// import URI for clients (server public key + bootstrap resolvers).
+print-config:
+	$(call server_cmd,--print-config)
+
+# Just the server signing public key (the sk= field).
+print-pubkey:
+	$(call server_cmd,--print-pubkey)
+
+# Hourly stats dashboard, read from the data dir.
+report:
+	$(call server_cmd,--report)
 
 test:
 	go test -race -count=1 ./...
@@ -170,7 +259,24 @@ ANDROID_LDFLAGS = -s -w \
                   -X github.com/sartoopjj/thefeed/internal/version.Date=$(DATE) \
                   -extldflags=-Wl,-z,max-page-size=16384
 
-android-bind: ios-deps
+# The 32-bit ARM crash: Go 1.26.0-1.26.8 have a runtime bug that kills the app
+# at startup on 32-bit ARM Android 8-10 -- it was 8% of Play Store sessions.
+# CI pins 1.26.9 (codemagic.yaml, .gitlab-ci.yml); a build run by hand uses
+# whatever Go is installed, so refuse rather than produce an APK that crashes
+# on devices nobody here owns to test on.
+MIN_GO_ANDROID = 1.26.9
+
+check-go-android:
+	@have=$$(go env GOVERSION | sed 's/^go//'); \
+	lowest=$$(printf '%s\n%s\n' "$(MIN_GO_ANDROID)" "$$have" | sort -V | head -1); \
+	if [ "$$lowest" != "$(MIN_GO_ANDROID)" ]; then \
+	  echo "Go $$have is too old for an Android build: 1.26.0-1.26.8 crash 32-bit ARM Android 8-10 at startup."; \
+	  echo "Use $(MIN_GO_ANDROID) or newer, e.g.: GOTOOLCHAIN=go$(MIN_GO_ANDROID) make $(MAKECMDGOALS)"; \
+	  exit 1; \
+	fi; \
+	echo "Android build using Go $$have (>= $(MIN_GO_ANDROID))"
+
+android-bind: check-go-android ios-deps
 	@command -v gomobile >/dev/null 2>&1 || { echo "gomobile not found. Run: go install golang.org/x/mobile/cmd/gomobile@latest && gomobile init"; exit 1; }
 	@mkdir -p $(ANDROID_AAR_DIR)
 	gomobile bind -target=android/arm,android/arm64,android/386,android/amd64 -androidapi 24 -ldflags='$(ANDROID_LDFLAGS)' -o $(ANDROID_AAR) ./mobile

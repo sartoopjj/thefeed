@@ -111,6 +111,29 @@ type ProfileList struct {
 	// frontend owns the list (some touch localStorage) and reports its level;
 	// storing it server-side stops replays when the loopback port changes.
 	MigrationVersion int `json:"migrationVersion,omitempty"`
+	// TelAPIID / TelAPIHash let a user substitute their own Telegram app
+	// credentials for the bridge. Empty means the app's bundled default.
+	TelAPIID   int    `json:"telApiId,omitempty"`
+	TelAPIHash string `json:"telApiHash,omitempty"`
+	// TelWatch keeps checking Telegram for new messages while the app is in
+	// the background, so the platform can raise a notification. ON by default:
+	// a messenger that only notices messages while you are looking at it is
+	// not doing its job.
+	//
+	// A pointer, not a bool: nil means the user has never chosen, and only then
+	// does the default apply. A plain bool could not tell "turned it off" from
+	// "never touched it", since omitempty drops a false entirely.
+	TelWatch *bool `json:"telWatch,omitempty"`
+	// TelLastServer is the config the Telegram session was last connected on,
+	// so opening the app can go straight back to it. In memory it would be lost
+	// on every client restart, which is exactly when getting back on matters.
+	TelLastServer string `json:"telLastServer,omitempty"`
+	// TelAuthorized remembers that Telegram CONFIRMED this session belongs to
+	// an account. The session file existing proves nothing: connecting without
+	// one makes gotd generate a fresh auth key and save it, so a file is there
+	// while Telegram answers AUTH_KEY_UNREGISTERED. Only a confirmation sets
+	// this, and only a logout or Telegram rejecting the key clears it.
+	TelAuthorized bool `json:"telAuthorized,omitempty"`
 	// ResolverBank is the shared pool of DNS resolvers used by all profiles.
 	ResolverBank []string `json:"resolverBank,omitempty"`
 	// ResolverScores stores accumulated performance data for bank resolvers.
@@ -180,7 +203,10 @@ func (pl *ProfileList) ShareEnabled() bool {
 // Defaults for the connection settings exposed on the settings page.
 const (
 	defaultQueryMode = "single"
-	defaultRateLimit = 10.0
+	// Queries PER SECOND (not concurrency -- that is scatter). 30 keeps the
+	// messenger and the MTProto tunnel usable, since each of their cells is a
+	// separate query.
+	defaultRateLimit = 30.0
 	defaultScatter   = 6
 	defaultTimeout   = 10.0
 )
@@ -278,6 +304,10 @@ type Server struct {
 	// a dedicated probe and a "no chat" verdict is always signature-backed.
 	chatAdvMu sync.Mutex
 	chatAdv   map[string]chatAdvEntry
+	// mtpAdv caches the VERIFIED MTProto-advertised bit per config, filled
+	// from ordinary feed metadata so the Tel tab needs no probing.
+	mtpAdvMu sync.Mutex
+	mtpAdv   map[string]chatAdvEntry
 
 	logMu    sync.RWMutex
 	logLines []string
@@ -342,6 +372,9 @@ type Server struct {
 
 	// chat is the standalone messenger hub (identity, threads, poll loop).
 	chat *chatHub
+	// tel is the MTProto-over-DNS bridge ("Tel" tab). Separate from chat: a
+	// different protocol, a different account, and the relay never holds keys.
+	tel *telHub
 
 	// newMsgMu guards newMsgHandler, an optional callback the background chat
 	// poll loop invokes when it finds new messages. The mobile bind layer wires
@@ -418,6 +451,7 @@ func New(dataDir string, port int, host string, password string) (*Server, error
 		s.broadcast("event: update\ndata: \"telemirror:" + username + "\"\n\n")
 	})
 	s.chat = newChatHub(s, dataDir)
+	s.tel = newTelHub(s, dataDir)
 
 	if mediaCache != nil {
 		go mediaCache.Cleanup()
@@ -570,6 +604,24 @@ func (s *Server) serve(ln net.Listener) error {
 	mux.HandleFunc("/api/chat/messages", s.handleChatMessages)
 	mux.HandleFunc("/api/chat/setserver", s.handleChatSetServer)
 	mux.HandleFunc("/api/chat/send", s.handleChatSend)
+	mux.HandleFunc("/api/tel/info", s.handleTelInfo)
+	mux.HandleFunc("/api/tel/connect", s.handleTelConnect)
+	mux.HandleFunc("/api/tel/disconnect", s.handleTelDisconnect)
+	mux.HandleFunc("/api/tel/credentials", s.handleTelCredentials)
+	mux.HandleFunc("/api/tel/recheck", s.handleTelRecheck)
+	mux.HandleFunc("/api/tel/auth", s.handleTelAuth)
+	mux.HandleFunc("/api/tel/dialogs", s.handleTelDialogs)
+	mux.HandleFunc("/api/tel/history", s.handleTelHistory)
+	mux.HandleFunc("/api/tel/send", s.handleTelSend)
+	mux.HandleFunc("/api/tel/delete", s.handleTelDelete)
+	mux.HandleFunc("/api/tel/resolve", s.handleTelResolve)
+	mux.HandleFunc("/api/tel/read", s.handleTelRead)
+	mux.HandleFunc("/api/tel/peer", s.handleTelPeer)
+	mux.HandleFunc("/api/tel/watch", s.handleTelWatch)
+	mux.HandleFunc("/api/tel/mute", s.handleTelMute)
+	mux.HandleFunc("/api/tel/stats", s.handleTelStats)
+	mux.HandleFunc("/api/tel/react", s.handleTelReact)
+	mux.HandleFunc("/api/tel/join", s.handleTelJoin)
 	mux.HandleFunc("/api/chat/poll", s.handleChatPoll)
 	mux.HandleFunc("/api/chat/peer-status", s.handleChatPeerStatus)
 	mux.HandleFunc("/api/chat/settings", s.handleChatSettings)
@@ -811,6 +863,9 @@ func (s *Server) initFetcher() error {
 	// Cache this config's VERIFIED chat-advertised bit from the feed's regular
 	// metadata fetches, so the messenger needn't re-probe to learn it.
 	if feedKey := chatServerKey(cfg.Domain); feedKey != "" {
+		fetcher.SetOnMetaMTProtoAvail(func(advertised, verified bool) {
+			s.recordMTPAdv(feedKey, advertised, verified)
+		})
 		fetcher.SetOnMetaChatAvail(func(advertised, verified bool) {
 			s.recordChatAdv(feedKey, advertised, verified)
 		})
@@ -853,6 +908,9 @@ func (s *Server) initFetcher() error {
 	// poll loop also dies with fetcherCtx.
 	if s.chat != nil {
 		s.chat.reset(ctx)
+		// A fetcher rebuild invalidates the tunnel under the bridge, so the
+		// Tel hub drops its connection and takes the new lifetime context.
+		s.tel.reset(ctx)
 	}
 	return nil
 }
@@ -911,6 +969,11 @@ func (s *Server) buildChatFetcher(cfg Config, resolvers []string, ctx context.Co
 	// Cache this config's VERIFIED chat-advertised bit from the messenger's own
 	// metadata fetches too (shared with the feed's, keyed by server).
 	if chatKey := chatServerKey(cfg.Domain); chatKey != "" {
+		// Same for the tunnel bit. Without this only the ACTIVE config ever
+		// got one, so every other config looked like it had no tunnel.
+		f.SetOnMetaMTProtoAvail(func(advertised, verified bool) {
+			s.recordMTPAdv(chatKey, advertised, verified)
+		})
 		f.SetOnMetaChatAvail(func(advertised, verified bool) {
 			s.recordChatAdv(chatKey, advertised, verified)
 		})

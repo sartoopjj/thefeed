@@ -55,9 +55,12 @@ type hourlyReport struct {
 		Domain  string `json:"domain"`
 		Queries int64  `json:"queries"`
 	} `json:"domains"`
-	ChatStats  map[string]int64 `json:"chat"`
-	MediaCache *mediaCacheStats `json:"mediaCache"`
-	GHRelay    *ghRelayStats    `json:"ghRelay"`
+	ChatStats map[string]int64 `json:"chat"`
+	// MTProtoStats is the Telegram proxy: how many people are connected and
+	// how many sockets to Telegram that costs right now.
+	MTProtoStats map[string]int64 `json:"mtproto"`
+	MediaCache   *mediaCacheStats `json:"mediaCache"`
+	GHRelay      *ghRelayStats    `json:"ghRelay"`
 }
 
 // mediaCacheStats mirrors server.MediaCacheStats. Bytes is the logical size of
@@ -86,22 +89,23 @@ type ghRelayStats struct {
 
 // aggregate accumulates parsed reports.
 type aggregate struct {
-	reports         int
-	total           int64
-	metadata        int64
-	version         int64
-	media           int64
-	chat            int64
-	invalid         int64
-	channels        map[string]int64 // content channels: name -> queries
-	reserved        map[int]int64
-	domains         map[string]int64
-	hours           map[int]int64 // hour-of-day -> total queries
-	series          []int64       // per-report total, in order (for the sparkline)
-	lastChatStats   map[string]int64
-	lastMedia       *mediaCacheStats
-	lastRelay       *ghRelayStats
-	firstTo, lastTo time.Time
+	reports          int
+	total            int64
+	metadata         int64
+	version          int64
+	media            int64
+	chat             int64
+	invalid          int64
+	channels         map[string]int64 // content channels: name -> queries
+	reserved         map[int]int64
+	domains          map[string]int64
+	hours            map[int]int64 // hour-of-day -> total queries
+	series           []int64       // per-report total, in order (for the sparkline)
+	lastChatStats    map[string]int64
+	lastMTProtoStats map[string]int64
+	lastMedia        *mediaCacheStats
+	lastRelay        *ghRelayStats
+	firstTo, lastTo  time.Time
 
 	// filterFrom/filterTo (either may be zero) limit which hourly reports are
 	// aggregated, by each report's window timestamp.
@@ -153,6 +157,14 @@ func (a *aggregate) add(rep *hourlyReport) {
 	a.chat += rep.Chat
 	a.invalid += rep.Invalid
 	a.series = append(a.series, rep.Total)
+	if rep.MTProtoStats != nil {
+		if a.lastMTProtoStats == nil {
+			a.lastMTProtoStats = map[string]int64{}
+		}
+		for k, v := range rep.MTProtoStats {
+			a.lastMTProtoStats[k] = v
+		}
+	}
 	if rep.ChatStats != nil {
 		if a.lastChatStats == nil {
 			a.lastChatStats = map[string]int64{}

@@ -64,6 +64,13 @@ type Feed struct {
 	chatInfoBlocks [][]byte
 	// chatAvailable sets the metadata "server has chat" flag bit.
 	chatAvailable bool
+	// mtprotoAvailable sets the metadata "server relays MTProto" flag bit, so
+	// a client can mark the config without probing it.
+	mtprotoAvailable bool
+	// mtprotoInfoBlocks serves the tunnel capability payload on
+	// MTProtoInfoChannel. Empty means no tunnel — not-found, which clients
+	// negative-cache, exactly like chat.
+	mtprotoInfoBlocks [][]byte
 
 	// signKey is the server ed25519 key used to sign ExtraBlocks. nil
 	// disables signing (old behaviour). extraBlocks holds, per channel,
@@ -195,6 +202,9 @@ func (f *Feed) GetBlock(channel, block int) ([]byte, error) {
 	if channel == int(protocol.ChatInfoChannel) {
 		return f.getChatInfoBlock(block)
 	}
+	if channel == int(protocol.MTProtoInfoChannel) {
+		return f.getMTProtoInfoBlock(block)
+	}
 	// Channel sits in the binary media range — delegate to MediaCache. We
 	// drop the read lock first because MediaCache uses its own lock and we
 	// don't want to hold f.mu across that path.
@@ -307,6 +317,18 @@ func (f *Feed) SetChatAvailable(v bool) {
 	f.rebuildMetaBlocks()
 }
 
+// SetMTProtoAvailable sets the metadata flag advertising that this server
+// relays MTProto over DNS.
+func (f *Feed) SetMTProtoAvailable(v bool) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.mtprotoAvailable == v {
+		return
+	}
+	f.mtprotoAvailable = v
+	f.rebuildMetaBlocks()
+}
+
 // SetChatInfoPayload publishes (or clears, with empty payload) the chat
 // capability data on ChatInfoChannel. Block 0 is prefixed with a uint16
 // total-block count (same convention as titles); the channel is signed like
@@ -338,6 +360,38 @@ func (f *Feed) getChatInfoBlock(block int) ([]byte, error) {
 			return eb, nil
 		}
 		return nil, fmt.Errorf("chat-info block %d out of range (%d blocks)", block, len(blocks))
+	}
+	return blocks[block], nil
+}
+
+// SetMTProtoInfoPayload publishes (or clears, with an empty payload) the
+// tunnel capability data on MTProtoInfoChannel. Block 0 carries a uint16
+// block count, mirroring the chat payload.
+func (f *Feed) SetMTProtoInfoPayload(payload []byte) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if len(payload) == 0 {
+		f.mtprotoInfoBlocks = nil
+		delete(f.extraBlocks, int(protocol.MTProtoInfoChannel))
+		return
+	}
+	blocks := protocol.SplitIntoBlocks(payload)
+	prefix := []byte{byte(len(blocks) >> 8), byte(len(blocks))}
+	blocks[0] = append(prefix, blocks[0]...)
+	f.mtprotoInfoBlocks = blocks
+	f.buildExtraBlockLocked(int(protocol.MTProtoInfoChannel), f.mtprotoInfoBlocks)
+}
+
+func (f *Feed) getMTProtoInfoBlock(block int) ([]byte, error) {
+	blocks := f.mtprotoInfoBlocks
+	if len(blocks) == 0 {
+		return nil, fmt.Errorf("mtproto not enabled")
+	}
+	if block < 0 || block >= len(blocks) {
+		if eb, ok := f.extraBlockAt(int(protocol.MTProtoInfoChannel), block, len(blocks)); ok {
+			return eb, nil
+		}
+		return nil, fmt.Errorf("mtproto-info block %d out of range (%d blocks)", block, len(blocks))
 	}
 	return blocks[block], nil
 }
@@ -385,6 +439,7 @@ func (f *Feed) rebuildMetaBlocks() {
 		NextFetch:        f.nextFetch,
 		TelegramLoggedIn: f.telegramLoggedIn,
 		ChatAvailable:    f.chatAvailable,
+		MTProtoAvailable: f.mtprotoAvailable,
 	}
 
 	for i, name := range f.channels {

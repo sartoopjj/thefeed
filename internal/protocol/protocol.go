@@ -107,7 +107,11 @@ type Metadata struct {
 	// (flags bit 0x02). Lets clients skip the ChatInfo probe on chatless
 	// servers and tell apart "no chat" from "chat, but you lack the key".
 	ChatAvailable bool
-	Channels      []ChannelInfo
+
+	// MTProtoAvailable advertises that this server can relay MTProto over DNS,
+	// so a client can show the shield on a config instead of probing each one.
+	MTProtoAvailable bool
+	Channels         []ChannelInfo
 }
 
 // ChannelInfo describes a single feed channel.
@@ -190,6 +194,9 @@ func SerializeMetadata(m *Metadata) []byte {
 	if m.ChatAvailable {
 		flags |= 0x02
 	}
+	if m.MTProtoAvailable {
+		flags |= 0x04
+	}
 	buf[off] = flags
 	off++
 
@@ -248,6 +255,7 @@ func ParseMetadata(data []byte) (*Metadata, error) {
 	off++
 	m.TelegramLoggedIn = flags&0x01 != 0
 	m.ChatAvailable = flags&0x02 != 0
+	m.MTProtoAvailable = flags&0x04 != 0
 
 	count := binary.BigEndian.Uint16(data[off:])
 	off += 2

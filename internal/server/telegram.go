@@ -427,24 +427,6 @@ func (tr *TelegramReader) resolvePeer(ctx context.Context, api *tg.Client, usern
 	return nil, fmt.Errorf("%s not found in resolved chats or users", username)
 }
 
-func (tr *TelegramReader) fetchChannel(ctx context.Context, api *tg.Client, username string) ([]protocol.Message, error) {
-	rp, err := tr.resolvePeer(ctx, api, username)
-	if err != nil {
-		return nil, err
-	}
-
-	hist, err := api.MessagesGetHistory(ctx, &tg.MessagesGetHistoryRequest{
-		Peer:  rp.peer,
-		Limit: tr.msgLimit,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("get history %s: %w", username, err)
-	}
-
-	userNames := buildUserMap(hist)
-	return tr.extractMessages(ctx, api, hist, protocol.ChatTypeChannel, userNames)
-}
-
 // buildUserMap extracts a user ID → display name map from a history response.
 func buildUserMap(hist tg.MessagesMessagesClass) map[int64]string {
 	var users []tg.UserClass

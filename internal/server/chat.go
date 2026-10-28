@@ -42,14 +42,14 @@ type ChatService struct {
 }
 
 type chatSession struct {
-	account  [protocol.AddressSize]byte
-	ksession [protocol.KeySize]byte
-	created  time.Time
-	lastSeen time.Time
-	upload   *chatUpload
-	frag     *chatFragReasm // in-flight OP_FRAG reassembly (one op at a time)
-	opMu      sync.Mutex    // serializes ops so concurrent retransmits can't race
-	respCache chatRespCache // sealed response bytes keyed by request counter
+	account   [protocol.AddressSize]byte
+	ksession  [protocol.KeySize]byte
+	created   time.Time
+	lastSeen  time.Time
+	upload    *chatUpload
+	frag      *chatFragReasm // in-flight OP_FRAG reassembly (one op at a time)
+	opMu      sync.Mutex     // serializes ops so concurrent retransmits can't race
+	respCache chatRespCache  // sealed response bytes keyed by request counter
 }
 
 // chatRespCache caches the sealed response for each request counter so that a

@@ -67,13 +67,6 @@ func (rc *ResolverChecker) SetAutoScan(enabled bool) {
 	rc.autoScan = enabled
 }
 
-// Start begins the periodic health-check loop in the background.
-// An initial check runs immediately; subsequent checks happen every 10 minutes.
-// ctx controls the lifetime — cancel it to stop the checker.
-func (rc *ResolverChecker) Start(ctx context.Context) {
-	rc.StartAndNotify(ctx, nil)
-}
-
 // StartAndNotify is like Start but calls onFirstDone (if non-nil) after the
 // first successful health-check pass (i.e. at least one resolver is healthy),
 // before the periodic ticker begins.

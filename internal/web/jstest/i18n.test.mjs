@@ -142,6 +142,39 @@ for (const key of en) {
 assert('placeholders survive translation', placeholderMismatch.length === 0,
   placeholderMismatch.join('\n  '));
 
+// The progress strip is built by concatenating these keys into one line. A
+// Latin-script word among them makes the bidi algorithm reorder that line in a
+// right-to-left language, which is how "512 B" ended up split across the text
+// around it. Units belong in the table, translated, not hardcoded in tel.js.
+const stripKeys = [
+  'tel_connecting', 'tel_working', 'tel_checking_new', 'tel_attempt',
+  'tel_of_queries', 'tel_receiving', 'tel_awaiting_reply', 'tel_err_msg_not_found', 'tel_join', 'tel_step', 'tel_updating_views', 'tel_updating_reactions',
+  'tel_phase_discover', 'tel_phase_tunnel', 'tel_phase_telegram',
+  'tel_phase_keyexchange', 'tel_phase_session',
+  'tel_unit_b', 'tel_unit_kb', 'tel_unit_mb', 'tel_unit_gb',
+];
+const rtlLangs = ['fa'];
+const latinInRTL = [];
+for (const key of stripKeys) {
+  if (typeof tables.en[key] !== 'string') {
+    latinInRTL.push(`en.${key}: missing, so the strip falls back to the raw key`);
+    continue;
+  }
+  for (const lang of rtlLangs) {
+    const val = tables[lang] && tables[lang][key];
+    if (typeof val !== 'string') {
+      latinInRTL.push(`${lang}.${key}: missing`);
+      continue;
+    }
+    // Placeholders are substituted before display, so they are not text.
+    const bare = val.replace(/\{\w+\}/g, '');
+    const latin = bare.match(/[A-Za-z]+/g);
+    if (latin) latinInRTL.push(`${lang}.${key}: Latin text ${JSON.stringify(latin)} in ${JSON.stringify(val)}`);
+  }
+}
+assert('progress strip carries no Latin text in an RTL language', latinInRTL.length === 0,
+  latinInRTL.join('\n  '));
+
 console.log(`${passed} passed, ${failed} failed  (${en.size} keys x ${langs.length} langs)`);
 // Not process.exit(): stdout is a pipe under `go test`, and exit() drops what
 // has not flushed — truncating the very list that explains the failure.

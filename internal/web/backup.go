@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -27,6 +28,20 @@ type backupSections struct {
 	Saved      json.RawMessage   `json:"saved,omitempty"`
 	SavedMedia []backupMediaBlob `json:"savedMedia,omitempty"`
 	BgImage    []byte            `json:"bgImage,omitempty"`
+	// Telegram is the gotd session for the MTProto bridge. It holds the auth
+	// key, so whoever has it IS the user on Telegram: it goes ONLY into an
+	// encrypted backup, and is opt-in like every other section.
+	Telegram []byte `json:"telegram,omitempty"`
+	// TelegramCache is the cached conversations and messages, its own opt-in
+	// item: it is bulky and rebuildable, so a user may well want the session
+	// without it.
+	//
+	// Both travel DECRYPTED inside the backup, which is itself sealed with the
+	// user's password. That is how Saved already does it, and it means the
+	// device key never leaves the device and a restore works on any machine --
+	// shipping the sealed bytes instead would hand the next device a file it
+	// has no key for, which now reads as "start fresh", i.e. a silent logout.
+	TelegramCache []byte `json:"telegramCache,omitempty"`
 }
 
 type backupMediaBlob struct {
@@ -106,6 +121,18 @@ func (s *Server) handleBackupExport(w http.ResponseWriter, r *http.Request) {
 	if want["bgImage"] {
 		if raw, err := os.ReadFile(filepath.Join(s.dataDir, "bg_image")); err == nil {
 			sec.BgImage = raw
+		}
+	}
+	if want["telegram"] {
+		// Through the sealing layer, so what lands in the backup is the session
+		// itself rather than ciphertext only this device can open.
+		if plain, err := s.tel.sessionFile().LoadSession(r.Context()); err == nil {
+			sec.Telegram = plain
+		}
+	}
+	if want["telegramCache"] {
+		if plain, err := s.tel.store().export(); err == nil {
+			sec.TelegramCache = plain
 		}
 	}
 
@@ -301,6 +328,13 @@ func buildBackupPreview(p *backupPayload) map[string]any {
 	if len(p.Sections.BgImage) > 0 {
 		out["bgImage"] = map[string]any{"bytes": len(p.Sections.BgImage)}
 	}
+	if len(p.Sections.Telegram) > 0 {
+		// Byte count only: never echo any of the auth key back.
+		out["telegram"] = map[string]any{"bytes": len(p.Sections.Telegram)}
+	}
+	if len(p.Sections.TelegramCache) > 0 {
+		out["telegramCache"] = map[string]any{"bytes": len(p.Sections.TelegramCache)}
+	}
 
 	return out
 }
@@ -312,7 +346,15 @@ func (s *Server) handleBackupRestore(w http.ResponseWriter, r *http.Request) {
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, backupMaxBytes)
 	if err := r.ParseMultipartForm(32 << 20); err != nil {
-		http.Error(w, "file too large", http.StatusRequestEntityTooLarge)
+		// Only say "too large" when it was. A truncated upload, the wrong
+		// content type or a body that is not a form at all are not size
+		// problems, and reporting them as one misdirects the debugging.
+		var tooBig *http.MaxBytesError
+		if errors.As(err, &tooBig) {
+			http.Error(w, "file too large", http.StatusRequestEntityTooLarge)
+			return
+		}
+		http.Error(w, "unreadable upload", http.StatusBadRequest)
 		return
 	}
 	pw := r.FormValue("password")
@@ -385,6 +427,17 @@ func (s *Server) handleBackupRestore(w http.ResponseWriter, r *http.Request) {
 	}
 	if want["bgImage"] && len(p.Sections.BgImage) > 0 {
 		_ = os.WriteFile(filepath.Join(s.dataDir, "bg_image"), p.Sections.BgImage, 0o600)
+	}
+	if want["telegram"] && len(p.Sections.Telegram) > 0 {
+		// Restoring a session makes this device that Telegram account, so it is
+		// written back THROUGH the sealing layer: sealed under this device's
+		// own key, never left as plaintext on disk.
+		if err := s.tel.sessionFile().StoreSession(r.Context(), p.Sections.Telegram); err != nil {
+			log.Printf("backup: restoring the Telegram session failed: %v", err)
+		}
+	}
+	if want["telegramCache"] && len(p.Sections.TelegramCache) > 0 {
+		s.tel.store().importFrom(p.Sections.TelegramCache)
 	}
 
 	writeJSON(w, map[string]any{"ok": true})

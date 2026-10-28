@@ -192,8 +192,10 @@ func TestE2E_Settings_ConnectionDefaults(t *testing.T) {
 	if got, _ := m["queryMode"].(string); got != "single" {
 		t.Errorf("queryMode default = %v, want \"single\"", m["queryMode"])
 	}
-	if got, _ := m["rateLimit"].(float64); got != 10 {
-		t.Errorf("rateLimit default = %v, want 10", m["rateLimit"])
+	// Queries per second. Raised from 10 to 30 for the messenger and the
+	// MTProto tunnel, where every cell is a separate query.
+	if got, _ := m["rateLimit"].(float64); got != 30 {
+		t.Errorf("rateLimit default = %v, want 30", m["rateLimit"])
 	}
 	if got, _ := m["scatter"].(float64); got != 6 {
 		t.Errorf("scatter default = %v, want 6", m["scatter"])

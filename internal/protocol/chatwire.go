@@ -63,8 +63,11 @@ const (
 	// ChatCellPlainMin / ChatCellPlainMax bound the configurable per-cell op
 	// plaintext budget B (RFC §8.2 — v1 constant, client-chosen). The default is
 	// ChatCellPlainSize (15); a client may pick any B in [min,max] to trade query
-	// length against query count. Floor = room for the smallest framing; ceiling =
-	// fits a single DNS label.
+	// length against query count. Floor = room for the smallest framing.
+	//
+	// The ceiling leaves a DNS label only partly used, on purpose: a shorter
+	// query is likelier to get through a shutdown, so the unused room buys
+	// reach. Throughput comes from fewer round trips, never fatter cells.
 	ChatCellPlainMin = 6
 	ChatCellPlainMax = 21
 	// ChatCellPayloadMax is the largest sealed cell payload (max budget + jitter +
@@ -164,19 +167,12 @@ func ChatIsSessionLost(resp []byte) bool {
 
 func chatHdr(op byte) byte { return byte(ChatProtocolVersion)<<4 | (op & 0x0F) }
 
-// ChatPlainOp / ChatPlainVersion read the op / version from a sealed-plaintext.
+// ChatPlainOp reads the op from a sealed-cell plaintext.
 func ChatPlainOp(pt []byte) byte {
 	if len(pt) == 0 {
 		return 0
 	}
 	return pt[0] & 0x0F
-}
-
-func ChatPlainVersion(pt []byte) byte {
-	if len(pt) == 0 {
-		return 0
-	}
-	return pt[0] >> 4
 }
 
 func putUint24(b []byte, v uint32) { b[0] = byte(v >> 16); b[1] = byte(v >> 8); b[2] = byte(v) }

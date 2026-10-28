@@ -3,6 +3,7 @@ package web
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -12,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/sartoopjj/thefeed/internal/client"
 	"github.com/sartoopjj/thefeed/internal/protocol"
 )
 
@@ -639,5 +641,94 @@ func TestSameOriginGuard(t *testing.T) {
 	// Reads are never blocked, even cross-site.
 	if code, reached := run(http.MethodGet, "cross-site"); code != http.StatusOK || !reached {
 		t.Fatalf("cross-site GET: code=%d reached=%v, want 200/true", code, reached)
+	}
+}
+
+// A signed "this server HAS a messenger" must not be overruled by a probe
+// that merely failed to arrive.
+//
+// EnsureInfo answers "disabled" when the ChatInfo block does not turn up and
+// the server has never been confirmed — a guess that a silent server has none.
+// On a shutdown-grade link that guess is wrong: the block is late, not absent.
+// Reporting it as "disabled" contradicts metadata whose signature was just
+// verified, and costs the user a thirty-minute backoff instead of two minutes.
+func TestChatUnreachableIsNotReportedAsDisabled(t *testing.T) {
+	// The reason shown to the user.
+	if got := chatStatusKey(client.ErrChatUnreachable); got != "chat_err_unreachable" {
+		t.Fatalf("unreachable maps to %q", got)
+	}
+	// And the cost of being wrong: a transient failure must not buy the long
+	// ceiling that a verified "no messenger" does.
+	short := chatServerBackoff(client.ErrChatUnreachable)
+	long := chatServerBackoff(client.ErrChatDisabled)
+	if short >= long {
+		t.Fatalf("unreachable backs off %v, disabled %v — a late block costs as much "+
+			"as a server that really has no messenger", short, long)
+	}
+
+	// The probe must carry out the substitution when the verified bit says the
+	// server advertises chat.
+	src, err := os.ReadFile("handlers_chat.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(src),
+		"if advertised && fresh && errors.Is(err, client.ErrChatDisabled) {") {
+		t.Error("the probe no longer prefers the verified metadata bit over a " +
+			"ChatInfo fetch that simply did not arrive")
+	}
+}
+
+// Turning a server on must not report a failure for something that simply has
+// not finished.
+//
+// The first registration on a shutdown-grade link is many round trips from a
+// cold cache and regularly outlives its budget, while the retry behind it goes
+// on and usually succeeds seconds later. Reporting that as an error told the
+// user their server was broken every single time they turned it on.
+func TestChatEnableSeparatesTimeoutFromRefusal(t *testing.T) {
+	src, err := os.ReadFile("handlers_chat.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := string(src)
+	if !strings.Contains(body, `out["checking"] = true`) {
+		t.Fatal("the enable path no longer distinguishes running out of time from " +
+			"being refused; a slow first registration reads as a broken server")
+	}
+	// And the distinction has to be made on the deadline, not guessed.
+	if !strings.Contains(body, "sctx.Err() != nil || errors.Is(err, context.DeadlineExceeded)") {
+		t.Error("the timeout case is not identified from the deadline")
+	}
+	// A real refusal must still carry its reason through.
+	if !strings.Contains(body, `out["reason"] = chatStatusKey(err)`) {
+		t.Error("a genuine refusal no longer reports why")
+	}
+}
+
+// "Cannot reach the server" must reach the user as exactly that.
+//
+// Sending with no healthy resolver, or an attempt that runs out of time, both
+// mean the link is down — the one failure the user can actually do something
+// about. Both used to fall through to the catch-all "something went wrong",
+// which says nothing and sends them looking in the wrong place.
+func TestChatLinkFailuresSayTheLinkIsDown(t *testing.T) {
+	cases := []struct {
+		name string
+		err  error
+	}{
+		{"no resolver to send over", client.ErrChatNoResolvers},
+		{"wrapped", fmt.Errorf("send: %w", client.ErrChatNoResolvers)},
+		{"ran out of time", context.DeadlineExceeded},
+		{"the existing unreachable", client.ErrChatUnreachable},
+	}
+	for _, tc := range cases {
+		if got := chatStatusKey(tc.err); got != "chat_err_unreachable" {
+			t.Errorf("%s: reported %q, want chat_err_unreachable", tc.name, got)
+		}
+	}
+	// A genuine server verdict must NOT be swallowed into "unreachable".
+	if got := chatStatusKey(client.ErrChatServerDisabled); got != "chat_err_server_disabled" {
+		t.Errorf("a real server verdict became %q", got)
 	}
 }
