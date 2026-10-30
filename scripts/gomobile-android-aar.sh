@@ -17,6 +17,7 @@ trap 'rm -rf "$work"' EXIT
 
 for abi in "${abis[@]}"; do
   echo "== android/$abi"
+  mkdir -p "$work/$abi"
   gomobile bind -target="android/$abi" -androidapi 24 \
     -ldflags="$ldflags" -o "$work/$abi/mobile.aar" ./mobile
 done

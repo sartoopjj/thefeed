@@ -418,14 +418,26 @@ jobs:
           go mod tidy
 
       - name: Build Mobile.xcframework
+        timeout-minutes: 8
         run: |
           VERSION="${{ github.ref_type == 'tag' && github.ref_name || '0.0.1' }}"
           COMMIT=$(git rev-parse --short HEAD)
           DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
           LDFLAGS="-X github.com/sartoopjj/thefeed/internal/version.Version=${VERSION} -X github.com/sartoopjj/thefeed/internal/version.Commit=${COMMIT} -X github.com/sartoopjj/thefeed/internal/version.Date=${DATE}"
+          # Once a minute: what is running and how much memory is left, so a
+          # slow bind shows which command it is stuck in.
+          ( while sleep 60; do
+              echo "::group::sample $(date -u +%H:%M:%S)"
+              sysctl -n vm.swapusage
+              vm_stat | grep -E 'Pages free|Swapouts'
+              ps -Ao pcpu=,rss=,etime=,args= -r | head -5 | cut -c1-220
+              echo "::endgroup::"
+            done ) &
+          SAMPLER=$!
+          trap 'kill $SAMPLER 2>/dev/null' EXIT
           # Device slice only: the archive is for a device, and every extra
           # slice is another concurrent compile of gotd/td/tg.
-          gomobile bind -iosversion=15.0 -target=ios -ldflags="${LDFLAGS}" -o ios/Mobile.xcframework ./mobile
+          gomobile bind -x -iosversion=15.0 -target=ios/arm64 -ldflags="${LDFLAGS}" -o ios/Mobile.xcframework ./mobile
 
       - name: Archive (unsigned)
         run: |

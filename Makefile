@@ -225,7 +225,7 @@ ios-bind: ios-deps
 	@command -v gomobile >/dev/null 2>&1 || { echo "gomobile not found. Run: go install golang.org/x/mobile/cmd/gomobile@latest && gomobile init"; exit 1; }
 	rm -rf $(IOS_SLICES) $(IOS_FRAMEWORK)
 	mkdir -p $(IOS_SLICES)/device $(IOS_SLICES)/sim
-	$(GOMOBILE_ENV) gomobile bind -iosversion=15.0 -target=ios -ldflags='$(IOS_LDFLAGS)' -o $(IOS_SLICES)/device/Mobile.xcframework ./mobile
+	$(GOMOBILE_ENV) gomobile bind -iosversion=15.0 -target=ios/arm64 -ldflags='$(IOS_LDFLAGS)' -o $(IOS_SLICES)/device/Mobile.xcframework ./mobile
 	$(GOMOBILE_ENV) gomobile bind -iosversion=15.0 -target=iossimulator/arm64 -ldflags='$(IOS_LDFLAGS)' -o $(IOS_SLICES)/sim/Mobile.xcframework ./mobile
 	xcodebuild -create-xcframework \
 		$$(for f in $(IOS_SLICES)/*/Mobile.xcframework/*/Mobile.framework; do printf -- '-framework %s ' "$$f"; done) \

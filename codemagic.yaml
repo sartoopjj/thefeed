@@ -103,7 +103,7 @@ workflows:
           DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
           LDFLAGS="-X github.com/sartoopjj/thefeed/internal/version.Version=v${APP_MARKETING_VERSION} -X github.com/sartoopjj/thefeed/internal/version.Commit=${COMMIT} -X github.com/sartoopjj/thefeed/internal/version.Date=${DATE}"
           # Device slice only; see the same step in .github/workflows/build.yml.
-          gomobile bind -iosversion=15.0 -target=ios -ldflags="${LDFLAGS}" -o ios/Mobile.xcframework ./mobile
+          gomobile bind -iosversion=15.0 -target=ios/arm64 -ldflags="${LDFLAGS}" -o ios/Mobile.xcframework ./mobile
       - name: Set up provisioning profiles
         script: xcode-project use-profiles
       - name: Build signed IPA

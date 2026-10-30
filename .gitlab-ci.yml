@@ -485,7 +485,7 @@ ios-ipa:
     # devices working. The xcodebuild below overrides the app to match;
     # the two must move together, or the framework's minimum ends up
     # above the app's and the link fails.
-    - gomobile bind -iosversion=13.0 -target=ios -ldflags="${LDFLAGS}" -o ios/Mobile.xcframework ./mobile
+    - gomobile bind -iosversion=13.0 -target=ios/arm64 -ldflags="${LDFLAGS}" -o ios/Mobile.xcframework ./mobile
     - MARKETING_VERSION="${VERSION#v}"
     - BUILD_NUMBER=$(git rev-list --count HEAD)
     - |
