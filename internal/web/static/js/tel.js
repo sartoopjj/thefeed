@@ -2024,6 +2024,7 @@ function telRender() {
   }
   telRestoreScroll('telBody', listScroll, false);
   telRestoreScroll('telMsgs', msgScroll, true);
+  telUpdateScrollDown();
   // A multi-line draft must not snap back to one line.
   var input = document.getElementById('telInput');
   if (input && telState.draft) telGrowInput(input);
@@ -2063,8 +2064,31 @@ function telKeepComposer(pane, html) {
 function telEditedHTML(m) {
   if (!m.editDate || m.service) return '';
   return '<span class="tel-msg-edited" title="' + telAttrQ(telFmtTime(m.editDate)) + '">' +
-    telEsc(telT('tel_edited')) + '</span>';
+    telEsc(telT('telemirror_edited')) + '</span>';
 }
+
+// The jump-to-latest button shows once the reader is more than this far
+// above the newest message.
+var TEL_SCROLL_DOWN_PX = 240;
+
+// telUpdateScrollDown shows the button only away from the bottom, and keeps
+// it just above the composer, whose height changes as a message grows.
+function telUpdateScrollDown() {
+  var box = document.getElementById('telMsgs');
+  var btn = document.getElementById('telScrollDown');
+  if (!box || !btn) return;
+  var far = box.scrollHeight - box.scrollTop - box.clientHeight > TEL_SCROLL_DOWN_PX;
+  btn.classList.toggle('hidden', !far);
+  var comp = document.querySelector('#telPane .tel-compose');
+  btn.style.bottom = ((comp ? comp.offsetHeight : 0) + 14) + 'px';
+}
+window.telUpdateScrollDown = telUpdateScrollDown;
+
+function telScrollToBottom() {
+  var box = document.getElementById('telMsgs');
+  if (box) box.scrollTo({ top: box.scrollHeight, behavior: 'smooth' });
+}
+window.telScrollToBottom = telScrollToBottom;
 
 function telCaptureScroll(id) {
   var el = document.getElementById(id);
@@ -3158,7 +3182,7 @@ function telRenderPane() {
   // One listener on the container, not one per link: the list is rebuilt on
   // every render and per-link handlers would be re-bound each time.
   html += '<div class="tel-msgs" id="telMsgs" onclick="telLinkClick(event)"' +
-    ' onscroll="telStatsOnScroll()">';
+    ' onscroll="telStatsOnScroll();telUpdateScrollDown()">';
   if (peer.kind === 'forum') {
     html += '<div class="tel-banner" dir="auto">' + telEsc(telT('tel_forum_note')) + '</div>';
   }
@@ -3229,6 +3253,10 @@ function telRenderPane() {
       telEsc(telFmtTime(m.date)) + '</span>' + telTickHTML(m, readOutbox) + '</span></div>';
   });
   html += '</div>';
+  // The messenger's button, reused: the same look in both sections.
+  html += '<button id="telScrollDown" class="chat-scroll-down hidden" onclick="telScrollToBottom()" aria-label="' +
+    telAttrQ(telT('chat_scroll_bottom')) + '" title="' + telAttrQ(telT('chat_scroll_bottom')) + '">' +
+    icon('arrowDown') + '</button>';
 
   // Telegram refuses a message here, so offering a composer would only
   // produce a failure the user cannot act on. No notice either: a channel you

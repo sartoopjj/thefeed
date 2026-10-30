@@ -152,7 +152,7 @@ const sendAck = (th, msgId, text) => {
   const edited = new Function('telT', 'telEsc', 'telAttrQ', 'telFmtTime',
     fn('telEditedHTML') + '; return telEditedHTML;')((k) => '[' + k + ']', (x) => x, (x) => x, (d) => 't' + d);
   eq('an edited message says so, with the edit time on hover',
-    edited({ id: 1, text: 'x', editDate: 90 }), '<span class="tel-msg-edited" title="t90">[tel_edited]</span>');
+    edited({ id: 1, text: 'x', editDate: 90 }), '<span class="tel-msg-edited" title="t90">[telemirror_edited]</span>');
   eq('an unedited one does not', edited({ id: 1, text: 'x' }), '');
   eq('nor a service line', edited({ id: 1, service: true, editDate: 90 }), '');
   eq('the mark is drawn in every message\'s meta line', /telStatsHTML\(m\) \+ telEditedHTML\(m\)/.test(src), true);

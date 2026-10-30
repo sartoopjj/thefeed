@@ -36,5 +36,14 @@ ok('focus restore leaves an element that kept focus alone',
   /el === document\.activeElement\) return/.test(restore) &&
   restore.indexOf('activeElement') < restore.indexOf('setSelectionRange'));
 
+// The jump-to-latest button: drawn with the conversation, re-evaluated on
+// every scroll and after every render (a render can move the list).
+ok('the conversation draws a jump-to-latest button', /id="telScrollDown"/.test(src));
+ok('scrolling decides whether it shows', /onscroll="[^"]*telUpdateScrollDown\(\)/.test(src));
+ok('and so does every render', /telUpdateScrollDown\(\);/.test(body('telRender')));
+const upd = body('telUpdateScrollDown');
+ok('it hides near the bottom and sits above the composer',
+  /classList\.toggle\('hidden', !far\)/.test(upd) && /tel-compose/.test(upd));
+
 console.log(`tel_composer: ${pass} passed, ${fail} failed`);
 if (fail) process.exit(1);

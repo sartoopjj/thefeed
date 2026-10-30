@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -97,12 +96,10 @@ type limitsRow struct {
 	Limits    map[string]int `json:"limits"`
 }
 
+// getChatJSON is getJSON decoded into a struct rather than a map.
 func getChatJSON(t *testing.T, url string, v any) {
 	t.Helper()
-	resp, err := http.Get(url)
-	if err != nil {
-		t.Fatal(err)
-	}
+	resp := getJSON(t, url)
 	defer resp.Body.Close()
 	raw, _ := io.ReadAll(resp.Body)
 	if err := json.Unmarshal(raw, v); err != nil {
