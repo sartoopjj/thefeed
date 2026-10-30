@@ -212,34 +212,26 @@ ios-deps:
 	@grep -q "golang.org/x/mobile" go.mod || go get golang.org/x/mobile/bind golang.org/x/mobile/bind/objc
 	go mod tidy
 
-# Cap concurrent compiles for every gomobile bind.
-#
-# gomobile builds each target slice in its own goroutine with no limit (see
-# bind_iosapp.go: buildWG.Go inside the targets loop), and each of those is a
-# `go build` that defaults to one compile action per core. On an 8-core
-# machine `-target=ios,iossimulator` therefore means 3 slices x 8 = up to 24
-# concurrent compilers.
-#
-# That would be survivable if the work were even, but it is not:
-# github.com/gotd/td/tg is 30 MB of generated source, 881k lines, in ONE
-# package -- and the Go compiler holds a whole package in memory, so that
-# single action needs 1.5-2.5 GB on its own. The three slices walk the same
-# dependency graph in step, so they reach it together: 5-7 GB of compilers at
-# once, which on an 8 GB machine means swap thrash, not a slow build.
-#
-# CI already caps this (.github/workflows/build.yml, GOFLAGS: -p=2) and the
-# Makefile did not, which is why a laptop struggled where a 2-core runner did
-# not. Override with GOMOBILE_P=4 on a machine with room.
+# github.com/gotd/td/tg is 881k lines in one package, and gomobile builds
+# every target slice at the same time (bind_iosapp.go: buildWG.Go per
+# target), so each slice is another copy of that compile in memory at once.
+# GOFLAGS=-p only limits packages inside one slice, not the slices, so
+# ios-bind runs one slice per gomobile call and merges them afterwards.
 GOMOBILE_P ?= 1
 GOMOBILE_ENV = GOFLAGS=-p=$(GOMOBILE_P)
+IOS_SLICES = $(BUILD_DIR)/ios-slices
 
 ios-bind: ios-deps
 	@command -v gomobile >/dev/null 2>&1 || { echo "gomobile not found. Run: go install golang.org/x/mobile/cmd/gomobile@latest && gomobile init"; exit 1; }
-	$(GOMOBILE_ENV) gomobile bind -iosversion=15.0 -target=ios,iossimulator -ldflags='$(IOS_LDFLAGS)' -o $(IOS_FRAMEWORK) ./mobile
+	rm -rf $(IOS_SLICES) $(IOS_FRAMEWORK)
+	mkdir -p $(IOS_SLICES)/device $(IOS_SLICES)/sim
+	$(GOMOBILE_ENV) gomobile bind -iosversion=15.0 -target=ios -ldflags='$(IOS_LDFLAGS)' -o $(IOS_SLICES)/device/Mobile.xcframework ./mobile
+	$(GOMOBILE_ENV) gomobile bind -iosversion=15.0 -target=iossimulator/arm64 -ldflags='$(IOS_LDFLAGS)' -o $(IOS_SLICES)/sim/Mobile.xcframework ./mobile
+	xcodebuild -create-xcframework \
+		$$(for f in $(IOS_SLICES)/*/Mobile.xcframework/*/Mobile.framework; do printf -- '-framework %s ' "$$f"; done) \
+		-output $(IOS_FRAMEWORK)
 
-# One slice instead of three, for running on the simulator while developing.
-# A third of the work, and only one heavy compile in flight at a time.
-# The full three-slice framework is only needed for a device/TestFlight build.
+# Simulator slice only, for running on the simulator while developing.
 ios-bind-sim: ios-deps
 	@command -v gomobile >/dev/null 2>&1 || { echo "gomobile not found. Run: go install golang.org/x/mobile/cmd/gomobile@latest && gomobile init"; exit 1; }
 	$(GOMOBILE_ENV) gomobile bind -iosversion=15.0 -target=iossimulator/arm64 -ldflags='$(IOS_LDFLAGS)' -o $(IOS_FRAMEWORK) ./mobile
@@ -304,11 +296,10 @@ check-go-android:
 	fi; \
 	echo "Android build using Go $$have (>= $(MIN_GO_ANDROID))"
 
-# Four slices, so the cap in GOMOBILE_P matters even more here than on iOS.
 android-bind: check-go-android ios-deps
 	@command -v gomobile >/dev/null 2>&1 || { echo "gomobile not found. Run: go install golang.org/x/mobile/cmd/gomobile@latest && gomobile init"; exit 1; }
 	@mkdir -p $(ANDROID_AAR_DIR)
-	$(GOMOBILE_ENV) gomobile bind -target=android/arm,android/arm64,android/386,android/amd64 -androidapi 24 -ldflags='$(ANDROID_LDFLAGS)' -o $(ANDROID_AAR) ./mobile
+	$(GOMOBILE_ENV) bash scripts/gomobile-android-aar.sh $(ANDROID_AAR) '$(ANDROID_LDFLAGS)'
 
 # Two gradle passes: first produces 4 per-ABI APKs (arm, arm64, x86,
 # x86_64); second produces a universal APK containing 3 ABIs (no x86).

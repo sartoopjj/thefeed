@@ -102,7 +102,8 @@ workflows:
           COMMIT=$(git rev-parse --short HEAD)
           DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
           LDFLAGS="-X github.com/sartoopjj/thefeed/internal/version.Version=v${APP_MARKETING_VERSION} -X github.com/sartoopjj/thefeed/internal/version.Commit=${COMMIT} -X github.com/sartoopjj/thefeed/internal/version.Date=${DATE}"
-          gomobile bind -iosversion=15.0 -target=ios,iossimulator -ldflags="${LDFLAGS}" -o ios/Mobile.xcframework ./mobile
+          # Device slice only; see the same step in .github/workflows/build.yml.
+          gomobile bind -iosversion=15.0 -target=ios -ldflags="${LDFLAGS}" -o ios/Mobile.xcframework ./mobile
       - name: Set up provisioning profiles
         script: xcode-project use-profiles
       - name: Build signed IPA
@@ -173,8 +174,7 @@ workflows:
           # .so loadable on Android 15+ 16 KB-page devices.
           LDFLAGS="-s -w -X github.com/sartoopjj/thefeed/internal/version.Version=v${APP_MARKETING_VERSION} -X github.com/sartoopjj/thefeed/internal/version.Commit=${COMMIT} -X github.com/sartoopjj/thefeed/internal/version.Date=${DATE} -extldflags=-Wl,-z,max-page-size=16384"
           mkdir -p android/app/libs
-          gomobile bind -target=android/arm,android/arm64,android/386,android/amd64 -androidapi 24 \
-            -ldflags="${LDFLAGS}" -o android/app/libs/mobile.aar ./mobile
+          bash scripts/gomobile-android-aar.sh android/app/libs/mobile.aar "${LDFLAGS}"
       - name: Wire signing keystore
         script: |
           set -e

@@ -329,8 +329,7 @@ jobs:
           # this; explicit flag works on older NDKs too.
           LDFLAGS="-s -w -X github.com/sartoopjj/thefeed/internal/version.Version=${VERSION} -X github.com/sartoopjj/thefeed/internal/version.Commit=${COMMIT} -X github.com/sartoopjj/thefeed/internal/version.Date=${DATE} -extldflags=-Wl,-z,max-page-size=16384"
           mkdir -p android/app/libs
-          gomobile bind -target=android/arm,android/arm64,android/386,android/amd64 -androidapi 24 \
-            -ldflags="${LDFLAGS}" -o android/app/libs/mobile.aar ./mobile
+          bash scripts/gomobile-android-aar.sh android/app/libs/mobile.aar "${LDFLAGS}"
           echo "after the bind:"; df -h / | tail -1; free -h | head -2
           ls -lh android/app/libs/mobile.aar
 
@@ -424,7 +423,9 @@ jobs:
           COMMIT=$(git rev-parse --short HEAD)
           DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
           LDFLAGS="-X github.com/sartoopjj/thefeed/internal/version.Version=${VERSION} -X github.com/sartoopjj/thefeed/internal/version.Commit=${COMMIT} -X github.com/sartoopjj/thefeed/internal/version.Date=${DATE}"
-          gomobile bind -iosversion=15.0 -target=ios,iossimulator -ldflags="${LDFLAGS}" -o ios/Mobile.xcframework ./mobile
+          # Device slice only: the archive is for a device, and every extra
+          # slice is another concurrent compile of gotd/td/tg.
+          gomobile bind -iosversion=15.0 -target=ios -ldflags="${LDFLAGS}" -o ios/Mobile.xcframework ./mobile
 
       - name: Archive (unsigned)
         run: |

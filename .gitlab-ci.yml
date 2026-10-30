@@ -300,7 +300,7 @@ android-apk:
       paths: [.cache/go-mod]
       policy: pull-push
   before_script:
-    - apt-get update -qq && apt-get install -y -qq curl unzip git
+    - apt-get update -qq && apt-get install -y -qq curl unzip zip git
     # Install Android cmdline-tools + SDK platform + build-tools if missing.
     # sdkmanager is Java-based and this image already ships Temurin 17, so
     # no extra JDK install is needed.
@@ -371,7 +371,7 @@ android-apk:
     # but the explicit flag is belt-and-suspenders.
     - LDFLAGS="-s -w -X github.com/sartoopjj/thefeed/internal/version.Version=${VERSION} -X github.com/sartoopjj/thefeed/internal/version.Commit=${COMMIT} -X github.com/sartoopjj/thefeed/internal/version.Date=${DATE} -extldflags=-Wl,-z,max-page-size=16384"
     - mkdir -p android/app/libs
-    - gomobile bind -target=android/arm,android/arm64,android/386,android/amd64 -androidapi 24 -ldflags="${LDFLAGS}" -o android/app/libs/mobile.aar ./mobile
+    - bash scripts/gomobile-android-aar.sh android/app/libs/mobile.aar "${LDFLAGS}"
     # Decode signing keystore. KEYSTORE_BASE64 can be a regular variable
     # (base64-encoded) or a File-type variable containing the raw bytes.
     # Required for any tag pipeline — we never ship debug-signed APKs
@@ -485,7 +485,7 @@ ios-ipa:
     # devices working. The xcodebuild below overrides the app to match;
     # the two must move together, or the framework's minimum ends up
     # above the app's and the link fails.
-    - gomobile bind -iosversion=13.0 -target=ios,iossimulator -ldflags="${LDFLAGS}" -o ios/Mobile.xcframework ./mobile
+    - gomobile bind -iosversion=13.0 -target=ios -ldflags="${LDFLAGS}" -o ios/Mobile.xcframework ./mobile
     - MARKETING_VERSION="${VERSION#v}"
     - BUILD_NUMBER=$(git rev-list --count HEAD)
     - |
