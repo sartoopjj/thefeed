@@ -902,3 +902,82 @@ func TestChatInboxHoldsSeqAfterTransientGap(t *testing.T) {
 		t.Fatalf("recovered inbox mismatch: %+v", msgs)
 	}
 }
+
+// Ciphertext nobody can read must not be able to hold an inbox hostage.
+//
+// Identities are free, so anyone can mint throwaway senders and post
+// envelopes sealed to a key the recipient does not have. The client skipped
+// what it could not decrypt and acknowledged only what it could, so those
+// envelopes stayed in the inbox for the full TTL -- and once the cap is
+// reached every genuine sender is told InboxFull. Reported here instead, so
+// the caller can acknowledge and free the slot.
+//
+// The distinction that matters: a TRANSIENT failure stays held back, because
+// acknowledging past it would free an earlier message that was never read.
+func TestUndecryptableEnvelopesAreReportedSoTheyCanBeAcked(t *testing.T) {
+	ts := newChatTestServer(t, protocol.DefaultChatLimits())
+	victim := newChatTestClient(t, ts)
+	attacker := newChatTestClient(t, ts)
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	// Register both: the victim looks the sender's key up before decrypting,
+	// so an unregistered sender would fail transiently instead.
+	if _, err := victim.FetchInbox(ctx, nil); err != nil {
+		t.Fatalf("victim register: %v", err)
+	}
+	if _, err := attacker.FetchInbox(ctx, nil); err != nil {
+		t.Fatalf("attacker register: %v", err)
+	}
+
+	// One real message...
+	if _, err := attacker.SendMessage(ctx, victim.Identity().Addr, 1, "readable", nil); err != nil {
+		t.Fatalf("send: %v", err)
+	}
+
+	// ...and what a flooder actually posts: a well-formed envelope full of
+	// bytes that will never open. Straight into the store, which is where
+	// such an envelope lands however it was sent.
+	garbage := make([]byte, 64)
+	if _, err := cryptoRand.Read(garbage); err != nil {
+		t.Fatal(err)
+	}
+	st, _, _, _, err := ts.store.CommitMessage(
+		attacker.Identity().Addr, victim.Identity().Addr, 2, garbage, time.Now())
+	if err != nil {
+		t.Fatalf("commit garbage: %v", err)
+	}
+	if st != protocol.ChatStatusOK {
+		t.Fatalf("the store refused the garbage envelope: st=%d", st)
+	}
+
+	msgs, err := victim.FetchInbox(ctx, nil)
+	if err != nil {
+		t.Fatalf("fetch: %v", err)
+	}
+	var readable, undecryptable int
+	var badSeq uint32
+	for _, m := range msgs {
+		if m.Undecryptable {
+			undecryptable++
+			badSeq = m.Seq
+			if m.Text != "" {
+				t.Error("an undecryptable envelope carried text")
+			}
+		} else {
+			readable++
+		}
+	}
+	if readable != 1 {
+		t.Errorf("readable messages = %d, want 1", readable)
+	}
+	if undecryptable != 1 {
+		t.Fatalf("undecryptable reported = %d, want 1 -- unreadable ciphertext is "+
+			"still invisible to the caller, so it can never be acknowledged and "+
+			"sits in the inbox until it expires", undecryptable)
+	}
+	// And it is acknowledgeable, which is the point: the slot comes back.
+	if err := victim.Ack(ctx, attacker.Identity().Addr, badSeq); err != nil {
+		t.Fatalf("ack the undecryptable seq: %v", err)
+	}
+}

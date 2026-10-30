@@ -784,7 +784,7 @@ function chatRenderList(keepView) {
   if (info.address) {
     var addrMasked = false;
     try { addrMasked = localStorage.getItem('thefeed_chat_addr_mask') === '1'; } catch (e) { }
-    html += '<div class="chat-addr-row" onclick="chatCopy(\'' + escAttr(info.address) + '\')">' +
+    html += '<div class="chat-addr-row" onclick="chatCopy(\'' + jsStr(info.address) + '\')">' +
       '<span class="chat-addr-label">' + esc(chatT('chat_my_address')) + '</span>' +
       '<button type="button" class="chat-icon-btn chat-addr-info" title="' + escAttr(chatT('chat_addr_info_btn')) + '" aria-label="' + escAttr(chatT('chat_addr_info_btn')) +
       '" onclick="event.stopPropagation();showInfoDialog(chatT(\'chat_addr_info\'))">' + icon('info') + '</button>' +
@@ -794,7 +794,7 @@ function chatRenderList(keepView) {
       '<button type="button" class="chat-icon-btn chat-addr-eye" title="' + escAttr(chatT('chat_addr_mask')) + '" aria-label="' + escAttr(chatT('chat_addr_mask')) +
       '" onclick="event.stopPropagation();chatToggleAddrMask()">' + icon(addrMasked ? 'eyeOff' : 'views') + '</button>' +
       '<button type="button" class="chat-icon-btn chat-addr-copy" title="' + escAttr(chatT('chat_copy')) + '" aria-label="' + escAttr(chatT('chat_copy')) +
-      '" onclick="event.stopPropagation();chatCopy(\'' + escAttr(info.address) + '\')">' + icon('copy') + '</button>' +
+      '" onclick="event.stopPropagation();chatCopy(\'' + jsStr(info.address) + '\')">' + icon('copy') + '</button>' +
       '</div>';
   }
 
@@ -814,13 +814,13 @@ function chatRenderList(keepView) {
     chatState.threads.forEach(function (th) {
       var nm = th.name || chatName(th.addr);
       var pinMark = th.pinned ? ('<span class="chat-pin-mark">' + icon('pinned') + '</span> ') : '';
-      html += '<div class="chat-thread-item" onclick="openChatThread(\'' + escAttr(th.addr) + '\')">' +
+      html += '<div class="chat-thread-item" onclick="openChatThread(\'' + jsStr(th.addr) + '\')">' +
         chatAvatarHTML(nm, 44) + // match the feed (.ch-avatar) and mirror list avatars (44px)
         '<div class="chat-thread-main"><div class="chat-thread-name">' + pinMark + esc(nm) + '</div>' +
         '<div class="chat-thread-last">' + esc(th.lastText || '') + '</div></div>' +
         (th.unread ? '<span class="chat-unread-badge">' + th.unread + '</span>' : '') +
         '<span class="chat-thread-time">' + chatFmtTime(th.lastTs) + '</span>' +
-        '<button class="chat-icon-btn chat-row-menu" title="" onclick="event.stopPropagation();chatRowMenu(\'' + escAttr(th.addr) + '\',' + (th.pinned ? 'true' : 'false') + ')">' + icon('more') + '</button>' +
+        '<button class="chat-icon-btn chat-row-menu" title="" onclick="event.stopPropagation();chatRowMenu(\'' + jsStr(th.addr) + '\',' + (th.pinned ? 'true' : 'false') + ')">' + icon('more') + '</button>' +
         '</div>';
     });
     html += '</div>';
@@ -922,7 +922,7 @@ async function chatShowRecovery() {
       '<div class="chat-myaddr-hint">' + esc(chatT('chat_recovery_hint')) + '</div>' +
       '<div class="chat-recovery-code">' + esc(d.recovery) + '</div>' +
       '<div class="chat-banner-actions">' +
-      '<button class="chat-btn-soft" onclick="chatCopy(\'' + escAttr(d.recovery) + '\')">' + esc(chatT('chat_copy')) + '</button>' +
+      '<button class="chat-btn-soft" onclick="chatCopy(\'' + jsStr(d.recovery) + '\')">' + esc(chatT('chat_copy')) + '</button>' +
       '<button class="chat-btn-soft' + ((chatState.info && chatState.info.backedUp === false) ? ' chat-dot' : '') + '" onclick="chatMarkBackedUp()">' + esc(chatT('chat_backup_saved')) + '</button>' +
       '<button class="chat-btn-soft" onclick="chatImportPrompt()">' + esc(chatT('chat_import')) + '</button>' +
       '</div></div>';
@@ -1014,10 +1014,10 @@ function chatServerSheet() {
     } else if (sv.available || sv.enabled) {
       // Accent pill for "Turn on", plain for "Turn off".
       var cls = sv.enabled ? 'chat-btn-soft' : 'chat-btn-soft chat-btn-enable';
-      btn = '<button class="' + cls + '" onclick="chatToggleServer(\'' + escAttr(sv.key) + '\',' +
+      btn = '<button class="' + cls + '" onclick="chatToggleServer(\'' + jsStr(sv.key) + '\',' +
         (sv.enabled ? 'false' : 'true') + ')">' + esc(action) + '</button>';
     } else if (sv.reason !== 'chat_err_disabled') {
-      btn = '<button class="chat-btn-soft" onclick="chatRecheckServer(\'' + escAttr(sv.key) + '\')">' +
+      btn = '<button class="chat-btn-soft" onclick="chatRecheckServer(\'' + jsStr(sv.key) + '\')">' +
         esc(chatT('chat_server_recheck')) + '</button>';
     }
     items += '<div class="chat-server-row">' +
@@ -1178,7 +1178,7 @@ function chatServerPicker(addr, servers) {
   var items = '<div class="chat-sheet-title">' + esc(chatT('chat_pick_server')) + '</div>';
   servers.forEach(function (sv) {
     var label = (sv.name ? sv.name + ' — ' : '') + sv.domain;
-    items += '<button class="chat-sheet-item" onclick="chatPickServer(\'' + escAttr(addr) + '\',\'' + escAttr(sv.key) + '\')">' +
+    items += '<button class="chat-sheet-item" onclick="chatPickServer(\'' + jsStr(addr) + '\',\'' + jsStr(sv.key) + '\')">' +
       esc(label) + '</button>';
   });
   items += '<button class="chat-sheet-item chat-sheet-cancel" onclick="chatCloseMenu()">' + esc(chatT('cancel')) + '</button>';
@@ -1281,9 +1281,9 @@ function chatRowMenu(addr, pinned) {
   sheet.innerHTML =
     '<div class="chat-sheet">' +
     '<div class="chat-sheet-title">' + esc(nm) + '</div>' +
-    '<button class="chat-sheet-item" onclick="chatPin(\'' + escAttr(addr) + '\',' + (pinned ? 'false' : 'true') + ')">' +
+    '<button class="chat-sheet-item" onclick="chatPin(\'' + jsStr(addr) + '\',' + (pinned ? 'false' : 'true') + ')">' +
     icon('pinned') + ' ' + esc(chatT(pinned ? 'chat_unpin' : 'chat_pin')) + '</button>' +
-    '<button class="chat-sheet-item chat-sheet-danger" onclick="chatDelete(\'' + escAttr(addr) + '\')">' +
+    '<button class="chat-sheet-item chat-sheet-danger" onclick="chatDelete(\'' + jsStr(addr) + '\')">' +
     icon('delete') + ' ' + esc(chatT('chat_delete')) + '</button>' +
     '<button class="chat-sheet-item chat-sheet-cancel" onclick="chatCloseMenu()">' + esc(chatT('cancel')) + '</button>' +
     '</div>';
@@ -1627,7 +1627,7 @@ async function chatRenderThread() {
       '<div class="chat-switch-text">' +
       chatFmtBidi(chatT('chat_peer_switched'), { n: nm, s: plabel }) +
       '</div><button class="chat-btn-primary chat-switch-btn" onclick="chatSwitchServer(\'' +
-      escAttr(peerServer) + '\')">' +
+      jsStr(peerServer) + '\')">' +
       chatFmtBidi(chatT('chat_switch_reply'), { s: plabel }) + '</button></div>';
   }
   html += '</div>'; // .chat-body
@@ -1915,7 +1915,7 @@ function chatContactInfo() {
     '<div class="chat-sheet-title">' + esc(nm) + '</div></div>';
   h += '<div class="chat-info-field"><div class="chat-info-label">' + esc(chatT('chat_account_id')) + '</div>' +
     '<div class="chat-info-value chat-info-id" dir="ltr">' + esc(addr) + '</div>' +
-    '<button class="chat-btn-soft" onclick="chatCopy(\'' + escAttr(addr) + '\')">' + esc(chatT('chat_copy')) + '</button></div>';
+    '<button class="chat-btn-soft" onclick="chatCopy(\'' + jsStr(addr) + '\')">' + esc(chatT('chat_copy')) + '</button></div>';
   // Safety code, next to the address — tap to expand the explainer.
   if (st.emojis) {
     h += '<div class="chat-info-field chat-info-safety-wrap" onclick="this.classList.toggle(\'open\')">' +
@@ -1935,8 +1935,8 @@ function chatContactInfo() {
   }
   h += '<button class="chat-sheet-item" onclick="chatContactRename()">' + icon('edit') + ' ' + esc(chatT('chat_rename')) + '</button>';
   // Merged in from the old thread ⋮ menu: clear / delete the conversation.
-  h += '<button class="chat-sheet-item" onclick="chatClearMessages(\'' + escAttr(addr) + '\')">' + icon('eraser') + ' ' + esc(chatT('chat_clear')) + '</button>';
-  h += '<button class="chat-sheet-item chat-sheet-danger" onclick="chatDelete(\'' + escAttr(addr) + '\')">' + icon('delete') + ' ' + esc(chatT('chat_delete')) + '</button>';
+  h += '<button class="chat-sheet-item" onclick="chatClearMessages(\'' + jsStr(addr) + '\')">' + icon('eraser') + ' ' + esc(chatT('chat_clear')) + '</button>';
+  h += '<button class="chat-sheet-item chat-sheet-danger" onclick="chatDelete(\'' + jsStr(addr) + '\')">' + icon('delete') + ' ' + esc(chatT('chat_delete')) + '</button>';
   h += '<button class="chat-sheet-item chat-sheet-cancel" onclick="chatCloseMenu()">' + esc(chatT('close')) + '</button></div>';
   sheet.innerHTML = h;
   document.getElementById('chatModal').appendChild(sheet);
@@ -1969,7 +1969,7 @@ function chatSwitchServerSheet(reasonHtml) {
     var label = (sv.name ? sv.name + ' — ' : '') + sv.domain;
     var cur = sv.key === chatState.curServer;
     items += '<button class="chat-sheet-item"' + (cur ? ' disabled' : '') +
-      ' onclick="chatSwitchServer(\'' + escAttr(sv.key) + '\')">' + esc(label) +
+      ' onclick="chatSwitchServer(\'' + jsStr(sv.key) + '\')">' + esc(label) +
       (cur ? ' · <span class="chat-server-current">' + esc(chatT('chat_server_current')) + '</span>' : '') + '</button>';
   });
   items += '<button class="chat-sheet-item chat-sheet-cancel" onclick="chatCloseMenu()">' + esc(chatT('cancel')) + '</button>';

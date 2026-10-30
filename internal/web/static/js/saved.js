@@ -396,7 +396,7 @@ function renderSavedItem(record) {
         : md.fname
         ? md.fname
         : (md.tag.replace(/[\[\]]/g, '').toLowerCase() || 'media') + '-' + md.size;
-      var dlBtn = '<button class="saved-media-save" onclick="savedMediaSave(\'' + escAttr(src) + '\',\'' + escAttr(dlName) + '\')" '
+      var dlBtn = '<button class="saved-media-save" onclick="savedMediaSave(\'' + jsStr(src) + '\',\'' + jsStr(dlName) + '\')" '
         + 'title="' + escAttr(t('download') || 'Download') + '" aria-label="' + escAttr(t('download') || 'Download') + '">'
         + icon('download') + '</button>';
       if (md.tag === '[IMAGE]' || md.tag === '[STICKER]' || md.tag === '[GIF]') {
@@ -415,7 +415,7 @@ function renderSavedItem(record) {
           + '<div class="sm-filename">' + esc(dlName) + '</div>'
           + '<div class="sm-filesize">' + formatBytes(md.size) + '</div>'
           + '</div></div>'
-          + '<button class="sm-dl-btn" onclick="savedMediaSave(\'' + escAttr(src) + '\',\'' + escAttr(dlName) + '\')">'
+          + '<button class="sm-dl-btn" onclick="savedMediaSave(\'' + jsStr(src) + '\',\'' + jsStr(dlName) + '\')">'
           + '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 15V3"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7,10 12,15 17,10"/></svg>'
           + esc(t('download') || 'Download')
           + '</button>';

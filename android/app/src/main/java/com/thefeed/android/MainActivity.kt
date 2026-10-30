@@ -13,6 +13,7 @@ import android.os.PowerManager
 import android.net.Uri
 import android.provider.Settings
 import android.text.InputType
+import android.webkit.HttpAuthHandler
 import android.webkit.RenderProcessGoneDetail
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
@@ -141,6 +142,11 @@ class MainActivity : ComponentActivity() {
         fun tryUnlock() {
             val pw = lockInput.text.toString()
             if (bridge.checkPassword(pw)) {
+                // Held only until the probe below can reach the server, which
+                // may still be starting: the Telegram data key is wrapped
+                // under this passcode and has to be opened before the UI
+                // starts reading the session or the cache.
+                pendingUnlockPassword = pw
                 lockOverlay.visibility = View.GONE
                 webView.visibility = View.VISIBLE
                 lockScreenVisible = false
@@ -250,6 +256,29 @@ class MainActivity : ComponentActivity() {
     @SuppressLint("SetJavaScriptEnabled")
     private fun configureWebView() {
         webView.webViewClient = object : WebViewClient() {
+            // The local server runs with HTTP Basic under a per-launch secret,
+            // so this is what lets our own WebView in while every other app on
+            // the device gets 401. It fires for sub-resources as well as the
+            // page, which is why nothing else -- no header on loadUrl, no
+            // change anywhere in the frontend -- has to carry the secret.
+            override fun onReceivedHttpAuthRequest(
+                view: WebView?,
+                handler: HttpAuthHandler?,
+                host: String?,
+                realm: String?
+            ) {
+                val secret = getLocalSecret()
+                if (handler == null) return
+                // Only ever to our own loopback server, and never a second
+                // time for the same request: proceed() on a retry would mean
+                // the secret is wrong, and looping would hammer it.
+                if (secret.isEmpty() || host != "127.0.0.1" || handler.useHttpAuthUsernamePassword()) {
+                    handler.cancel()
+                    return
+                }
+                handler.proceed("thefeed", secret)
+            }
+
             override fun shouldOverrideUrlLoading(
                 view: WebView?,
                 request: WebResourceRequest?
@@ -415,6 +444,26 @@ class MainActivity : ComponentActivity() {
                     val code = conn.responseCode
                     conn.disconnect()
                     if (code > 0) {
+                        // The server runs with HTTP Basic under a secret
+                        // generated this launch; onReceivedHttpAuthRequest
+                        // below answers the challenge, for sub-resources too.
+                        // Nothing is appended to the URL.
+                        val secret = getLocalSecret()
+                        if (secret.isEmpty()) {
+                            Thread.sleep(PROBE_INTERVAL_MS)
+                            continue
+                        }
+                        // Open the sealed Telegram store before the page
+                        // loads. Already on a background thread, which is
+                        // where the Argon2id derivation belongs. A failure is
+                        // not fatal -- the section reports itself locked
+                        // rather than the app refusing to start.
+                        pendingUnlockPassword?.let { pw ->
+                            pendingUnlockPassword = null
+                            if (!AndroidBridge(this@MainActivity).telUnlock(pw)) {
+                                android.util.Log.w("thefeed", "telegram store stayed locked")
+                            }
+                        }
                         ready = true
                         val url = "http://127.0.0.1:$port"
                         handler.post { setStatus(""); webView.loadUrl(url) }
@@ -432,6 +481,15 @@ class MainActivity : ComponentActivity() {
                 handler.post { setStatus("Could not connect. Restart the app.") }
             }
         }.start()
+    }
+
+    // The passcode, between a successful unlock and the server being up.
+    // Cleared as soon as it has been handed over.
+    private var pendingUnlockPassword: String? = null
+
+    private fun getLocalSecret(): String {
+        val prefs = getSharedPreferences(ThefeedService.PREFS_NAME, Context.MODE_PRIVATE)
+        return prefs.getString(ThefeedService.PREF_LOCAL_SECRET, "") ?: ""
     }
 
     private fun getCurrentPort(): Int {

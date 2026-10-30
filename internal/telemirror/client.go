@@ -12,6 +12,8 @@ import (
 	"sync"
 	"time"
 
+	"crypto/x509"
+	"errors"
 	utls "github.com/refraction-networking/utls"
 )
 
@@ -384,6 +386,51 @@ func (c *Client) waitForRate(ctx context.Context) error {
 	return nil
 }
 
+// verifyAgainstName builds the certificate check for a fronted connection.
+//
+// The name checked is the SNI, which on a fronted attempt is the front
+// (www.google.com) and not the host the content comes from. That is not a
+// shortcut, it is the only name that CAN be checked: Google's frontend picks
+// the certificate from the SNI, so a fronted connection is handed a
+// www.google.com certificate and nothing else. Demanding one for
+// *.translate.goog fails every fronted attempt -- which is to say, every
+// attempt that works on a censored network.
+//
+// What this does buy is the thing that matters: only someone holding a
+// certificate a public CA issued for the front can complete the handshake.
+// The censor on the path cannot, so they can no longer answer with a page of
+// their own, which is what no verification at all allowed. Beyond that the
+// transport trusts Google's frontend to route the Host header to the real
+// host -- the same trust the Mirror already places in it to proxy Telegram at
+// all -- so the page itself is still treated as hostile and sanitised.
+func verifyAgainstName(name string) func(rawCerts [][]byte, _ [][]*x509.Certificate) error {
+	return func(rawCerts [][]byte, _ [][]*x509.Certificate) error {
+		if len(rawCerts) == 0 {
+			return errors.New("telemirror: server sent no certificate")
+		}
+		certs := make([]*x509.Certificate, 0, len(rawCerts))
+		for _, der := range rawCerts {
+			c, err := x509.ParseCertificate(der)
+			if err != nil {
+				return fmt.Errorf("telemirror: bad certificate: %w", err)
+			}
+			certs = append(certs, c)
+		}
+		inters := x509.NewCertPool()
+		for _, c := range certs[1:] {
+			inters.AddCert(c)
+		}
+		_, err := certs[0].Verify(x509.VerifyOptions{
+			DNSName:       name,
+			Intermediates: inters,
+		})
+		if err != nil {
+			return fmt.Errorf("telemirror: certificate is not valid for %s: %w", name, err)
+		}
+		return nil
+	}
+}
+
 // dialTLSFor returns a DialTLSContext closure preconfigured for the given
 // proxy attempt. Connect → uTLS handshake with the chosen fingerprint and
 // SNI (which may differ from the request Host for domain fronting).
@@ -402,10 +449,19 @@ func dialTLSFor(ap proxyAttempt, host string) func(ctx context.Context, network,
 		if sni == sniUseHost {
 			sni = host
 		}
+		// Certificates ARE verified -- see verifyAgainstName for which name and
+		// why. Skipping verification entirely handed the connection to
+		// whoever is on the path, which here is the censor, the one adversary
+		// this transport exists to resist: they could answer with any page
+		// they liked and the renderer puts it in the UI's origin.
+		//
+		// InsecureSkipVerify stays on because uTLS would otherwise reject the
+		// chain itself; the check below replaces it rather than relaxing it.
 		cfg := &utls.Config{
-			ServerName:         sni,
-			InsecureSkipVerify: true,
-			NextProtos:         []string{"http/1.1"},
+			ServerName:            sni,
+			InsecureSkipVerify:    true,
+			NextProtos:            []string{"http/1.1"},
+			VerifyPeerCertificate: verifyAgainstName(sni),
 		}
 		var spec *utls.ClientHelloSpec
 		if ap.fp.nodeTLS12 {

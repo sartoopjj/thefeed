@@ -15,6 +15,9 @@ import UIKit
 /// the app and `AppDelegate` calls `start()` again from scratch.
 final class ServerController: ObservableObject {
     @Published private(set) var port: Int = 0
+    // Per-launch HTTP Basic secret the local server requires. Handed to the
+    // WebView, whose navigation delegate answers the auth challenge with it.
+    @Published private(set) var password: String = ""
     @Published private(set) var lastError: String?
     /// Bumped on every successful (re)start. ContentView keys the WebView on
     /// this so a cold start / retry reloads the page against the fresh server.
@@ -74,6 +77,9 @@ final class ServerController: ObservableObject {
                 return
             }
             instance = s
+            // Loopback is not private on a phone: another app can reach this
+            // port. This secret is what the WebView has and nothing else does.
+            password = s.password()
             let actual = Int(s.port())
             port = actual
             generation += 1
@@ -88,6 +94,7 @@ final class ServerController: ObservableObject {
         instance?.stop()
         instance = nil
         port = 0
+        password = ""
     }
 
     private static func dataDir() throws -> URL {

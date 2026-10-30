@@ -44,9 +44,10 @@ var allowedMediaSchemes = map[string]bool{
 //
 // It enforces the configured max-size both up-front (Content-Length) and on
 // the wire (LimitReader) so a server lying about size can't blow past the
-// limit. URLs are validated against allowedMediaSchemes; private-network
-// targets are not blocked here because callers (PublicReader, XPublicReader)
-// only pass URLs scraped from Telegram/Nitter responses.
+// limit. URLs are validated against allowedMediaSchemes. The target ADDRESS
+// is deliberately not restricted: an operator who points the server at an
+// upstream on their own network is building from source anyway, and choosing
+// the upstream is their decision.
 func downloadHTTPMedia(ctx context.Context, cache *MediaCache, tag, rawURL string) (protocol.MediaMeta, bool) {
 	if cache == nil || rawURL == "" {
 		return protocol.MediaMeta{}, false

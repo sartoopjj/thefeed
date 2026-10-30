@@ -3,6 +3,7 @@ package tgbridge
 import (
 	"github.com/gotd/td/telegram/thumbnail"
 	"github.com/gotd/td/tg"
+	"strings"
 )
 
 // PeerKind is what a dialog is; the UI lists each kind separately.
@@ -100,6 +101,88 @@ type Message struct {
 	// the same thing the same way.
 	Views     int        `json:"views,omitempty"`
 	Reactions []Reaction `json:"reactions,omitempty"`
+	// Entities is the message's formatting: bold, links, spoilers,
+	// blockquotes and the rest. It arrives with the message at no extra cost,
+	// and without it a post written with any of them reads as flat text --
+	// which for a channel that formats heavily loses the structure the author
+	// put there.
+	Entities []Entity `json:"entities,omitempty"`
+}
+
+// Entity is one run of formatting over the message text.
+//
+// Offset and Length are in UTF-16 code units, as Telegram defines them. They
+// are passed through unconverted on purpose: JavaScript strings are UTF-16,
+// so the renderer indexes with them directly and there is no conversion to
+// get wrong. (Go's own rune indexing is what needs the conversion, which is
+// why the server-side link embedder carries a mapping table.)
+type Entity struct {
+	Type   string `json:"type"`
+	Offset int    `json:"offset"`
+	Length int    `json:"length"`
+	// URL carries the target of a text_url, and the language of a pre block.
+	URL string `json:"url,omitempty"`
+	// Collapsed marks an expandable blockquote.
+	Collapsed bool `json:"collapsed,omitempty"`
+}
+
+// entitiesOf maps Telegram's entity list to the subset the UI can render.
+//
+// Unknown types are dropped rather than guessed at: an entity we do not
+// understand must not change how the text reads.
+func entitiesOf(in []tg.MessageEntityClass) []Entity {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make([]Entity, 0, len(in))
+	for _, e := range in {
+		var ent Entity
+		switch v := e.(type) {
+		case *tg.MessageEntityBold:
+			ent = Entity{Type: "bold", Offset: v.Offset, Length: v.Length}
+		case *tg.MessageEntityItalic:
+			ent = Entity{Type: "italic", Offset: v.Offset, Length: v.Length}
+		case *tg.MessageEntityUnderline:
+			ent = Entity{Type: "underline", Offset: v.Offset, Length: v.Length}
+		case *tg.MessageEntityStrike:
+			ent = Entity{Type: "strike", Offset: v.Offset, Length: v.Length}
+		case *tg.MessageEntitySpoiler:
+			ent = Entity{Type: "spoiler", Offset: v.Offset, Length: v.Length}
+		case *tg.MessageEntityCode:
+			ent = Entity{Type: "code", Offset: v.Offset, Length: v.Length}
+		case *tg.MessageEntityPre:
+			ent = Entity{Type: "pre", Offset: v.Offset, Length: v.Length, URL: v.Language}
+		case *tg.MessageEntityBlockquote:
+			// Collapsed is the expandable kind, which is the newest of these
+			// and the reason channels started formatting long posts again.
+			ent = Entity{Type: "blockquote", Offset: v.Offset, Length: v.Length, Collapsed: v.Collapsed}
+		case *tg.MessageEntityTextURL:
+			u := strings.TrimSpace(v.URL)
+			// Only schemes a link may safely carry. javascript: and data:
+			// reach the renderer otherwise, and the renderer writes an href.
+			if !strings.HasPrefix(u, "http://") && !strings.HasPrefix(u, "https://") &&
+				!strings.HasPrefix(u, "tg://") {
+				continue
+			}
+			ent = Entity{Type: "text_url", Offset: v.Offset, Length: v.Length, URL: u}
+		case *tg.MessageEntityURL:
+			ent = Entity{Type: "url", Offset: v.Offset, Length: v.Length}
+		case *tg.MessageEntityMention:
+			ent = Entity{Type: "mention", Offset: v.Offset, Length: v.Length}
+		case *tg.MessageEntityHashtag:
+			ent = Entity{Type: "hashtag", Offset: v.Offset, Length: v.Length}
+		default:
+			continue
+		}
+		if ent.Length <= 0 || ent.Offset < 0 {
+			continue
+		}
+		out = append(out, ent)
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 // Reaction is one emoji and how many people picked it. Chosen marks the one
@@ -129,19 +212,26 @@ func buttonsOf(markup tg.ReplyMarkupClass) []Button {
 	var out []Button
 	for i, row := range inline.Rows {
 		for _, b := range row.Buttons {
-			switch v := b.(type) {
-			case *tg.KeyboardButtonURL:
-				out = append(out, Button{Text: v.Text, URL: v.URL, Row: i})
-			case *tg.KeyboardButtonURLAuth:
-				out = append(out, Button{Text: v.Text, URL: v.URL, Row: i})
-			default:
-				if t, ok := b.(interface{ GetText() string }); ok {
-					out = append(out, Button{Text: t.GetText(), Row: i})
-				}
-			}
+			// Telegram moved the button's KIND into its own field: the label
+			// lives on the button, what it does lives in Type. Previously
+			// each kind was a separate button type.
+			out = append(out, Button{Text: b.Text, URL: buttonURL(b.Type), Row: i})
 		}
 	}
 	return out
+}
+
+// buttonURL returns the link a button opens, or "" when it does something
+// else (a callback, a game, a web view). Only the kinds that are a plain
+// navigation are carried -- the same two the UI has always linked.
+func buttonURL(t tg.InlineButtonTypeClass) string {
+	switch v := t.(type) {
+	case *tg.InlineButtonTypeURL:
+		return v.URL
+	case *tg.InlineButtonTypeURLAuth:
+		return v.URL
+	}
+	return ""
 }
 
 // Media kinds. Short keys: the UI translates them.
@@ -345,6 +435,7 @@ func messageFrom(m tg.MessageClass, names map[string]string) (Message, bool) {
 		out.Views = v
 	}
 	out.Reactions = reactionsOf(msg)
+	out.Entities = entitiesOf(msg.Entities)
 	if h, ok := msg.GetReplyTo(); ok {
 		if hdr, ok := h.(*tg.MessageReplyHeader); ok {
 			out.ReplyTo, _ = hdr.GetReplyToMsgID()

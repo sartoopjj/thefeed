@@ -219,12 +219,28 @@ func (s *Server) handleMediaGet(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 
-	body, err := client.DecompressMediaReader(pipeR, header.Compression)
+	rawBody, err := client.DecompressMediaReader(pipeR, header.Compression)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("decompress: %v", err), http.StatusBadGateway)
 		return
 	}
-	defer body.Close()
+	defer rawBody.Close()
+
+	// BOUNDED: deflate expands about a thousandfold, and these bytes come from
+	// whichever resolver answered. Unbounded, a few hundred kilobytes of
+	// answer inflate into gigabytes -- streamed at the browser, and copied
+	// into teeBuf, which grows until the process dies.
+	//
+	// The bound is the size the file was ANNOUNCED as, not a ratio: a real
+	// file never exceeds its own declared length, so nothing legitimate is
+	// ever cut off, and how large a file a server relays stays the operator's
+	// choice. Only when no size was declared is there nothing to compare
+	// against, and then it falls back to what the blocks could even carry.
+	outCap := expectedSize
+	if outCap <= 0 {
+		outCap = int64(protocol.InflateCap(int(blockCount) * protocol.MaxBlockPayload))
+	}
+	body := &cappedReader{r: rawBody, left: outCap, max: outCap}
 
 	// Tee decompressed bytes into a buffer so we can persist them to the
 	// disk cache after a successful response.
@@ -300,6 +316,44 @@ func (s *Server) handleMediaGet(w http.ResponseWriter, r *http.Request) {
 			s.addLog(fmt.Sprintf("media cached: %d bytes, crc=%08x, mime=%s", teeBuf.Len(), expectedCRC, mime))
 		}
 	}
+}
+
+// cappedReader passes through at most max bytes and then FAILS rather than
+// truncating: a silently cut-off file would be streamed to the browser and
+// written to the disk cache as though it were whole, so every later view would
+// serve the broken copy.
+//
+// A stream of exactly max bytes still ends in a clean EOF -- that is the
+// normal case for every real download, so the last byte is probed for rather
+// than assumed.
+type cappedReader struct {
+	r    io.Reader
+	left int64
+	max  int64
+}
+
+func (c *cappedReader) overflow() error {
+	return fmt.Errorf("media expands past %d bytes, which no real file of that size does", c.max)
+}
+
+func (c *cappedReader) Read(p []byte) (int, error) {
+	if len(p) == 0 {
+		return 0, nil
+	}
+	if c.left == 0 {
+		var probe [1]byte
+		n, err := c.r.Read(probe[:])
+		if n > 0 {
+			return 0, c.overflow()
+		}
+		return 0, err
+	}
+	if int64(len(p)) > c.left {
+		p = p[:c.left]
+	}
+	n, err := c.r.Read(p)
+	c.left -= int64(n)
+	return n, err
 }
 
 type flushAfterEachWriter struct {

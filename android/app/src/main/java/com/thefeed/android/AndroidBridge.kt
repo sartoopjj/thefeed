@@ -108,6 +108,13 @@ class AndroidBridge(private val activity: Activity) {
     fun setPassword(password: String): Boolean {
         if (password.isEmpty()) return false
         prefs.edit().putString(PREF_PASSWORD_HASH, sha256(password)).apply()
+        // The hash is only the lock screen. This is what makes the passcode
+        // worth something at rest: the Telegram session and message cache are
+        // sealed under a data key, and in device mode that key is a file
+        // beside the data. Wrapping it under the passcode means the files
+        // alone are not enough. The SAME key is re-wrapped, never replaced,
+        // so an existing session is not orphaned.
+        telLock(password)
         return true
     }
 
@@ -116,6 +123,9 @@ class AndroidBridge(private val activity: Activity) {
         val stored = prefs.getString(PREF_PASSWORD_HASH, null) ?: return false
         if (sha256(currentPassword) != stored) return false
         prefs.edit().remove(PREF_PASSWORD_HASH).apply()
+        // Back to a device-held key, or the data would stay sealed under a
+        // passcode the user has just removed and can no longer be asked for.
+        telPost("/api/tel/lock/remove", null)
         return true
     }
 
@@ -123,6 +133,55 @@ class AndroidBridge(private val activity: Activity) {
     fun checkPassword(password: String): Boolean {
         val stored = prefs.getString(PREF_PASSWORD_HASH, null) ?: return true
         return sha256(password) == stored
+    }
+
+    // ===== Binding the passcode to the Telegram data key =====
+
+    // telLock wraps the data key under the passcode. Runs off the caller's
+    // thread: Argon2id is deliberately slow, and setPassword is called from
+    // the WebView's JS thread.
+    fun telLock(password: String) {
+        Thread { telPost("/api/tel/lock", password) }.start()
+    }
+
+    // telUnlock opens the sealed store for this run. Synchronous on purpose:
+    // the lock screen calls it as the user is let in, and the Telegram
+    // section must not start reading a store whose key has not arrived yet.
+    fun telUnlock(password: String): Boolean = telPost("/api/tel/unlock", password)
+
+    // telPost calls the local API with the per-launch Basic secret. Returns
+    // false on anything other than success -- callers treat that as "not
+    // bound", which is the pre-existing behaviour, never as a reason to block
+    // the user.
+    private fun telPost(path: String, password: String?): Boolean {
+        val port = prefs.getInt(ThefeedService.PREF_PORT, -1)
+        val secret = prefs.getString(ThefeedService.PREF_LOCAL_SECRET, "") ?: ""
+        if (port <= 0 || secret.isEmpty()) return false
+        return try {
+            val conn = (java.net.URL("http://127.0.0.1:$port$path").openConnection()
+                    as java.net.HttpURLConnection).apply {
+                requestMethod = "POST"
+                connectTimeout = 5_000
+                // Argon2id at 64 MiB takes a moment on a weak phone.
+                readTimeout = 30_000
+                doOutput = true
+                setRequestProperty("Content-Type", "application/json")
+                // Any user name is accepted; only the password is checked.
+                val basic = android.util.Base64.encodeToString(
+                    "thefeed:$secret".toByteArray(), android.util.Base64.NO_WRAP)
+                setRequestProperty("Authorization", "Basic $basic")
+            }
+            conn.outputStream.use {
+                val body = if (password == null) "{}"
+                else org.json.JSONObject().put("passphrase", password).toString()
+                it.write(body.toByteArray())
+            }
+            val ok = conn.responseCode / 100 == 2
+            conn.disconnect()
+            ok
+        } catch (_: Exception) {
+            false
+        }
     }
 
     // ===== Media handoff to system apps =====

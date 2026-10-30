@@ -43,6 +43,15 @@
     return (typeof escAttr === 'function') ? escAttr(s) :
       tmEsc(s).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
   }
+  // For a value going inside a single-quoted JS string in an inline handler.
+  // tmEscAttr is NOT safe there: it turns ' into &#39;, which the HTML parser
+  // decodes back to ' before the JS parser ever sees it, re-opening the
+  // string. See jsStr in ui.js.
+  function tmJsStr(s) {
+    return (typeof jsStr === 'function') ? jsStr(s) :
+      tmEsc(String(s == null ? '' : s)).replace(/\\/g, '\\\\')
+        .replace(/'/g, "\\'").replace(/"/g, '&quot;');
+  }
   function tmToast(msg, ms) {
     if (typeof showToast === 'function') showToast(msg, ms);
   }
@@ -273,7 +282,7 @@
       // avatar is cached — onerror then falls back to the initial.
       var src = '/api/telemirror/avatar/' + encodeURIComponent(key);
       inner = '<img src="' + tmEscAttr(src) + '" loading="lazy" decoding="async" alt=""'
-        + ' onerror="tmAvatarLoadFailed(this, \'' + tmEscAttr(key) + '\')">'
+        + ' onerror="tmAvatarLoadFailed(this, \'' + tmJsStr(key) + '\')">'
         + initial;
     }
     return '<div class="tm-avatar" style="width:' + size + 'px;height:' + size + 'px;background:' + bg + '">'
@@ -652,7 +661,7 @@
     var oldestId = (posts[0] && posts[0].id || '').split('/').pop();
     if (oldestId) {
       html += '<div class="tm-load-older-row">'
-        + '<button class="tm-load-older" onclick="tmLoadOlder(\'' + tmEscAttr(oldestId) + '\', this)">'
+        + '<button class="tm-load-older" onclick="tmLoadOlder(\'' + tmJsStr(oldestId) + '\', this)">'
         + tmEsc(tmI18n('telemirror_load_older', 'Load older posts'))
         + '</button>'
         + '</div>';
@@ -860,7 +869,7 @@
         + '<img src="' + tmEscAttr(m.thumb) + '" loading="lazy" decoding="async" alt=""'
         + ' referrerpolicy="no-referrer"'
         + ' onload="tmPhotoLoaded(this)"'
-        + ' onclick="tmOpenLightbox(\'' + tmEscAttr(m.thumb) + '\')"'
+        + ' onclick="tmOpenLightbox(\'' + tmJsStr(m.thumb) + '\')"'
         + ' style="cursor:zoom-in"'
         + ' onerror="this.parentNode.classList.add(\'tm-photo-failed\')">'
         + '<a class="tm-photo-dl" href="' + tmEscAttr(m.thumb) + '"'
@@ -871,7 +880,7 @@
         + '</div>';
     }
     if (m.type === 'video') {
-      var bg = m.thumb ? 'background-image:url(\'' + tmEscAttr(m.thumb) + '\')' : '';
+      var bg = m.thumb ? 'background-image:url(\'' + tmJsStr(m.thumb) + '\')' : '';
       var dur = m.duration ? '<span class="tm-vid-dur">' + tmEsc(m.duration) + '</span>' : '';
       return '<div class="tm-vid" style="' + bg + '">'
         + '<span class="tm-vid-play">' + window.icon('play') + '</span>' + dur + '</div>';

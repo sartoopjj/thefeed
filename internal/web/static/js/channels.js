@@ -285,7 +285,7 @@ function _renderChannelsNow() {
       var autoTitle = esc(t('auto_update_toggle') || 'Auto-update this channel');
       h += '<button type="button" class="ch-autoupdate' + (autoOn ? ' on' : '') + '"'
         + ' title="' + autoTitle + '" aria-label="' + autoTitle + '"'
-        + ' onclick="toggleAutoUpdate(\'' + escAttr(autoKey) + '\', event)">' + icon('timer') + '</button>';
+        + ' onclick="toggleAutoUpdate(\'' + jsStr(autoKey) + '\', event)">' + icon('timer') + '</button>';
       var pinKey = handle.replace(/^@/, '').trim();
       var pinOn = pinnedChannels.has(pinKey);
       var pinTitle = esc(t('pin_channel') || 'Pin this channel');
@@ -293,7 +293,7 @@ function _renderChannelsNow() {
       var pinGlyph = pinOn ? icon('pinned') : icon('unpinned');
       h += '<button type="button" class="ch-pin' + (pinOn ? ' on' : '') + '"'
         + ' title="' + pinTitle + '" aria-label="' + pinTitle + '"'
-        + ' onclick="togglePinChannel(\'' + escAttr(pinKey) + '\', event)">' + pinGlyph + '</button>';
+        + ' onclick="togglePinChannel(\'' + jsStr(pinKey) + '\', event)">' + pinGlyph + '</button>';
       h += '</div>';
     }
     return h;

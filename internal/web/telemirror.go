@@ -289,11 +289,44 @@ func (h *telemirrorHub) handleImg(w http.ResponseWriter, r *http.Request) {
 	writeTelemirrorImg(w, body, ctype)
 }
 
-func writeTelemirrorImg(w http.ResponseWriter, body []byte, ctype string) {
-	if ctype == "" {
-		ctype = "application/octet-stream"
+// safeMediaTypes are the content types this endpoint will name. Everything
+// else is served as bytes.
+//
+// image/svg+xml is the one that matters: it passes an "is it an image?" prefix
+// check, and an SVG is a document -- it can carry <script>, and opened
+// directly (not through an <img>) that script runs in THIS origin, next to
+// the messenger seed and the feed passphrase. The bytes come from an upstream
+// the censor sits on.
+var safeMediaTypes = map[string]bool{
+	"image/jpeg": true, "image/png": true, "image/gif": true,
+	"image/webp": true, "image/avif": true, "image/bmp": true,
+	"image/x-icon": true, "image/vnd.microsoft.icon": true,
+	"video/mp4": true, "video/webm": true, "video/quicktime": true,
+	"audio/mpeg": true, "audio/ogg": true, "audio/mp4": true,
+	"audio/wav": true, "audio/webm": true, "audio/aac": true,
+}
+
+// sanitizeMediaType keeps a known-inert type and replaces anything else with
+// an opaque one, so the browser renders it as a download rather than a page.
+func sanitizeMediaType(ctype string) string {
+	base := strings.ToLower(strings.TrimSpace(ctype))
+	if i := strings.IndexByte(base, ';'); i >= 0 { // drop ";charset=..."
+		base = strings.TrimSpace(base[:i])
 	}
-	w.Header().Set("Content-Type", ctype)
+	if safeMediaTypes[base] {
+		return base
+	}
+	return "application/octet-stream"
+}
+
+func writeTelemirrorImg(w http.ResponseWriter, body []byte, ctype string) {
+	w.Header().Set("Content-Type", sanitizeMediaType(ctype))
+	// Belt to the allow-list's braces: without this the browser is free to
+	// sniff the bytes and decide for itself that they are markup.
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	// And if one is ever opened as a document anyway, it gets nothing: no
+	// scripts, no network, its own opaque origin.
+	w.Header().Set("Content-Security-Policy", "default-src 'none'; sandbox")
 	w.Header().Set("Cache-Control", "private, max-age=3600")
 	w.Header().Set("Content-Length", fmt.Sprintf("%d", len(body)))
 	_, _ = w.Write(body)

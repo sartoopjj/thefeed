@@ -166,10 +166,14 @@ func (s *Server) handleBackupExport(w http.ResponseWriter, r *http.Request) {
 	w.Write(out)
 }
 
+// chatBackupFiles are the only names the chat section ever contains. Restore
+// checks against this same list, so the two cannot drift apart.
+var chatBackupFiles = []string{"identity", "contacts", "threads", "servers", "settings"}
+
 func (s *Server) collectChatBackup() json.RawMessage {
 	chatDir := filepath.Join(s.dataDir, "chat")
 	files := map[string]json.RawMessage{}
-	for _, name := range []string{"identity", "contacts", "threads", "servers", "settings"} {
+	for _, name := range chatBackupFiles {
 		if raw, err := os.ReadFile(filepath.Join(chatDir, name+".json")); err == nil {
 			files[name] = raw
 		}
@@ -481,7 +485,23 @@ func (s *Server) restoreChat(data json.RawMessage) error {
 	}
 	s.chat.mu.Lock()
 	defer s.chat.mu.Unlock()
+	// The keys come out of the uploaded file, so they are the attacker's
+	// text. Joined straight onto a path, "../../../.claude/settings" walks
+	// out of the data directory and writes anywhere a .json is read from --
+	// hooks that run on the next start, an editor's settings, the app's own
+	// profiles.json. The victim only has to restore a backup someone gave
+	// them, which is exactly what a backup file is for.
+	//
+	// An allow-list, not a sanitiser: these five names are the whole format.
+	allowed := make(map[string]bool, len(chatBackupFiles))
+	for _, n := range chatBackupFiles {
+		allowed[n] = true
+	}
 	for name, raw := range files {
+		if !allowed[name] {
+			s.addLog("[backup] restore: ignoring unexpected chat entry " + strconv.Quote(name))
+			continue
+		}
 		_ = writeFileAtomic(filepath.Join(chatDir, name+".json"), raw, 0o600)
 	}
 	s.chat.loadState()

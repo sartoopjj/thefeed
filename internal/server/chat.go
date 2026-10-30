@@ -39,6 +39,11 @@ type ChatService struct {
 	statInits     atomic.Int64 // completed handshakes
 	statCommits   atomic.Int64
 	statRegisters atomic.Int64
+	// statStaleCells counts cells refused because their counter was already
+	// answered (or too far behind the window to tell). On a healthy link this
+	// stays at or near zero; a rising count means duplicates are arriving
+	// very late, which is worth seeing in the report.
+	statStaleCells atomic.Int64
 }
 
 type chatSession struct {
@@ -50,6 +55,59 @@ type chatSession struct {
 	frag      *chatFragReasm // in-flight OP_FRAG reassembly (one op at a time)
 	opMu      sync.Mutex     // serializes ops so concurrent retransmits can't race
 	respCache chatRespCache  // sealed response bytes keyed by request counter
+	// maxCounter / seenMask are the anti-replay window: maxCounter is the
+	// highest counter answered, and seenMask records which of the
+	// chatReplayWindow counters at or below it have been. Exact inside the
+	// window, so out-of-order arrival is served normally and only a genuine
+	// repeat is refused. See handleInContext.
+	maxCounter uint32
+	seenMask   uint64
+	seenAny    bool
+}
+
+// chatReplayWindow is how far back the server can still tell "already
+// answered" from "not yet seen". One bit per counter in seenMask.
+//
+// It only has to cover reordering between a cell's FIRST arrivals, and the
+// client is strictly sequential -- exchange consumes one counter and awaits
+// its answer before the next, including every chunk of an upload (see
+// sendData) -- so in practice the gap is 0 and anything above 1 is margin.
+// 64 is the free size: it is one word, and it leaves room for a future client
+// that pipelines without this turning into dropped cells.
+const chatReplayWindow = 64
+
+// markCounter records that this counter is being answered and reports whether
+// it already was. Caller holds c.mu.
+//
+// Inside the window the answer is exact, so genuine out-of-order arrival is
+// served. Below the window the server cannot prove the counter is new, so it
+// is treated as a repeat: anything that far behind is a stray duplicate or a
+// replay, never a cell the client is still waiting on.
+func (s *chatSession) markCounter(counter uint32) (replay bool) {
+	if !s.seenAny {
+		s.seenAny, s.maxCounter, s.seenMask = true, counter, 1
+		return false
+	}
+	switch {
+	case counter > s.maxCounter:
+		if shift := counter - s.maxCounter; shift >= chatReplayWindow {
+			s.seenMask = 1
+		} else {
+			s.seenMask = (s.seenMask << shift) | 1
+		}
+		s.maxCounter = counter
+		return false
+	default:
+		back := s.maxCounter - counter
+		if back >= chatReplayWindow {
+			return true // too far behind to tell; refuse rather than reseal
+		}
+		if s.seenMask&(1<<back) != 0 {
+			return true
+		}
+		s.seenMask |= 1 << back
+		return false
+	}
 }
 
 // chatRespCache caches the sealed response for each request counter so that a
@@ -270,6 +328,7 @@ func (c *ChatService) StatsSnapshot() map[string]int64 {
 		"inits":     c.statInits.Swap(0),
 		"messages":  c.statCommits.Swap(0),
 		"registers": c.statRegisters.Swap(0),
+		"stale":     c.statStaleCells.Swap(0),
 		"accounts":  int64(c.store.AccountCount()),
 		"sessions":  sessions,
 	}
@@ -315,11 +374,41 @@ func (c *ChatService) HandleCell(selector [protocol.ChatSelectorSize]byte, count
 
 // ---- handshake ----
 
-func (h *chatHandshake) add(idx uint8, payload []byte) {
+// chatMaxHandshakeCells bounds how many cells one handshake may claim.
+//
+// The index is a byte, so one cell carrying index 255 grew the slice to 256
+// entries: 6 KiB of slice headers for a ~50-byte query that proves nothing
+// about who sent it. The tag table holds 50 000 of those, so 50 000 queries
+// pinned ~300 MiB, and filling every slot reaches 14 KiB a tag. Held until a
+// sweep that runs every few minutes, which an attacker simply works inside.
+//
+// A real handshake needs 12.
+//
+// COMPUTED from the protocol rather than written down, with a margin: a
+// number typed here would be correct today and silently refuse real
+// handshakes the moment an envelope grows. The largest stream is a Register:
+// ephemeral key + version + kind + the sealed envelope.
+var chatMaxHandshakeCells = func() int {
+	boot := protocol.RegisterEnvelopeLen + protocol.ChatSealTagSize
+	if auth := protocol.AddressSize + 4 + protocol.ChatAccountProofSize + protocol.ChatSealTagSize; auth > boot {
+		boot = auth
+	}
+	total := protocol.X25519KeySize + 2 + boot
+	cells := (total + protocol.ChatCellPayloadSize - 1) / protocol.ChatCellPayloadSize
+	return cells + 3 // margin, so a small format change cannot break a handshake
+}()
+
+// add stores one cell of a handshake stream, reporting whether the index is
+// one a real handshake could use.
+func (h *chatHandshake) add(idx uint8, payload []byte) bool {
+	if int(idx) >= chatMaxHandshakeCells {
+		return false
+	}
 	for len(h.chunks) <= int(idx) {
 		h.chunks = append(h.chunks, nil)
 	}
 	h.chunks[idx] = append([]byte(nil), payload...)
+	return true
 }
 
 // assemble returns the full handshake stream once enough cells have arrived.
@@ -360,6 +449,14 @@ func (h *chatHandshake) assemble() ([]byte, bool) {
 func (c *ChatService) handleHandshakeCell(setupTag [protocol.ChatSelectorSize]byte, idx uint8, payload []byte, domain string, now time.Time) []byte {
 	c.mu.Lock()
 	h := c.handshakes[setupTag]
+	// The TTL is enforced HERE as well as in the sweep. The sweep runs every
+	// few minutes, so without this a stale entry keeps collecting cells for
+	// the whole gap -- and an attacker who knows the sweep interval simply
+	// works inside it.
+	if h != nil && now.Sub(h.created) > chatHandshakeTTL {
+		delete(c.handshakes, setupTag)
+		h = nil
+	}
 	if h == nil {
 		if len(c.handshakes) >= chatMaxSessions {
 			c.mu.Unlock()
@@ -368,7 +465,10 @@ func (c *ChatService) handleHandshakeCell(setupTag [protocol.ChatSelectorSize]by
 		h = &chatHandshake{created: now}
 		c.handshakes[setupTag] = h
 	}
-	h.add(idx, payload)
+	if !h.add(idx, payload) {
+		c.mu.Unlock()
+		return []byte{} // an index no handshake could use
+	}
 	stream, ok := h.assemble()
 	if !ok {
 		c.mu.Unlock()
@@ -443,6 +543,7 @@ func (c *ChatService) completeHandshake(setupTag [protocol.ChatSelectorSize]byte
 			return hsResp(protocol.ChatStatusBusy, nil)
 		}
 		c.statRegisters.Add(1)
+		return hsResp(protocol.ChatStatusRegistered, nil)
 	case protocol.ChatHandshakeAuth:
 		b, e := protocol.ParseChatAuthBootstrapPlain(boot)
 		if e != nil {
@@ -529,6 +630,24 @@ func (c *ChatService) handleInContext(sess *chatSession, selector [protocol.Chat
 	if cached, ok := sess.respCache.get(counter); ok {
 		c.mu.Unlock()
 		return cached
+	}
+	// Answered before, but no longer in the cache above.
+	//
+	// INVARIANT: one nonce seals at most one plaintext. The seal is AES-CTR
+	// and its nonce is fixed by (session key, selector, counter), so a second
+	// response at the same counter must be byte-identical to the first or not
+	// exist. The cache keeps that true for recent counters; this keeps it
+	// true for older ones, where the cache can no longer answer.
+	//
+	// Dropped rather than answered with an error: a repeat on a live session
+	// is a stray duplicate the client is no longer waiting on (it consumed
+	// that counter once and moved on), or a deliberate one. Silence is what a
+	// lost packet looks like, so the client's own retransmit logic copes --
+	// and an error status would need that same nonce anyway.
+	if replay := sess.markCounter(counter); replay {
+		c.mu.Unlock()
+		c.statStaleCells.Add(1)
+		return []byte{}
 	}
 	c.mu.Unlock()
 

@@ -736,3 +736,63 @@ func TestRemoveDefaultAlsoInUserList(t *testing.T) {
 		t.Errorf("%q returned after reload: %v", target, got)
 	}
 }
+
+// Post markup reaches us over a connection the censor sits on, and the
+// renderer splices it into the UI's origin with innerHTML. The old sanitizer
+// stripped on* handlers and javascript: hrefs and kept every ELEMENT, so
+// <iframe srcdoc="..."> went straight through -- and a srcdoc frame inserted
+// via innerHTML executes with the parent's origin. No click, no handler
+// attribute, just render. From there: the recovery seed, the passphrase, the
+// chat history.
+func TestSanitizePostHTMLDropsExecutableElements(t *testing.T) {
+	cases := []struct {
+		desc, in string
+	}{
+		{"srcdoc frame", `a<iframe srcdoc="&lt;script&gt;alert(1)&lt;/script&gt;"></iframe>b`},
+		{"plain frame", `a<iframe src="https://evil.example/"></iframe>b`},
+		{"script", `a<script>alert(1)</script>b`},
+		{"object", `a<object data="https://evil.example/x.swf"></object>b`},
+		{"embed", `a<embed src="https://evil.example/x">b`},
+		{"svg animate", `a<svg><animate onbegin="alert(1)"></svg>b`},
+		{"form action", `a<form action="javascript:alert(1)"><input></form>b`},
+		{"meta refresh", `a<meta http-equiv="refresh" content="0;url=https://evil.example">b`},
+		{"base", `a<base href="https://evil.example/">b`},
+		{"style", `a<style>body{display:none}</style>b`},
+	}
+	for _, c := range cases {
+		got := strings.ToLower(sanitizePostHTML(c.in))
+		for _, bad := range []string{"<iframe", "<script", "<object", "<embed", "<svg",
+			"<form", "<input", "<meta", "<base", "<style", "srcdoc", "onbegin"} {
+			if strings.Contains(got, bad) {
+				t.Errorf("%s: %q survived in %q", c.desc, bad, got)
+			}
+		}
+		// The surrounding text is still there: this sanitises, it does not
+		// blank the post.
+		if !strings.Contains(got, "a") || !strings.Contains(got, "b") {
+			t.Errorf("%s: the post's own text was lost: %q", c.desc, got)
+		}
+	}
+}
+
+// An unknown tag loses the tag, never the words inside it.
+func TestSanitizePostHTMLUnwrapsUnknownTags(t *testing.T) {
+	got := sanitizePostHTML(`before<marquee>the text</marquee>after`)
+	if strings.Contains(strings.ToLower(got), "<marquee") {
+		t.Errorf("unknown tag kept: %q", got)
+	}
+	if !strings.Contains(got, "the text") {
+		t.Errorf("text inside an unknown tag was dropped: %q", got)
+	}
+}
+
+// style= cannot execute, but it can lay an invisible element over the page.
+func TestSanitizePostHTMLDropsStyleAttribute(t *testing.T) {
+	got := sanitizePostHTML(`<span style="position:fixed;inset:0;z-index:99">x</span>`)
+	if strings.Contains(strings.ToLower(got), "style=") {
+		t.Errorf("style attribute survived: %q", got)
+	}
+	if !strings.Contains(got, "x") {
+		t.Errorf("content lost: %q", got)
+	}
+}

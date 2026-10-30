@@ -21,8 +21,9 @@ struct ContentView: View {
                 ? Color(.sRGB, red: 14 / 255, green: 22 / 255, blue: 33 / 255, opacity: 1)    // --bg2 dark  #0e1621
                 : Color(.sRGB, red: 240 / 255, green: 242 / 255, blue: 245 / 255, opacity: 1)) // --bg2 light #f0f2f5
                 .fillSafeArea()
-            if server.port > 0 {
-                WebView(url: URL(string: "http://127.0.0.1:\(server.port)")!)
+            if server.port > 0, !server.password.isEmpty {
+                WebView(url: URL(string: "http://127.0.0.1:\(server.port)")!,
+                        secret: server.password)
                     // Force a fresh WebView (and page reload) on every server
                     // restart, even when the port is unchanged. See
                     // ServerController.generation.

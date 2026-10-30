@@ -138,6 +138,19 @@ type Fetcher struct {
 // callers decide policy (feed: accept with a warning; messenger: reject).
 var ErrUnverified = errors.New("content unverified: no signature block")
 
+// pinned reports whether this config carries a server signing key (sk=).
+//
+// When one is pinned, an ABSENT signature is a failure, not a tolerated old
+// server: the whole point of pinning is that content cannot be accepted
+// without it. Tolerating absence made the pin cosmetic -- a resolver that
+// simply withheld the signature block forged the entire feed, and the UI said
+// nothing because "unverified" was only ever logged.
+//
+// Availability is not the cost it looks like: FetchBlock already retries 20
+// times with back-off, so reaching here means twenty consecutive failures on
+// a link that just delivered the content blocks.
+func (f *Fetcher) pinned() bool { return f.serverPubKey != nil }
+
 // ErrExtraBlockInvalid means an ExtraBlock WAS returned but failed
 // verification (bad signature, wrong channel, rolled-back timestamp, or
 // content-digest mismatch) — i.e. an active tamper attempt. Always hard-fail.
@@ -274,7 +287,9 @@ func (f *Fetcher) fetchRawAndVerify(ctx context.Context, channelID uint16, count
 		raw = append(raw, b...)
 	}
 	if needExtra {
-		if verr := f.verifyExtraBytes(channelID, raw, extraRaw); verr == ErrExtraBlockInvalid {
+		// needExtra is only set when a key is pinned, so ANY verification
+		// failure here -- invalid or absent -- is fatal.
+		if verr := f.verifyExtraBytes(channelID, raw, extraRaw); verr != nil {
 			return nil, verr
 		}
 	}
@@ -1026,6 +1041,13 @@ func (f *Fetcher) FetchMetadata(ctx context.Context) (*protocol.Metadata, error)
 	if hdrErr != nil && f.debug {
 		f.log("[debug] extended header peek: %v (using legacy fetch)", hdrErr)
 	}
+	// The legacy path fetches no signature and verifies nothing, and which
+	// path runs is chosen by a magic number in block 0 -- which the answering
+	// resolver writes. With a key pinned, stripping that magic would be a
+	// one-byte downgrade to an unverified feed, so refuse it.
+	if f.pinned() {
+		return nil, fmt.Errorf("metadata: %w (server offered only the unsigned legacy path)", ErrUnverified)
+	}
 	return f.fetchMetadataLegacy(ctx, block0)
 }
 
@@ -1126,10 +1148,11 @@ func (f *Fetcher) fetchMetadataExtended(parent context.Context, block0 []byte, c
 			return nil, fmt.Errorf("parse: %w", err)
 		}
 		// Verify the server signature over the metadata block concatenation
-		// using the ExtraBlock fetched above. A present-but-invalid signature
-		// is a hard failure; a missing one (old server) is tolerated.
+		// using the ExtraBlock fetched above. An invalid signature is always a
+		// hard failure; an absent one only when a key is pinned, since
+		// withholding the block would otherwise bypass the pin entirely.
 		verr := f.verifyExtraBytes(protocol.MetadataChannel, assembled, extraRaw)
-		if verr == ErrExtraBlockInvalid {
+		if verr == ErrExtraBlockInvalid || (verr != nil && f.pinned()) {
 			return nil, fmt.Errorf("metadata: %w", verr)
 		}
 		// Report the chat advertisement bit: verified only when a key is pinned
@@ -1417,10 +1440,10 @@ func (f *Fetcher) fetchChannelBlocks(ctx context.Context, channelNum int, blockC
 	}
 
 	// Verify the server signature over the raw (pre-decompression) block
-	// concatenation using the ExtraBlock fetched above. A present-but-invalid
-	// signature is a hard failure (active tamper); a missing one (old server)
-	// is tolerated so the feed still works, just unverified. Log the outcome
-	// per channel so the verification state is visible.
+	// concatenation using the ExtraBlock fetched above. An invalid signature
+	// is always a hard failure; an absent one is refused too, because a
+	// resolver that can withhold a block would otherwise bypass the pin.
+	// Log the outcome per channel so the verification state is visible.
 	if f.serverPubKey != nil {
 		switch verr := f.verifyExtraBytes(uint16(channelNum), allData, extraRaw); verr {
 		case nil:
@@ -1429,14 +1452,22 @@ func (f *Fetcher) fetchChannelBlocks(ctx context.Context, channelNum int, blockC
 			f.log("[verify] channel %d: SIGNATURE INVALID — rejecting", channelNum)
 			return nil, fmt.Errorf("channel %d: %w", channelNum, verr)
 		default: // ErrUnverified
+			if f.pinned() {
+				f.log("[verify] channel %d: NO SIGNATURE BLOCK — rejecting (key is pinned)", channelNum)
+				return nil, fmt.Errorf("channel %d: %w", channelNum, verr)
+			}
 			f.log("[verify] channel %d: no signature block (UNVERIFIED)", channelNum)
 		}
 		// Fill the extra progress slot once the verification step is done.
 		f.logProgress(fmt.Sprintf("Channel %d (%d/%d)", channelNum, progressTotal, progressTotal), float64(progressTotal), float64(progressTotal))
 	}
 
-	// Decompress if data has compression header
-	decompressed, err := protocol.DecompressMessages(allData)
+	// Decompress if data has compression header. BOUNDED: the bytes come from
+	// whoever answered the DNS query, and deflate expands about a thousand
+	// times -- a few hundred KB on the wire inflates into gigabytes and takes
+	// the process with it. A hostile resolver needs nothing but the public
+	// passphrase to do it.
+	decompressed, err := protocol.DecompressMessagesLimited(allData, protocol.InflateCap(len(allData)))
 	if err != nil {
 		// If the data starts with a known compression header but decompression
 		// failed, the data is corrupt — do NOT raw-parse compressed bytes as

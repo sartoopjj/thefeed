@@ -257,7 +257,7 @@ function renderScanProgress(p) {
     tr.innerHTML = '<td style="padding:8px"><input type="checkbox" class="scan-select-cb" data-ip="' + escAttr(r.ip) + '" checked onchange="updateScanSelectedCount()"></td>' +
       '<td style="padding:8px;font-family:monospace;font-size:13px">' + esc(r.ip) + '</td>' +
       '<td style="padding:8px;text-align:right;font-size:13px;color:var(--text-dim)">' + (r.latencyMs != null ? Math.round(r.latencyMs) + 'ms' : '-') + '</td>' +
-      '<td style="padding:4px 8px"><button class="btn btn-flat" style="font-size:12px;padding:4px 8px;min-width:0" onclick="navigator.clipboard.writeText(\'' + escAttr(r.ip) + '\');showToast(t(\'copied\'))">' + icon('copy') + '</button></td>';
+      '<td style="padding:4px 8px"><button class="btn btn-flat" style="font-size:12px;padding:4px 8px;min-width:0" onclick="navigator.clipboard.writeText(\'' + jsStr(r.ip) + '\');showToast(t(\'copied\'))">' + icon('copy') + '</button></td>';
     body.appendChild(tr);
   }
 

@@ -255,10 +255,14 @@ type channelsCacheFile map[string]*channelsCacheEntry
 
 // Server is the web UI server for thefeed client.
 type Server struct {
-	dataDir  string
-	port     int
-	host     string
-	password string // admin password; empty means no auth
+	dataDir string
+	port    int
+	host    string
+	// password gates every request with HTTP Basic when set; empty means no
+	// auth. On desktop the user chooses it (--password). On a phone the bind
+	// layer generates one per launch and hands it to its own WebView, because
+	// loopback is not private there: see mobile.NewServer.
+	password string
 	// sharedBackend marks a multi-user deployment (e.g. --host 0.0.0.0 with
 	// --shared). The UI then keeps unread/seen state per-browser in
 	// localStorage instead of the shared server profiles.json, so connected
@@ -579,6 +583,11 @@ func (s *Server) serve(ln net.Listener) error {
 	mux.HandleFunc("/api/saved/lock/remove", s.handleSavedLockRemove)
 	mux.HandleFunc("/api/saved/lock/reset", s.handleSavedLockReset)
 	mux.HandleFunc("/api/saved/unlock", s.handleSavedUnlock)
+	// Driven by the native lock screen, which is the only place that sees the
+	// passcode in the clear. See handlers_tel_lock.go.
+	mux.HandleFunc("/api/tel/lock", s.handleTelLock)
+	mux.HandleFunc("/api/tel/lock/remove", s.handleTelLockRemove)
+	mux.HandleFunc("/api/tel/unlock", s.handleTelUnlock)
 	mux.HandleFunc("/api/saved/pin", s.handleSavedPin)
 	mux.HandleFunc("/api/saved/count", s.handleSavedCount)
 	mux.HandleFunc("/api/saved/seen", s.handleSavedSeen)
@@ -674,6 +683,9 @@ func (s *Server) serve(ln net.Listener) error {
 		})
 	}
 	handler = sameOriginGuard(handler)
+	// The host actually served on. Mobile binds its own listener first to
+	// discover the kernel-assigned port, so s.host is what to go by.
+	handler = hostGuard(handler, s.host)
 
 	srv := &http.Server{
 		Addr:    addr,
@@ -746,6 +758,118 @@ func sameOriginGuard(next http.Handler) http.Handler {
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+// hostGuard rejects requests whose Host is not an address this machine is
+// actually reachable at.
+//
+// That is what stops DNS rebinding: the user opens any page, the attacker's
+// domain re-resolves to this server's address, and every request the page
+// makes is same-origin as far as the browser is concerned -- so Sec-Fetch-Site
+// says "same-origin" and the cross-site guard waves it through. GETs were
+// never checked there at all, and GET /api/chat/seed returns the messenger
+// recovery code while GET /api/config returns the feed passphrase.
+//
+// The Host header is the one thing the attacking page cannot change: it is
+// the name the browser was pointed at. A rebinding attack always arrives
+// under a NAME the attacker owns, never under this machine's own address --
+// so the check holds whether the server is bound to loopback or to the LAN.
+//
+// bindHost is whatever --host was given (empty or a wildcard means every
+// interface). THEFEED_EXTRA_HOSTS lets an operator add names they reach the
+// server by, for the one case this cannot infer: a DNS name of their own.
+func hostGuard(next http.Handler, bindHost string) http.Handler {
+	allowed := allowedHosts(bindHost)
+	var warned sync.Map // one line per distinct Host, not per request
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !hostAllowed(r.Host, allowed) {
+			// Behind a reverse proxy that passes the original name through
+			// (nginx with `proxy_set_header Host $host;`) this is a correct
+			// setup hitting a refusal, and a bare 403 gives nothing to act
+			// on. Say the name and the fix, once per name.
+			if _, seen := warned.LoadOrStore(r.Host, true); !seen {
+				log.Printf("[web] refused Host %q: not an address this machine is "+
+					"reachable at. If you reach the app through a proxy or a name "+
+					"of your own, add it: THEFEED_EXTRA_HOSTS=%s", r.Host, hostOnly(r.Host))
+			}
+			http.Error(w, "bad host: set THEFEED_EXTRA_HOSTS if you reach this "+
+				"server through a proxy or a custom name", http.StatusForbidden)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+// hostOnly strips the port, for the hint above.
+func hostOnly(host string) string {
+	if h, _, err := net.SplitHostPort(host); err == nil {
+		return h
+	}
+	return host
+}
+
+// allowedHosts is the set of names and addresses this server answers to.
+func allowedHosts(bindHost string) map[string]bool {
+	out := map[string]bool{
+		"localhost": true, "127.0.0.1": true, "::1": true, "0:0:0:0:0:0:0:1": true,
+	}
+	if h := strings.ToLower(strings.TrimSpace(bindHost)); h != "" && !wildcardHost(h) {
+		out[strings.TrimSuffix(strings.TrimPrefix(h, "["), "]")] = true
+	}
+	// Bound to every interface: the user reaches it by one of this machine's
+	// own addresses, and we cannot know which.
+	if wildcardHost(bindHost) {
+		if addrs, err := net.InterfaceAddrs(); err == nil {
+			for _, a := range addrs {
+				if ipn, ok := a.(*net.IPNet); ok {
+					out[strings.ToLower(ipn.IP.String())] = true
+				}
+			}
+		}
+	}
+	// A name of the operator's own -- a hosts entry, a LAN DNS record. Not
+	// inferable, so it has to be stated.
+	for _, h := range strings.Split(os.Getenv("THEFEED_EXTRA_HOSTS"), ",") {
+		if h = strings.ToLower(strings.TrimSpace(h)); h != "" {
+			out[h] = true
+		}
+	}
+	return out
+}
+
+func wildcardHost(h string) bool {
+	switch strings.TrimSuffix(strings.TrimPrefix(strings.TrimSpace(h), "["), "]") {
+	case "", "0.0.0.0", "::", "[::]":
+		return true
+	}
+	return false
+}
+
+// hostAllowed checks one Host header. The port is ignored: a request that
+// reached us arrived on our port by definition, and the NAME is the part an
+// attacker cannot forge.
+func hostAllowed(host string, allowed map[string]bool) bool {
+	if host == "" {
+		return false
+	}
+	name := host
+	if h, _, err := net.SplitHostPort(host); err == nil {
+		name = h
+	}
+	name = strings.ToLower(strings.TrimSuffix(strings.TrimPrefix(name, "["), "]"))
+	if allowed[name] {
+		return true
+	}
+	// RFC 6761 reserves .localhost for the loopback, and browsers resolve it
+	// there without asking DNS -- so it cannot be rebound.
+	if strings.HasSuffix(name, ".localhost") {
+		return true
+	}
+	// Any other literal loopback address (127.0.0.0/8).
+	if ip := net.ParseIP(name); ip != nil && ip.IsLoopback() {
+		return true
+	}
+	return false
 }
 
 func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {

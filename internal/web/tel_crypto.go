@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"sync"
 )
 
 // Telegram at-rest encryption.
@@ -41,6 +42,27 @@ func (tc *telCrypto) deviceKeyPath() string { return filepath.Join(tc.dir, "devi
 // alone rather than overwritten. Only ever used in passcode mode, where the
 // user holds the means to unlock.
 var errTelLocked = errors.New("tel: store is locked")
+
+// telUnlocked remembers the data key of a passphrase-mode store that has been
+// opened this run, keyed by its keys directory.
+//
+// loadTelCrypto is deliberately called per use rather than cached, so turning
+// a passcode on or off takes effect without a restart -- which means there is
+// no live handle to swap an unlocked key into. This is where the key lives
+// instead: in memory for the life of the process, never on disk.
+var telUnlocked sync.Map // keys dir -> [32]byte
+
+func rememberTelKey(keysDir string, dek [32]byte) { telUnlocked.Store(keysDir, dek) }
+func forgetTelKey(keysDir string)                 { telUnlocked.Delete(keysDir) }
+
+func recallTelKey(keysDir string) ([32]byte, bool) {
+	v, ok := telUnlocked.Load(keysDir)
+	if !ok {
+		return [32]byte{}, false
+	}
+	dek, ok := v.([32]byte)
+	return dek, ok
+}
 
 // resetSealed deletes data nobody can ever read again.
 //
@@ -90,7 +112,14 @@ func loadTelCrypto(dir string) (*telCrypto, error) {
 	}
 	tc.mode = kr.Mode
 	if kr.Mode == "passphrase" {
-		tc.locked = true // filled in by unlockTelCrypto
+		// Unlocked earlier in this run? Then the key is in memory and the
+		// store is usable; otherwise it stays locked until the user types it,
+		// and seal/open refuse rather than clobbering what is on disk.
+		if dek, ok := recallTelKey(tc.dir); ok {
+			tc.dek = dek
+			return tc, nil
+		}
+		tc.locked = true
 		return tc, nil
 	}
 	dk, err := os.ReadFile(tc.deviceKeyPath())
@@ -157,6 +186,9 @@ func (tc *telCrypto) setPassphrase(passphrase string) error {
 	// the only way back to the data.
 	_ = os.Remove(tc.deviceKeyPath())
 	tc.mode = "passphrase"
+	// The user just proved they hold it, so this run stays unlocked -- without
+	// this, setting a passcode would lock the section until the next restart.
+	rememberTelKey(tc.dir, tc.dek)
 	return nil
 }
 
@@ -180,6 +212,7 @@ func unlockTelCrypto(dir, passphrase string) (*telCrypto, error) {
 	}
 	copy(tc.dek[:], dek)
 	tc.locked = false
+	rememberTelKey(tc.dir, tc.dek)
 	return tc, nil
 }
 
@@ -199,6 +232,8 @@ func (tc *telCrypto) removePassphrase() error {
 		return err
 	}
 	tc.mode = "device"
+	// The device key is back on disk, so nothing needs the in-memory copy.
+	forgetTelKey(tc.dir)
 	return nil
 }
 

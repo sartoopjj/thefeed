@@ -1,30 +1,45 @@
 package tgbridge
 
 import (
-	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
+	"context"
+	"fmt"
+	"strings"
+
+	"github.com/gotd/log"
 )
 
-// newLogger bridges gotd's zap logging into the app's own log sink. gotd is
+// newLogger bridges gotd's logging into the app's own log sink. gotd is
 // otherwise silent: a failed MTProto handshake just turns into a backoff
 // retry, so the caller sees a stall with no reason anywhere.
-func newLogger(sink func(string)) *zap.Logger {
-	enc := zapcore.NewConsoleEncoder(zapcore.EncoderConfig{
-		MessageKey:     "msg",
-		LevelKey:       "level",
-		NameKey:        "logger",
-		EncodeLevel:    zapcore.LowercaseLevelEncoder,
-		EncodeDuration: zapcore.StringDurationEncoder,
-	})
-	return zap.New(zapcore.NewCore(enc, zapcore.AddSync(writerFunc(sink)), zapcore.InfoLevel))
+//
+// gotd used to take a *zap.Logger and now takes its own two-method interface.
+// Our sink is a single func(string), so implementing that interface here is
+// less code than adapting a logging library to it.
+func newLogger(sink func(string)) log.Logger { return sinkLogger{sink: sink} }
+
+// sinkLogger renders a structured record as one line for a plain-text sink.
+type sinkLogger struct{ sink func(string) }
+
+// Enabled drops debug records. gotd calls this BEFORE building attributes,
+// so refusing here keeps a chatty level off the hot path entirely rather
+// than formatting records we would only discard.
+func (s sinkLogger) Enabled(_ context.Context, level log.Level) bool {
+	return s.sink != nil && level >= log.LevelInfo
 }
 
-// writerFunc adapts a log callback to io.Writer for zap.
-type writerFunc func(string)
-
-func (w writerFunc) Write(p []byte) (int, error) {
-	w(string(p))
-	return len(p), nil
+func (s sinkLogger) Log(_ context.Context, level log.Level, msg string, attrs ...log.Attr) {
+	if s.sink == nil {
+		return
+	}
+	var b strings.Builder
+	b.WriteString(strings.ToLower(level.String()))
+	b.WriteString("\t")
+	b.WriteString(msg)
+	for _, a := range attrs {
+		b.WriteString("\t")
+		b.WriteString(a.Key)
+		b.WriteString("=")
+		b.WriteString(fmt.Sprint(a.Value.Any()))
+	}
+	s.sink(b.String())
 }
-
-func (w writerFunc) Sync() error { return nil }

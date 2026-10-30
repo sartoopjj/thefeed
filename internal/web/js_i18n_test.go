@@ -177,6 +177,34 @@ func TestJSTelegramProgressDoesNotJump(t *testing.T) {
 	t.Logf("%s", out)
 }
 
+// Telegram's own formatting must render, and must not become markup. Run
+// with the rest of the suite, not by hand.
+func TestJSTelegramEntities(t *testing.T) {
+	node, err := exec.LookPath("node")
+	if err != nil {
+		t.Skip("node not installed")
+	}
+	out, err := exec.Command(node, "jstest/tel_entities.test.mjs").CombinedOutput()
+	if err != nil {
+		t.Fatalf("entity rendering checks failed:\n%s", out)
+	}
+	t.Logf("%s", out)
+}
+
+// A value in an inline handler must be escaped for JAVASCRIPT. Run with the
+// rest of the suite, not by hand.
+func TestJSInlineHandlerEscaping(t *testing.T) {
+	node, err := exec.LookPath("node")
+	if err != nil {
+		t.Skip("node not installed")
+	}
+	out, err := exec.Command(node, "jstest/inline_handler_escaping.test.mjs").CombinedOutput()
+	if err != nil {
+		t.Fatalf("inline handler escaping checks failed:\n%s", out)
+	}
+	t.Logf("%s", out)
+}
+
 // A muted conversation must look muted. Run with the rest of the suite, not
 // by hand.
 func TestJSTelegramMutedRow(t *testing.T) {

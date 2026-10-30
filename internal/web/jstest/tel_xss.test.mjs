@@ -62,9 +62,15 @@ for (const ch of ['\u202A', '\u202B', '\u202C', '\u202D', '\u202E',
     `got ${JSON.stringify(telSafeText('a' + ch + 'b'))}`);
 }
 check('leaves ordinary text alone', telSafeText('سلام hello 123') === 'سلام hello 123');
+// Message text goes through telFormatText, which cleans, escapes and
+// flag-swaps internally so Telegram's own formatting can be applied around
+// escaped pieces. The property is the same; the call site moved.
 check('a message with an override is cleaned before display',
-  /\((telEsc|linkify)\(telSafeText\(m\.text\)\)/.test(src) || src.includes('linkify(telSafeText(m.text))'),
-  'message text is not cleaned');
+  /function telFormatText[\s\S]*?telSafeText\(text\)/.test(src),
+  'telFormatText no longer cleans the text it renders');
+check('message text is rendered through it',
+  src.includes('telFormatText(m.text, m.entities)'),
+  'the render site no longer uses telFormatText');
 check('a media name with an override is cleaned',
   src.includes('telSafeText(m.mediaName)'), 'media names are not cleaned');
 check('a button shows its real target',
@@ -80,7 +86,9 @@ for (const [what, re] of [
   // linkify() escapes everything it does not turn into a link, and its regex
   // only matches http(s), so no scheme can ride in. It is the feed's, shared
   // so both sections handle links the same way.
-  ['message text', /(telEsc|linkify)\((telSafeText\()?m\.text/],
+  // telFormatText escapes each slice with telEsc and linkifies the plain
+  // runs; nothing from the message is interpolated as markup.
+  ['message text', /function telFormatText[\s\S]*?telEsc\(piece\)/],
   ['button label', /telEsc\((telSafeText\()?b\.text/],
   ['media label', /telEsc\((telSafeText\()?label/],
 ]) {
@@ -125,7 +133,7 @@ check('linkify requires an explicit http(s) scheme', !!linkRe && linkRe[1].inclu
     "telFlag(telEsc(d.preview || ''))",
     "telFlag(telEsc(peer.title || peer.username || ''))",
     'telFlag(telEsc(telSafeText(text)))',
-    'telFlag(linkify(telSafeText(m.text)))',
+    'telFlag(linkify(safe))',
   ]) {
     check(`flag swap runs on escaped text: ${call.slice(0, 40)}`, src.includes(call));
   }

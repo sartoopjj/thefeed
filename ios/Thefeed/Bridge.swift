@@ -9,6 +9,44 @@ import WebKit
 final class Bridge: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     weak var webView: WKWebView?
 
+    /// Per-launch HTTP Basic secret for the local server. Set by WebView
+    /// before the first load; see ServerController.password.
+    var localSecret: String = ""
+
+    /// Answers the local server's Basic auth challenge.
+    ///
+    /// Loopback is not private on a phone: any other app with the INTERNET
+    /// permission can reach this port, and the service starts before anything
+    /// gates it. So the server requires a secret generated this launch, and
+    /// this is the only place that knows it. Another app gets 401.
+    ///
+    /// `.forSession` persistence, not `.permanent`: the secret changes every
+    /// launch, so storing it in the keychain would leave stale credentials
+    /// behind and leak it past the process.
+    func webView(
+        _ webView: WKWebView,
+        didReceive challenge: URLAuthenticationChallenge,
+        completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void
+    ) {
+        let space = challenge.protectionSpace
+        guard space.authenticationMethod == NSURLAuthenticationMethodHTTPBasic,
+              space.host == "127.0.0.1" || space.host == "localhost",
+              !localSecret.isEmpty
+        else {
+            completionHandler(.performDefaultHandling, nil)
+            return
+        }
+        // A second challenge for the same request means the secret was
+        // rejected; retrying would loop.
+        if challenge.previousFailureCount > 0 {
+            completionHandler(.cancelAuthenticationChallenge, nil)
+            return
+        }
+        // Any user name is accepted; only the password is checked.
+        completionHandler(.useCredential, URLCredential(
+            user: "thefeed", password: localSecret, persistence: .forSession))
+    }
+
     func userContentController(
         _ userContentController: WKUserContentController,
         didReceive message: WKScriptMessage

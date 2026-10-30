@@ -133,6 +133,7 @@ const (
 	ChatStatusReplay     = 13
 	ChatStatusBadRequest = 14
 	ChatStatusDisabled   = 15
+	ChatStatusRegistered = 16
 )
 
 // chatSelectorHandshakeBit marks a selector as a client-chosen handshake setup

@@ -356,6 +356,14 @@ but they contend on the same branch and share the same size budget.
 - **Remote management (`--allow-manage`)** — when enabled, anyone with the passphrase can, from the client: **send messages through the server's Telegram account** (into channels / private chats — this is Telegram sending via the operator's logged-in account, and is *completely separate* from the end-to-end [messenger](#messenger)), and **change the feed's channel list** (add or remove the channels shown in the feed). Off by default; enable only on trusted servers.
 - **Client web password (`--password`)** — HTTP Basic Auth on the web UI. Local protection only; it does **not** affect DNS-level access.
 
+**Reaching the client's web UI by a name of your own.** The client answers only at an address the machine is actually reachable at — loopback, the address it was bound to, and the names you list. Anything else is refused with a `403` that names the setting, because a page on the internet that re-resolves its own domain to `127.0.0.1` would otherwise be same-origin with the UI and could read your passphrase. If you serve the client through nginx or under a custom hostname, list it:
+
+```bash
+THEFEED_EXTRA_HOSTS=feed.example.com,feed.home.lan
+```
+
+On **Android and iOS** you do not set `--password`: the app generates one itself each launch and hands it only to its own WebView, so other apps on the phone get a `401` even while the app sits locked. Loopback is not private on a phone. Nothing to configure. On **Android**, where the device can have a passcode, that passcode also wraps the Telegram session and message-cache key, so those files are useless without it.
+
 **Properties:** end-to-end AES-256 in both directions · random padding defeats size analysis · each query independent (no wire session state) · writes gated by `--allow-manage` · Telegram 2FA prompted interactively (never stored in args) · session file `0600`.
 
 > **⚠️ Never share your passphrase publicly.** Anyone who has it can run their own client and read all your messages — there is no way to prevent that. The `--password` flag only guards the web UI on your own machine.

@@ -319,3 +319,155 @@ func TestBackupRestoreReportsTheRealReason(t *testing.T) {
 		t.Errorf("body = %q, want it to say the upload could not be read", rec.Body.String())
 	}
 }
+
+// A backup file is something you are GIVEN, so every key in it is the
+// sender's text. Joined straight onto a path, "../../../.claude/settings"
+// walks out of the data directory and writes a .json anywhere -- hooks that
+// run on the next start, an editor's settings, the app's own profiles.json.
+// Restoring a backup someone sent you is the entire point of the format.
+func TestRestoreChatRefusesToWriteOutsideItsDirectory(t *testing.T) {
+	dir := t.TempDir()
+	s := &Server{dataDir: dir}
+	s.chat = newChatHub(s, dir)
+
+	escapes := map[string]json.RawMessage{
+		"../../../.claude/settings": json.RawMessage(`{"hooks":"pwned"}`),
+		"../../profiles":            json.RawMessage(`{"pwned":true}`),
+		"../escaped":                json.RawMessage(`{"pwned":true}`),
+		"sub/nested":                json.RawMessage(`{"pwned":true}`),
+		// ...and one legitimate entry, which must still land.
+		"identity": json.RawMessage(`{"ok":true}`),
+	}
+	data, err := json.Marshal(escapes)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.restoreChat(data); err != nil {
+		t.Fatalf("restoreChat: %v", err)
+	}
+
+	chatDir := filepath.Join(dir, "chat")
+	// The one allowed name is written.
+	if _, err := os.Stat(filepath.Join(chatDir, "identity.json")); err != nil {
+		t.Errorf("the legitimate entry was not restored: %v", err)
+	}
+	// Nothing at all outside the chat directory.
+	for _, p := range []string{
+		filepath.Join(dir, "profiles.json"),
+		filepath.Join(dir, "escaped.json"),
+		filepath.Join(filepath.Dir(dir), "escaped.json"),
+		filepath.Join(chatDir, "sub", "nested.json"),
+	} {
+		if _, err := os.Stat(p); err == nil {
+			t.Errorf("a backup entry wrote outside its directory: %s", p)
+		}
+	}
+	// And the whole tree holds nothing but the five known names.
+	ents, err := os.ReadDir(chatDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	allowed := map[string]bool{}
+	for _, n := range chatBackupFiles {
+		allowed[n+".json"] = true
+	}
+	for _, e := range ents {
+		if !allowed[e.Name()] {
+			t.Errorf("unexpected file in the chat directory: %s", e.Name())
+		}
+	}
+}
+
+// The restore list and the export list must stay the same list.
+func TestChatBackupNamesMatchWhatRestoreAccepts(t *testing.T) {
+	if len(chatBackupFiles) == 0 {
+		t.Fatal("no chat backup names declared")
+	}
+	for _, n := range chatBackupFiles {
+		if strings.ContainsAny(n, `/\.`) {
+			t.Errorf("name %q is not a plain file name", n)
+		}
+	}
+}
+
+// Renaming the backup file must change nothing.
+//
+// The allow-list added for the path-traversal fix is on the KEYS INSIDE the
+// archive, never on the file's own name -- so "my-backup.json", a second copy
+// the system saved as "thefeed-backup (1).tfbak", or any name at all restores
+// exactly the same. Worth pinning: a filename or extension check bolted on
+// later would silently break every user who renamed or re-downloaded theirs.
+func TestRestoreIgnoresTheFileName(t *testing.T) {
+	// One real backup, made the ordinary way.
+	src := t.TempDir()
+	sc, _ := loadSavedCrypto(src)
+	s1 := &Server{dataDir: src, savedCrypto: sc}
+	s1.chat = newChatHub(s1, src)
+	if err := s1.saveProfiles(&ProfileList{
+		Active:   "p1",
+		Profiles: []Profile{{ID: "p1", Nickname: "Renamed File Test", Config: Config{Domain: "d.example.com", Key: "k"}}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	chatDir := filepath.Join(src, "chat")
+	_ = os.MkdirAll(chatDir, 0o700)
+	_ = writeFileAtomic(filepath.Join(chatDir, "contacts.json"), []byte(`{"a":"Alice"}`), 0o600)
+	s1.chat.mu.Lock()
+	s1.chat.loadState()
+	s1.chat.mu.Unlock()
+
+	exp := httptest.NewRequest("POST", "/api/backup/export",
+		strings.NewReader(`{"password":"pw","sections":["profiles","chat"]}`))
+	ew := httptest.NewRecorder()
+	s1.handleBackupExport(ew, exp)
+	if ew.Code != 200 {
+		t.Fatalf("export status = %d: %s", ew.Code, ew.Body)
+	}
+	archive := ew.Body.Bytes()
+
+	// The same bytes under every name a user or an operating system might
+	// give them -- including no name at all.
+	for _, name := range []string{
+		"thefeed-backup.tfbak",
+		"thefeed-backup (1).tfbak",  // the OS's second copy
+		"my phone before reinstall", // no extension, spaces
+		"backup.json",               // renamed to something else entirely
+		"نسخه-پشتیبان.tfbak",        // non-ASCII
+	} {
+		var buf bytes.Buffer
+		mw := multipart.NewWriter(&buf)
+		_ = mw.WriteField("password", "pw")
+		sj, _ := json.Marshal([]string{"profiles", "chat"})
+		_ = mw.WriteField("sections", string(sj))
+		fw, err := mw.CreateFormFile("file", name)
+		if err != nil {
+			t.Fatalf("%q: %v", name, err)
+		}
+		fw.Write(archive)
+		mw.Close()
+
+		dst := t.TempDir()
+		sc2, _ := loadSavedCrypto(dst)
+		s2 := &Server{dataDir: dst, savedCrypto: sc2}
+		s2.chat = newChatHub(s2, dst)
+
+		req := httptest.NewRequest("POST", "/api/backup/restore", &buf)
+		req.Header.Set("Content-Type", mw.FormDataContentType())
+		rec := httptest.NewRecorder()
+		s2.handleBackupRestore(rec, req)
+		if rec.Code != 200 {
+			t.Errorf("restoring a file named %q failed: %d %s", name, rec.Code, rec.Body)
+			continue
+		}
+
+		// And the contents really landed, not just a 200.
+		pl, err := s2.loadProfiles()
+		if err != nil || len(pl.Profiles) != 1 || pl.Profiles[0].Nickname != "Renamed File Test" {
+			t.Errorf("file named %q restored no profile: %+v (%v)", name, pl, err)
+		}
+		raw, err := os.ReadFile(filepath.Join(dst, "chat", "contacts.json"))
+		if err != nil || !strings.Contains(string(raw), "Alice") {
+			t.Errorf("file named %q restored no contacts: %v", name, err)
+		}
+	}
+}

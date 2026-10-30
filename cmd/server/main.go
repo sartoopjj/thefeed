@@ -24,6 +24,8 @@ import (
 func main() {
 	dataDir := flag.String("data-dir", "./data", "Data directory for channels, session, and config")
 	listen := flag.String("listen", ":53", "DNS listen address (host:port)")
+	envFile := flag.String("env-file", "", "Read settings from this file "+
+		"(default: ./.env, then <data-dir>/.env, then <data-dir>/thefeed.env)")
 	domain := flag.String("domain", "", "Main DNS domain (e.g., t.example.com); canonical for relay paths")
 	extraDomains := flag.String("extra-domains", "", "Comma-separated extra sub-domains to also answer feed queries on (clients spread queries across all of them)")
 	key := flag.String("key", "", "Encryption passphrase")
@@ -84,6 +86,55 @@ func main() {
 		flag.PrintDefaults()
 	}
 	flag.Parse()
+
+	// A .env sitting next to the binary or in the data directory is loaded
+	// first. Without this, writing one and running the server by hand did
+	// nothing at all: only `docker compose` (env_file:) and systemd
+	// (EnvironmentFile=) were ever reading it, and the binary silently used
+	// its defaults.
+	//
+	// Variables already in the real environment always win, so compose and
+	// systemd keep behaving exactly as before.
+	loadEnvFiles(*envFile, *dataDir)
+
+	// Every configurable flag can also come from the environment, so the
+	// server runs the same from a compose file, a systemd EnvironmentFile or
+	// a shell -- without a command line that has to repeat all of it.
+	//
+	// A flag given on the command line always wins. "Given" means literally
+	// typed: comparing against the default cannot tell "--data-dir ./data"
+	// from not passing it, and several of these have non-empty defaults.
+	given := map[string]bool{}
+	flag.Visit(func(f *flag.Flag) { given[f.Name] = true })
+	strEnv := func(name string, val *string, env string) {
+		if !given[name] {
+			if v := os.Getenv(env); v != "" {
+				*val = v
+			}
+		}
+	}
+	boolEnv := func(name string, val *bool, env string) {
+		if given[name] {
+			return
+		}
+		switch os.Getenv(env) {
+		case "1", "true", "TRUE", "yes":
+			*val = true
+		case "0", "false", "FALSE", "no":
+			*val = false
+		}
+	}
+	strEnv("data-dir", dataDir, "THEFEED_DATA_DIR")
+	strEnv("listen", listen, "THEFEED_LISTEN")
+	strEnv("channels", channelsFile, "THEFEED_CHANNELS")
+	strEnv("private-channels", privateChannelsFile, "THEFEED_PRIVATE_CHANNELS")
+	strEnv("x-accounts", xAccountsFile, "THEFEED_X_ACCOUNTS")
+	strEnv("session", sessionPath, "THEFEED_SESSION")
+	boolEnv("no-telegram", noTelegram, "THEFEED_NO_TELEGRAM")
+	// The one-shot actions (--version, --print-config, --print-pubkey,
+	// --report, --login-only) are deliberately NOT settable this way: an
+	// environment variable that makes the server print something and exit
+	// would be a trap in a unit file nobody re-reads.
 
 	if *showVersion {
 		fmt.Printf("thefeed-server %s (commit: %s, built: %s)\n", version.Version, version.Commit, version.Date)

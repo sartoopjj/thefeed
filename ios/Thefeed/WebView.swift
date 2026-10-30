@@ -3,6 +3,10 @@ import WebKit
 
 struct WebView: UIViewRepresentable {
     let url: URL
+    /// Per-launch HTTP Basic secret the local server requires. Handed to the
+    /// coordinator, which answers the challenge for the page and every
+    /// sub-resource.
+    let secret: String
 
     func makeCoordinator() -> Bridge { Bridge() }
 
@@ -27,6 +31,7 @@ struct WebView: UIViewRepresentable {
         view.scrollView.scrollIndicatorInsets = .zero
         view.navigationDelegate = context.coordinator
         context.coordinator.webView = view
+        context.coordinator.localSecret = secret
 
         userContent.addUserScript(WKUserScript(
             source: shimSource(),

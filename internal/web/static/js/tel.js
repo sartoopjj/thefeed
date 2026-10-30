@@ -2901,6 +2901,92 @@ function telFlag(html) {
     '<img src="/static/lion-sun.svg" alt="\u{1F981}\u2600\uFE0F" style="height:1.1em;vertical-align:middle">');
 }
 
+// telFormatText renders a message's text with Telegram's own formatting.
+//
+// Entities arrive with the message, so this costs nothing extra on the wire.
+// Without it a post written with bold, quotes or spoilers reads as flat text,
+// losing the structure its author put there.
+//
+// SAFETY: the text is escaped FIRST, then tags are placed around escaped
+// pieces. Nothing from the message is ever interpolated as markup, and the
+// only attribute written is an href whose scheme has already been checked
+// server-side and is checked again here.
+//
+// Offsets are UTF-16 code units, which is exactly how JavaScript indexes a
+// string -- so they are used as-is, with no conversion to get wrong.
+function telFormatText(text, entities) {
+  var safe = telSafeText(text);
+  if (!entities || !entities.length) return telFlag(linkify(safe));
+
+  // Boundaries: every offset where formatting starts or ends. Between two
+  // adjacent boundaries the set of active entities never changes, so each
+  // slice can be wrapped once.
+  var marks = { 0: true, };
+  marks[safe.length] = true;
+  var ents = [];
+  for (var i = 0; i < entities.length; i++) {
+    var e = entities[i];
+    var a = Math.max(0, Math.min(safe.length, e.offset | 0));
+    var b = Math.max(0, Math.min(safe.length, a + (e.length | 0)));
+    if (b <= a) continue;
+    ents.push({ t: e.type, a: a, b: b, url: e.url, collapsed: !!e.collapsed });
+    marks[a] = true;
+    marks[b] = true;
+  }
+  if (!ents.length) return telFlag(linkify(safe));
+  var cuts = Object.keys(marks).map(Number).sort(function (x, y) { return x - y; });
+
+  var out = '';
+  for (var c = 0; c < cuts.length - 1; c++) {
+    var from = cuts[c], to = cuts[c + 1];
+    if (to <= from) continue;
+    var piece = safe.slice(from, to);
+    // A plain run still gets the feed's linkifier, so bare URLs and
+    // @mentions behave the same as everywhere else.
+    var active = ents.filter(function (e) { return e.a <= from && e.b >= to; });
+    if (!active.length) { out += telFlag(linkify(piece)); continue; }
+
+    var inner = telEsc(piece);
+    var href = null, codeish = false;
+    for (var k = 0; k < active.length; k++) {
+      if (active[k].t === 'code' || active[k].t === 'pre') codeish = true;
+    }
+    // Innermost first, so nesting reads correctly.
+    for (var k2 = active.length - 1; k2 >= 0; k2--) {
+      var e2 = active[k2];
+      switch (e2.t) {
+        case 'bold': inner = '<b>' + inner + '</b>'; break;
+        case 'italic': inner = '<i>' + inner + '</i>'; break;
+        case 'underline': inner = '<u>' + inner + '</u>'; break;
+        case 'strike': inner = '<s>' + inner + '</s>'; break;
+        case 'code': inner = '<code class="tel-code">' + inner + '</code>'; break;
+        case 'pre': inner = '<pre class="tel-pre">' + inner + '</pre>'; break;
+        case 'spoiler':
+          inner = '<span class="tel-spoiler" onclick="this.classList.add(\'shown\')">' + inner + '</span>';
+          break;
+        case 'blockquote':
+          inner = '<blockquote class="tel-quote' + (e2.collapsed ? ' tel-quote-collapsed' : '') +
+            '">' + inner + '</blockquote>';
+          break;
+        case 'text_url':
+          href = telSafeURL(e2.url);
+          break;
+        case 'url':
+        case 'mention':
+        case 'hashtag':
+          // These mark text that IS the link, which linkify already finds.
+          if (!codeish) inner = telFlag(linkify(piece));
+          break;
+      }
+    }
+    if (href) {
+      inner = '<a href="' + telAttrQ(href) + '" target="_blank" rel="noopener noreferrer">' + inner + '</a>';
+    }
+    out += inner;
+  }
+  return out;
+}
+
 function telSafeText(s) {
   return String(s == null ? '' : s).replace(/[\u202A-\u202E\u2066-\u2069]/g, '');
 }
@@ -3046,7 +3132,7 @@ function telRenderPane() {
       // linkify() is the feed's: markdown links, bare URLs with Persian
       // trailing punctuation trimmed, and @mentions. It escapes everything
       // else itself and only matches http(s), so no scheme can sneak through.
-      html += '<span class="tel-msg-text">' + telFlag(linkify(telSafeText(m.text))) + '</span>';
+      html += '<span class="tel-msg-text">' + telFormatText(m.text, m.entities) + '</span>';
     }
     if (media && m.text) html += media;
     html += telReactionsHTML(m) + telButtonsHTML(m) +

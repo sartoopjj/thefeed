@@ -1000,6 +1000,59 @@ html.tel-search-open #telPane .tel-msgs {
   height: 22px;
 }
 
+/* ---- message formatting (Telegram entities) --------------------------- */
+
+.tel-msg-text .tel-code,
+.tel-msg-text .tel-pre {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.92em;
+  background: color-mix(in srgb, var(--text) 10%, transparent);
+  border-radius: var(--radius-sm);
+  padding: 0 4px;
+}
+
+.tel-msg-text .tel-pre {
+  display: block;
+  padding: 6px 8px;
+  margin: 4px 0;
+  overflow-x: auto;
+  white-space: pre;
+}
+
+/* Hidden until tapped, like Telegram's own. Not a blur: that repaints the
+   text underneath on every frame, and these run on weak phones. */
+.tel-msg-text .tel-spoiler {
+  background: var(--text-dim);
+  color: transparent;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  user-select: none;
+}
+
+.tel-msg-text .tel-spoiler.shown {
+  background: transparent;
+  color: inherit;
+  cursor: auto;
+  user-select: auto;
+}
+
+.tel-msg-text .tel-quote {
+  margin: 4px 0;
+  padding: 2px 0 2px 8px;
+  border-inline-start: 2px solid var(--accent);
+  color: var(--text-dim);
+}
+
+/* Expandable quotes are clamped; the author used one because the quote is
+   long, so showing all of it would bury the message. */
+.tel-msg-text .tel-quote-collapsed {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
 /* ---- conversation ----------------------------------------------------- */
 
 .tel-msgs {

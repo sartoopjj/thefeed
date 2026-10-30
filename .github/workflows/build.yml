@@ -257,7 +257,28 @@ jobs:
           go install golang.org/x/mobile/cmd/gobind@latest
           gomobile init
 
+      # The AAR build is the heaviest step in the workflow: gomobile compiles
+      # the whole module once per ABI, and the Telegram library's generated
+      # package is enormous. Four of those at once on a 2-core/7 GB runner is
+      # what gets the step killed (exit 143) part way through.
+      #
+      # Reclaiming the preinstalled toolchains we do not use frees ~20 GB and
+      # some RAM pressure with it.
+      - name: Free runner space
+        run: |
+          echo "before:"; df -h / | tail -1; free -h | head -2
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android/sdk/ndk/2* \
+            /opt/ghc /usr/local/share/boost "$AGENT_TOOLSDIRECTORY" 2>/dev/null || true
+          sudo apt-get clean || true
+          echo "after:"; df -h / | tail -1; free -h | head -2
+
       - name: Build gomobile AAR
+        timeout-minutes: 45
+        env:
+          # Cap concurrent compiles. The default is one per core, and each
+          # one holds the generated Telegram package in memory; serialising a
+          # little is what keeps the peak under the runner's limit.
+          GOFLAGS: -p=2
         run: |
           export ANDROID_NDK_HOME="${ANDROID_NDK_HOME:-$ANDROID_NDK_LATEST_HOME}"
           VERSION="${{ github.ref_type == 'tag' && github.ref_name || '0.0.1' }}"
@@ -271,6 +292,8 @@ jobs:
           mkdir -p android/app/libs
           gomobile bind -target=android/arm,android/arm64,android/386,android/amd64 -androidapi 24 \
             -ldflags="${LDFLAGS}" -o android/app/libs/mobile.aar ./mobile
+          echo "after the bind:"; df -h / | tail -1; free -h | head -2
+          ls -lh android/app/libs/mobile.aar
 
       - name: Decode signing keystore
         env:
@@ -362,7 +385,7 @@ jobs:
           COMMIT=$(git rev-parse --short HEAD)
           DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
           LDFLAGS="-X github.com/sartoopjj/thefeed/internal/version.Version=${VERSION} -X github.com/sartoopjj/thefeed/internal/version.Commit=${COMMIT} -X github.com/sartoopjj/thefeed/internal/version.Date=${DATE}"
-          gomobile bind -iosversion=14.0 -target=ios,iossimulator -ldflags="${LDFLAGS}" -o ios/Mobile.xcframework ./mobile
+          gomobile bind -iosversion=13.0 -target=ios,iossimulator -ldflags="${LDFLAGS}" -o ios/Mobile.xcframework ./mobile
 
       - name: Archive (unsigned)
         run: |

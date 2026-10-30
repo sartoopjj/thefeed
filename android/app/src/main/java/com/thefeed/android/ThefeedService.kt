@@ -49,6 +49,7 @@ class ThefeedService : Service() {
         } catch (_: Throwable) {
         }
         server = null
+        clearSecret()
         savePort(-1)
         super.onDestroy()
         // Kill the whole app process so the activity doesn't linger.
@@ -88,9 +89,14 @@ class ThefeedService : Service() {
                     }
                 })
                 val actual = s.port().toInt()
+                // Every request to the local server must carry this as HTTP
+                // Basic. It lives in app-private prefs, which no other app can
+                // read -- which is the point, since loopback is not private.
+                saveSecret(s.password())
                 savePort(actual)
                 updateForegroundNotification("Running on http://127.0.0.1:$actual")
             } catch (e: Throwable) {
+                clearSecret()
                 savePort(-1)
                 updateForegroundNotification("Failed: ${e.message ?: e.javaClass.simpleName}")
             }
@@ -132,6 +138,16 @@ class ThefeedService : Service() {
     private fun savePort(port: Int) {
         getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             .edit().putInt(PREF_PORT, port).apply()
+    }
+
+    private fun saveSecret(secret: String) {
+        getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit().putString(PREF_LOCAL_SECRET, secret).apply()
+    }
+
+    private fun clearSecret() {
+        getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit().remove(PREF_LOCAL_SECRET).apply()
     }
 
     private fun createNotificationChannel() {
@@ -255,6 +271,7 @@ class ThefeedService : Service() {
         var pendingNewCount = 0
         const val PREFS_NAME = "thefeed_runtime"
         const val PREF_PORT = "port"
+        const val PREF_LOCAL_SECRET = "local_secret"
         const val ACTION_STOP = "com.thefeed.android.STOP"
         // Stable port window so the WebView origin survives restarts.
         const val PORT_RANGE_MIN = 38000

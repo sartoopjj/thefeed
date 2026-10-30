@@ -125,6 +125,19 @@ type ChatIncoming struct {
 	From [protocol.AddressSize]byte
 	Seq  uint32
 	Text string
+	// Undecryptable marks an envelope that will NEVER open: malformed, or
+	// sealed to a key that is not ours. It is reported rather than silently
+	// skipped so the caller can acknowledge it and free the inbox slot.
+	//
+	// Skipping them quietly is a denial of service: identities are free, so a
+	// handful of throwaway senders fill a victim's inbox with ciphertext
+	// nobody can read, every real sender then gets InboxFull, and it all sits
+	// there for the full 72-hour TTL because nothing ever acknowledges it.
+	//
+	// A TRANSIENT failure (a fetch that timed out, a sender key we could not
+	// look up) is NOT this: those are held back, because acknowledging a
+	// later seq would free an earlier one we never actually read.
+	Undecryptable bool
 }
 
 // ChatSendResult reports a committed send.
@@ -461,7 +474,11 @@ func (c *ChatClient) ensureSession(ctx context.Context, info *protocol.ChatInfo)
 	c.mu.Lock()
 	c.lastHandshake = time.Now()
 	c.mu.Unlock()
-	for attempt := 0; attempt < 2; attempt++ {
+	// Three rounds, because onboarding legitimately needs two: Auth says
+	// UnknownSender, Register publishes the record, and the Auth that follows
+	// is a round of its own. Leaving it at two spent the whole budget on
+	// registering and had no round left for a clock-skew retry.
+	for attempt := 0; attempt < 3; attempt++ {
 		ref, ks, status, srvUnix, err := c.handshake(ctx, info, protocol.ChatHandshakeAuth)
 		if err != nil {
 			return err
@@ -477,12 +494,22 @@ func (c *ChatClient) ensureSession(ctx context.Context, info *protocol.ChatInfo)
 				return rerr
 			}
 			c.updateClock(rsu)
-			if rst != protocol.ChatStatusOK {
+			switch rst {
+			case protocol.ChatStatusRegistered:
+				// The record is published; the session comes from Auth, which
+				// is the whole point -- a replayed record cannot produce one.
+				// Loop round and authenticate, now that the account exists.
+				c.f.log("[chat] registered %s…", ChatAddressString(c.id.Addr)[:8])
+				continue
+			case protocol.ChatStatusOK:
+				// A server from before that change still answers with a
+				// session. Accepted so this client keeps working against one.
+				c.f.log("[chat] registered %s… (server issued a session)", ChatAddressString(c.id.Addr)[:8])
+				c.setSession(rref, rks)
+				return nil
+			default:
 				return &ChatStatusError{Status: rst}
 			}
-			c.f.log("[chat] registered %s…", ChatAddressString(c.id.Addr)[:8])
-			c.setSession(rref, rks)
-			return nil
 		case protocol.ChatStatusBadAuth:
 			// Clock skew — srvUnix corrected our offset; retry auth once.
 			continue
@@ -1164,15 +1191,18 @@ func (c *ChatClient) FetchInbox(ctx context.Context, onQuery ChatProgress) ([]Ch
 		m, err := protocol.ParseChatMessage(env)
 		if err != nil {
 			c.f.log("[chat] envelope %x seq %d: %v", e.src[:4], e.seq, err)
+			out = append(out, ChatIncoming{From: e.src, Seq: e.seq, Undecryptable: true})
 			continue
 		}
 		contentKey, err := protocol.ChatContentKey(c.id.Enc, rec.EncPub, e.src, c.id.Addr, m.Seq)
 		if err != nil {
+			out = append(out, ChatIncoming{From: e.src, Seq: m.Seq, Undecryptable: true})
 			continue
 		}
 		text, err := m.Open(contentKey)
 		if err != nil {
 			c.f.log("[chat] decrypt %x seq %d: %v", e.src[:4], e.seq, err)
+			out = append(out, ChatIncoming{From: e.src, Seq: m.Seq, Undecryptable: true})
 			continue
 		}
 		out = append(out, ChatIncoming{From: e.src, Seq: m.Seq, Text: text})

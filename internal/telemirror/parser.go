@@ -543,11 +543,15 @@ func sanitizePostHTML(htmlStr string) string {
 	if err != nil {
 		return htmlStr
 	}
-	sanitizeAndRewriteTree(doc)
+	// Find the sentinel BEFORE sanitising: the attribute allow-list strips id,
+	// including this one's, and a lost sentinel means returning the fragment
+	// unsanitised -- failing open, which is the one outcome worth avoiding.
 	root := findFirstByID(doc, "tm-rewrite-root")
 	if root == nil {
 		return htmlStr
 	}
+	pruneTree(root)
+	sanitizeAndRewriteTree(root)
 	var b strings.Builder
 	for c := root.FirstChild; c != nil; c = c.NextSibling {
 		if err := html.Render(&b, c); err != nil {
@@ -557,12 +561,93 @@ func sanitizePostHTML(htmlStr string) string {
 	return b.String()
 }
 
+// Channel post markup is written by whoever runs the channel, and reaches us
+// over a connection the censor is on. The renderer splices it straight into
+// the UI's origin with innerHTML, so what survives here decides what can run.
+//
+// ALLOW-LIST, not deny-list. Stripping on* handlers and javascript: hrefs left
+// every element standing, and <iframe srcdoc="..."> inserted via innerHTML
+// executes with the parent's origin -- no click, no handler attribute, just
+// render. From there: the messenger recovery seed, the feed passphrase, the
+// chat history.
+//
+// These are the tags Telegram's own post markup uses.
+var allowedPostTags = map[string]bool{
+	"a": true, "b": true, "strong": true, "i": true, "em": true,
+	"u": true, "ins": true, "s": true, "strike": true, "del": true,
+	"code": true, "pre": true, "br": true, "span": true, "div": true,
+	"p": true, "blockquote": true, "img": true,
+	"tg-emoji": true, "tg-spoiler": true,
+}
+
+// dropWholeTags are containers whose CONTENT is as dangerous as the tag, so
+// unwrapping them (keeping the children) would defeat the point.
+var dropWholeTags = map[string]bool{
+	"script": true, "style": true, "iframe": true, "object": true,
+	"embed": true, "svg": true, "math": true, "template": true,
+	"form": true, "input": true, "textarea": true, "select": true,
+	"button": true, "link": true, "meta": true, "base": true,
+	"noscript": true, "frame": true, "frameset": true, "applet": true,
+	"audio": true, "video": true, "source": true, "track": true,
+	"portal": true, "canvas": true, "slot": true,
+}
+
+// allowedPostAttrs is per tag. Everything else goes, including style: it
+// cannot execute, but it can cover the page with an element that can.
+func allowedPostAttr(tag, key string) bool {
+	switch key {
+	case "class", "title", "dir":
+		return true
+	}
+	switch tag {
+	case "a":
+		return key == "href" || key == "target" || key == "rel"
+	case "img":
+		return key == "src" || key == "alt" || key == "width" || key == "height"
+	case "tg-emoji":
+		return key == "emoji-id"
+	}
+	return false
+}
+
+// pruneTree drops disallowed elements and unwraps unknown ones, keeping their
+// text. Runs before the attribute pass so nothing inside a dropped subtree is
+// ever looked at.
+func pruneTree(n *html.Node) {
+	var next *html.Node
+	for c := n.FirstChild; c != nil; c = next {
+		next = c.NextSibling
+		if c.Type != html.ElementNode {
+			pruneTree(c)
+			continue
+		}
+		tag := strings.ToLower(c.Data)
+		switch {
+		case dropWholeTags[tag]:
+			n.RemoveChild(c)
+		case allowedPostTags[tag]:
+			pruneTree(c)
+		default:
+			// Unknown tag: keep what it said, lose the tag itself.
+			pruneTree(c)
+			for gc := c.FirstChild; gc != nil; {
+				g := gc
+				gc = gc.NextSibling
+				c.RemoveChild(g)
+				n.InsertBefore(g, c)
+			}
+			n.RemoveChild(c)
+		}
+	}
+}
+
 func sanitizeAndRewriteTree(n *html.Node) {
 	if n.Type == html.ElementNode {
+		tag := strings.ToLower(n.Data)
 		kept := n.Attr[:0]
 		for _, a := range n.Attr {
 			key := strings.ToLower(a.Key)
-			if strings.HasPrefix(key, "on") {
+			if strings.HasPrefix(key, "on") || !allowedPostAttr(tag, key) {
 				continue
 			}
 			if key == "href" {

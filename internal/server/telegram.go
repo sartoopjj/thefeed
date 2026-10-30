@@ -619,9 +619,16 @@ func (tr *TelegramReader) extractText(msg *tg.Message) string {
 			mediaPrefix = protocol.MediaPoll
 			pollMedia := msg.Media.(*tg.MessageMediaPoll)
 			question := pollMedia.Poll.Question.Text
+			// Poll answers became an interface list: each one is a concrete
+			// type now, so the text is read after asserting rather than off
+			// the struct directly.
 			var opts []string
 			for _, a := range pollMedia.Poll.Answers {
-				opts = append(opts, "○ "+a.Text.Text)
+				ans, ok := a.(*tg.PollAnswer)
+				if !ok {
+					continue
+				}
+				opts = append(opts, "○ "+ans.Text.Text)
 			}
 			pollBody := "📊 " + question
 			if len(opts) > 0 {

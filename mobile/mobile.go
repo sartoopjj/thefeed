@@ -5,6 +5,8 @@
 package mobile
 
 import (
+	"crypto/rand"
+	"encoding/base64"
 	"errors"
 	"net"
 	"os"
@@ -16,9 +18,10 @@ import (
 
 // Server is a running thefeed-client instance bound to 127.0.0.1.
 type Server struct {
-	web  *web.Server
-	ln   net.Listener
-	port int
+	web      *web.Server
+	ln       net.Listener
+	port     int
+	password string
 
 	mu      sync.Mutex
 	stopped bool
@@ -69,16 +72,33 @@ func NewServer(dataDir string, preferredPort int) (*Server, error) {
 	}
 	port := ln.Addr().(*net.TCPAddr).Port
 
-	ws, err := web.New(dataDir, port, "127.0.0.1", "")
+	// Loopback is not private on a phone: any other app with the INTERNET
+	// permission can scan these ports and read the messenger seed, the feed
+	// passphrase and the chat history -- and the service starts before the
+	// lock screen, so it could do it while the app was locked. So the server
+	// runs with HTTP Basic auth, under a secret generated fresh every launch
+	// that only this process and its own WebView ever see (see Password).
+	//
+	// Same mechanism the desktop --password uses; the only difference is who
+	// chooses the secret.
+	var secret [32]byte
+	if _, err := rand.Read(secret[:]); err != nil {
+		_ = ln.Close()
+		return nil, err
+	}
+	password := base64.RawURLEncoding.EncodeToString(secret[:])
+
+	ws, err := web.New(dataDir, port, "127.0.0.1", password)
 	if err != nil {
 		_ = ln.Close()
 		return nil, err
 	}
 	s := &Server{
-		web:  ws,
-		ln:   ln,
-		port: port,
-		done: make(chan struct{}),
+		web:      ws,
+		ln:       ln,
+		port:     port,
+		password: password,
+		done:     make(chan struct{}),
 	}
 	go func() {
 		err := ws.Serve(ln)
@@ -119,6 +139,25 @@ func (s *Server) Port() int {
 		return 0
 	}
 	return s.port
+}
+
+// Password is the per-launch HTTP Basic secret every request to this server
+// must carry. Any user name is accepted; only the password is checked.
+//
+// The native side answers the server's auth challenge with it -- on Android
+// from WebViewClient.onReceivedHttpAuthRequest, on iOS from the WKWebView
+// navigation delegate's didReceive(challenge:). Those fire for sub-resources
+// too, so one implementation covers the page, its scripts, its images, its
+// XHRs and its event stream. Another app on the device sees 401.
+//
+// Never write it anywhere another app can read -- app-private storage or an
+// in-process value only. It changes every launch, so nothing should persist
+// it beyond the process either.
+func (s *Server) Password() string {
+	if s == nil {
+		return ""
+	}
+	return s.password
 }
 
 // Stop closes the listener and waits for serve to return.

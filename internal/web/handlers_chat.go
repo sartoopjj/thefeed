@@ -1091,20 +1091,11 @@ func (h *chatHub) pollServer(ctx context.Context, ps *perServerChat, progress cl
 
 	h.mu.Lock()
 	added := 0
-	maxSeq := map[string]uint32{}
+	maxSeq := ackWatermarks(msgs)
 
 	// Detect server-side seq regression: if every incoming seq from a peer
 	// is at/below our acked watermark, the server likely reset its store.
-	// Collect the highest incoming seq per peer first, then reset the
-	// watermark for any peer whose max incoming seq regressed.
-	peerMax := map[string]uint32{}
-	for _, m := range msgs {
-		addr := client.ChatAddressString(m.From)
-		if m.Seq > peerMax[addr] {
-			peerMax[addr] = m.Seq
-		}
-	}
-	for addr, mx := range peerMax {
+	for addr, mx := range maxSeq {
 		th := h.threads[addr]
 		if th != nil && th.AckedIn[ps.serverKey] > 0 && mx <= th.AckedIn[ps.serverKey] {
 			th.resetAckedIn(ps.serverKey)
@@ -1113,8 +1104,13 @@ func (h *chatHub) pollServer(ctx context.Context, ps *perServerChat, progress cl
 
 	for _, m := range msgs {
 		addr := client.ChatAddressString(m.From)
-		if m.Seq > maxSeq[addr] {
-			maxSeq[addr] = m.Seq
+		// An envelope we cannot read still has to be acknowledged -- that is
+		// the whole point, it frees the inbox slot -- but there is nothing to
+		// store or show. Anyone can send ciphertext we cannot open; leaving it
+		// unacknowledged let a few throwaway identities fill the inbox and
+		// lock out every real sender for 72 hours.
+		if m.Undecryptable {
+			continue
 		}
 		th := h.threads[addr]
 		if th == nil {
@@ -1179,6 +1175,24 @@ func (h *chatHub) pollServer(ctx context.Context, ps *perServerChat, progress cl
 		h.mu.Unlock()
 	}
 	return added, nil
+}
+
+// ackWatermarks returns the highest sequence number seen per peer.
+//
+// EVERY envelope counts, including ones that will never decrypt. The inbox
+// slot is held by the ciphertext, not by whether we could read it, so a
+// watermark that skipped unreadable envelopes left them sitting there until
+// they expired -- and a handful of throwaway identities posting garbage could
+// fill the inbox and lock out every real sender for the full 72 hours.
+func ackWatermarks(msgs []client.ChatIncoming) map[string]uint32 {
+	max := make(map[string]uint32, len(msgs))
+	for _, m := range msgs {
+		addr := client.ChatAddressString(m.From)
+		if m.Seq > max[addr] {
+			max[addr] = m.Seq
+		}
+	}
+	return max
 }
 
 // broadcastChat pushes a chat SSE event to all connected UIs.

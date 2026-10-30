@@ -32,7 +32,24 @@ func decompressMediaBytes(body []byte, compression protocol.MediaCompression) ([
 		return nil, err
 	}
 	defer rc.Close()
-	return io.ReadAll(rc)
+	// BOUNDED: these bytes came off the network and deflate expands about a
+	// thousand times, so a small answer can inflate until the process dies.
+	//
+	// The bound scales with what ARRIVED rather than being a fixed ceiling:
+	// how large a file a server relays is its operator's choice -- 100 KB on
+	// one, 35 MB on another -- and a number written here would be wrong for
+	// every server that chose differently. What no real file does is expand
+	// thirty-twofold.
+	limit := protocol.InflateCap(len(body))
+	out, err := io.ReadAll(io.LimitReader(rc, int64(limit)+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(out) > limit {
+		return nil, fmt.Errorf("media expands past %d bytes from %d on the wire, which no real file does",
+			limit, len(body))
+	}
+	return out, nil
 }
 
 // MediaProgress reports per-block progress (completed of total). May be

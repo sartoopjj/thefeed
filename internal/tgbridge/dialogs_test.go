@@ -330,12 +330,14 @@ func TestMediaKinds(t *testing.T) {
 // A bot's inline keyboard is listed so the message still makes sense; only the
 // buttons that lead somewhere carry a URL.
 func TestInlineButtonsAreListed(t *testing.T) {
-	markup := &tg.ReplyInlineMarkup{Rows: []tg.KeyboardButtonRow{
-		{Buttons: []tg.KeyboardButtonClass{
-			&tg.KeyboardButtonURL{Text: "Open", URL: "https://example.org"},
-			&tg.KeyboardButtonCallback{Text: "Next"},
+	// Telegram moved the button's kind into its own field: the label is on
+	// the button, what it does is in Type.
+	markup := &tg.ReplyInlineMarkup{Rows: []tg.KeyboardInlineButtonRow{
+		{Buttons: []tg.KeyboardInlineButton{
+			{Text: "Open", Type: &tg.InlineButtonTypeURL{URL: "https://example.org"}},
+			{Text: "Next", Type: &tg.InlineButtonTypeCallback{}},
 		}},
-		{Buttons: []tg.KeyboardButtonClass{&tg.KeyboardButton{Text: "Plain"}}},
+		{Buttons: []tg.KeyboardInlineButton{{Text: "Plain", Type: &tg.InlineButtonTypeDisabled{}}}},
 	}}
 	got := buttonsOf(markup)
 	if len(got) != 3 {
@@ -636,5 +638,50 @@ func TestNotifyDefaultsAreNotCachedWhenTheReadFails(t *testing.T) {
 	b.mu.Unlock()
 	if stale {
 		t.Fatal("the defaults survived a reconnect")
+	}
+}
+
+// Formatting arrives with the message, so carrying it costs nothing -- and
+// without it a post written with bold, quotes or spoilers reads as flat text.
+func TestEntitiesOfMapsWhatTheUICanRender(t *testing.T) {
+	in := []tg.MessageEntityClass{
+		&tg.MessageEntityBold{Offset: 0, Length: 4},
+		&tg.MessageEntityItalic{Offset: 5, Length: 3},
+		&tg.MessageEntitySpoiler{Offset: 9, Length: 6},
+		&tg.MessageEntityBlockquote{Offset: 16, Length: 5, Collapsed: true},
+		&tg.MessageEntityPre{Offset: 22, Length: 4, Language: "go"},
+		&tg.MessageEntityTextURL{Offset: 27, Length: 4, URL: "https://example.com"},
+	}
+	got := entitiesOf(in)
+	if len(got) != len(in) {
+		t.Fatalf("mapped %d of %d entities", len(got), len(in))
+	}
+	if got[3].Type != "blockquote" || !got[3].Collapsed {
+		t.Errorf("the expandable blockquote lost its flag: %+v", got[3])
+	}
+	if got[4].URL != "go" {
+		t.Errorf("a pre block lost its language: %+v", got[4])
+	}
+
+	// A link the renderer would turn into an href must have a scheme that can
+	// only navigate.
+	bad := entitiesOf([]tg.MessageEntityClass{
+		&tg.MessageEntityTextURL{Offset: 0, Length: 4, URL: "javascript:alert(1)"},
+		&tg.MessageEntityTextURL{Offset: 0, Length: 4, URL: "data:text/html,<script>"},
+	})
+	if len(bad) != 0 {
+		t.Errorf("a script-scheme link was passed to the renderer: %+v", bad)
+	}
+
+	// An entity we do not understand must not change how the text reads.
+	if n := len(entitiesOf([]tg.MessageEntityClass{&tg.MessageEntityBankCard{Offset: 0, Length: 4}})); n != 0 {
+		t.Errorf("an unknown entity was mapped anyway (%d)", n)
+	}
+	// Nonsense ranges are dropped rather than handed on.
+	if n := len(entitiesOf([]tg.MessageEntityClass{&tg.MessageEntityBold{Offset: -1, Length: 0}})); n != 0 {
+		t.Errorf("a zero-length entity survived (%d)", n)
+	}
+	if entitiesOf(nil) != nil {
+		t.Error("no entities should map to nil, not an empty slice")
 	}
 }

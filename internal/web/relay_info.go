@@ -138,11 +138,17 @@ func (s *Server) fetchFromGitHubRelayBytes(ctx context.Context, size int64, crc 
 	}
 
 	info, err := rc.get(ctx, fetcher)
-	if err != nil || info.GitHubRepo == "" {
-		return nil, nil
+	if err != nil {
+		// Reported, not swallowed. A failed relay-info lookup used to look
+		// exactly like "this server has no GitHub relay", so avatars simply
+		// never arrived and nothing anywhere said why.
+		return nil, fmt.Errorf("relay info: %w", err)
+	}
+	if info.GitHubRepo == "" {
+		return nil, nil // genuinely no GitHub relay on this server
 	}
 	if cfg.Key == "" {
-		return nil, nil
+		return nil, errors.New("relay: no passphrase configured")
 	}
 	relayKey, err := protocol.DeriveRelayKey(cfg.Key)
 	if err != nil {

@@ -183,8 +183,17 @@ func joinOrCheckInvite(ctx context.Context, api *tg.Client, hash string) (*resol
 	if err != nil {
 		return nil, fmt.Errorf("import invite %q: %w", hash, err)
 	}
+	// Joining used to answer with Updates directly. It now answers with a
+	// RESULT that either carries those Updates or says the invite needs a
+	// bot's web view first -- which is not something a headless reader can
+	// complete, so it is reported rather than silently returning nothing.
+	ok, isOK := updates.(*tg.MessagesChatInviteJoinResultOk)
+	if !isOK {
+		return nil, fmt.Errorf("import invite %q: the invite needs to be accepted "+
+			"interactively (%T), which this reader cannot do", hash, updates)
+	}
 	// Updates can be one of several shapes; we look for embedded chats.
-	chats := extractChatsFromUpdates(updates)
+	chats := extractChatsFromUpdates(ok.Updates)
 	if len(chats) == 0 {
 		return nil, fmt.Errorf("import invite %q: no chat in response", hash)
 	}

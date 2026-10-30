@@ -107,6 +107,11 @@ func TestPasscodeModeLocksRatherThanWiping(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// A RESTART is what "without the passcode" means. Within the run that set
+	// it the key is deliberately still in memory, or turning a passcode on
+	// would break the section until the app was restarted.
+	forgetTelKey(telCryptoDir(dir))
+
 	locked, err := loadTelCrypto(dir)
 	if err != nil {
 		t.Fatal(err)
@@ -155,7 +160,10 @@ func TestPasscodeKeepsTheSameKey(t *testing.T) {
 		t.Fatal("device key survived setting a passcode; the data is still readable without it")
 	}
 
-	// Without the passcode: locked, and the data untouched.
+	// Without the passcode -- that is, a fresh run -- locked, and the data
+	// untouched. (In the run that set it the key stays in memory on purpose.)
+	forgetTelKey(telCryptoDir(dir))
+
 	locked, err := loadTelCrypto(dir)
 	if err != nil {
 		t.Fatal(err)

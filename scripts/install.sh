@@ -363,7 +363,7 @@ setup_config() {
     echo -e "${green}═══════════════════════════════════════${plain}"
     echo ""
 
-    local cur_domain cur_key cur_limit cur_listen cur_fetch_interval cur_extra_domains
+    local cur_domain cur_key cur_limit cur_listen cur_fetch_interval cur_extra_domains cur_x_rss
     if $is_update; then
         cur_domain=$(env_get THEFEED_DOMAIN)
         cur_key=$(env_get THEFEED_KEY)
@@ -371,7 +371,13 @@ setup_config() {
         cur_listen=$(env_get THEFEED_LISTEN)
         cur_fetch_interval=$(env_get THEFEED_FETCH_INTERVAL)
         cur_extra_domains=$(env_get THEFEED_EXTRA_DOMAINS)
+        # Carried over like every other setting. This one used to be written
+        # back hard-coded, so each update -- which is how the script is
+        # normally re-run -- silently threw away whatever list the operator
+        # had put there.
+        cur_x_rss=$(env_get THEFEED_X_RSS_INSTANCES)
     fi
+    local x_rss_instances="${cur_x_rss:-https://nitter.net,http://nitter.net}"
 
     local domain=""
     while true; do
@@ -661,7 +667,7 @@ THEFEED_MTPROTO_MAX_TUNNELS=${mtproto_max_tunnels}
 THEFEED_KEY=${passkey}
 THEFEED_ALLOW_MANAGE=${allow_manage}
 THEFEED_MSG_LIMIT=${msg_limit}
-THEFEED_X_RSS_INSTANCES=https://nitter.net,http://nitter.net
+THEFEED_X_RSS_INSTANCES=${x_rss_instances}
 TELEGRAM_API_ID=${api_id}
 TELEGRAM_API_HASH=${api_hash}
 TELEGRAM_PHONE=${phone}
@@ -740,7 +746,7 @@ THEFEED_MTPROTO_MAX_TUNNELS=${mtproto_max_tunnels}
 THEFEED_KEY=${passkey}
 THEFEED_ALLOW_MANAGE=${allow_manage}
 THEFEED_MSG_LIMIT=${msg_limit}
-THEFEED_X_RSS_INSTANCES=https://nitter.net,http://nitter.net
+THEFEED_X_RSS_INSTANCES=${x_rss_instances}
 TELEGRAM_API_ID=${api_id}
 TELEGRAM_API_HASH=${api_hash}
 TELEGRAM_PHONE=${phone}
