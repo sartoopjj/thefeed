@@ -685,3 +685,18 @@ func TestEntitiesOfMapsWhatTheUICanRender(t *testing.T) {
 		t.Error("no entities should map to nil, not an empty slice")
 	}
 }
+
+// An edit keeps the message id, so the edit date is what tells a newer copy
+// of a held message from the one already on screen.
+func TestMessageCarriesEditDate(t *testing.T) {
+	edited := &tg.Message{ID: 7, Date: 100, Message: "fixed"}
+	edited.SetEditDate(160)
+	got, ok := messageFrom(edited, nil)
+	if !ok || got.EditDate != 160 {
+		t.Fatalf("edit date = %d (ok=%v), want 160", got.EditDate, ok)
+	}
+	plain, _ := messageFrom(&tg.Message{ID: 8, Date: 100, Message: "never edited"}, nil)
+	if plain.EditDate != 0 {
+		t.Fatalf("unedited message reports edit date %d", plain.EditDate)
+	}
+}

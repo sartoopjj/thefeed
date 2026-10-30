@@ -756,3 +756,31 @@ func TestDialogsHandlerRecordsTheEndMarker(t *testing.T) {
 			"list ends; the cached answer can then never stop offering another page")
 	}
 }
+
+// The mute request must decode on this side as the page sends it: the peer
+// exactly as the backend handed it out, beside the new setting. A body the
+// handler cannot read is refused with 400 before any round trip, which is
+// how muting failed at once every time.
+func TestTelMuteAcceptsWhatThePageSends(t *testing.T) {
+	s := newTelTestServer(t)
+	peer, err := json.Marshal(tgbridge.Peer{Kind: tgbridge.PeerChannel, ID: 1234567890123, AccessHash: -987654321, Title: "c"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	send := func(body string) int {
+		rec := httptest.NewRecorder()
+		s.handleTelMute(rec, httptest.NewRequest(http.MethodPost, "/api/tel/mute", strings.NewReader(body)))
+		return rec.Code
+	}
+	if code := send(`{"peer":` + string(peer) + `,"muted":true}`); code == http.StatusBadRequest {
+		t.Fatal("the page's mute request was refused as malformed")
+	}
+	// What the page used to send: the request options, not the payload.
+	wrapped, _ := json.Marshal(map[string]any{
+		"method": "POST", "headers": map[string]string{"Content-Type": "application/json"},
+		"body": `{"peer":` + string(peer) + `,"muted":true}`,
+	})
+	if code := send(string(wrapped)); code != http.StatusBadRequest {
+		t.Fatalf("a body without a peer must be refused, got %d", code)
+	}
+}

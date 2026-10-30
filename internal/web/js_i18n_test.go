@@ -288,3 +288,30 @@ func TestJSTelComposerSurvivesRenders(t *testing.T) {
 	}
 	t.Logf("%s", out)
 }
+
+// Every message Telegram has must reach the conversation, whatever we sent in
+// between, and an edit must replace the text already on screen.
+func TestJSTelNoGapsAndEdits(t *testing.T) {
+	node, err := exec.LookPath("node")
+	if err != nil {
+		t.Skip("node not installed")
+	}
+	out, err := exec.Command(node, "jstest/tel_gaps.test.mjs").CombinedOutput()
+	if err != nil {
+		t.Fatalf("tel gaps failed:\n%s", out)
+	}
+	t.Logf("%s", out)
+}
+
+// Every Tel request must send its payload, not request options wrapped as one.
+func TestJSTelCallsSendTheirPayload(t *testing.T) {
+	node, err := exec.LookPath("node")
+	if err != nil {
+		t.Skip("node not installed")
+	}
+	out, err := exec.Command(node, "jstest/tel_calls.test.mjs").CombinedOutput()
+	if err != nil {
+		t.Fatalf("tel calls failed:\n%s", out)
+	}
+	t.Logf("%s", out)
+}

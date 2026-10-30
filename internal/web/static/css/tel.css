@@ -1209,7 +1209,8 @@ html.tel-search-open #telPane .tel-msgs {
   min-width: 0;
 }
 
-.tel-msg-time {
+.tel-msg-time,
+.tel-msg-edited {
   font-size: var(--text-2xs);
   color: var(--text-dim);
 }

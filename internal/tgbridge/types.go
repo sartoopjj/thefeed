@@ -101,6 +101,9 @@ type Message struct {
 	// the same thing the same way.
 	Views     int        `json:"views,omitempty"`
 	Reactions []Reaction `json:"reactions,omitempty"`
+	// EditDate is when the text was last changed; an edit keeps the id, so
+	// this is how a newer copy of a held message is told apart.
+	EditDate int `json:"editDate,omitempty"`
 	// Entities is the message's formatting: bold, links, spoilers,
 	// blockquotes and the rest. It arrives with the message at no extra cost,
 	// and without it a post written with any of them reads as flat text --
@@ -433,6 +436,9 @@ func messageFrom(m tg.MessageClass, names map[string]string) (Message, bool) {
 	}
 	if v, ok := msg.GetViews(); ok {
 		out.Views = v
+	}
+	if d, ok := msg.GetEditDate(); ok {
+		out.EditDate = d
 	}
 	out.Reactions = reactionsOf(msg)
 	out.Entities = entitiesOf(msg.Entities)

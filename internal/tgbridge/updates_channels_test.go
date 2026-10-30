@@ -296,3 +296,21 @@ func TestMutedNowReadsBothFlags(t *testing.T) {
 		t.Error("explicitly audible must stay audible")
 	}
 }
+
+// The same for a private chat, which is where an edit is a correction to
+// something said to you -- and the edit date is what lets the screen replace
+// the copy it already holds.
+func TestOtherUpdatesCarriesPrivateEdits(t *testing.T) {
+	users := []tg.UserClass{&tg.User{ID: 3, AccessHash: 8, FirstName: "Ada"}}
+	m := &tg.Message{ID: 41, PeerID: &tg.PeerUser{UserID: 3}, Message: "how are you"}
+	m.SetEditDate(1700)
+	msgs := otherUpdates([]tg.UpdateClass{&tg.UpdateEditMessage{Message: m}}, users, nil, NotifyDefaults{}).Msgs
+	groups := groupByPeer(msgs, users, nil)
+	if len(groups) != 1 || len(groups[0].Messages) != 1 {
+		t.Fatalf("groups = %+v", groups)
+	}
+	got := groups[0].Messages[0]
+	if got.ID != 41 || got.Text != "how are you" || got.EditDate != 1700 {
+		t.Fatalf("edit arrived as %+v", got)
+	}
+}

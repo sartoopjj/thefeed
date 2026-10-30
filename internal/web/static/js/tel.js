@@ -104,6 +104,8 @@ var TEL_MORE_TRIES = 6;
 // every reply is a DNS query, so a page is kept small enough to paint quickly
 // on a slow link; "load older" brings the rest.
 var TEL_HISTORY_PAGE = 15;
+// Pages one check for new messages may walk when more than a page arrived.
+var TEL_NEW_MAX_PAGES = 6;
 // How many pages back a jump may walk. Each one is a DNS round trip, so a
 // quote pointing far up a channel gives up rather than fetching for minutes.
 var TEL_JUMP_MAX_PAGES = 3;
@@ -1541,18 +1543,39 @@ async function telThreadFetchNew(background) {
   var th = telThread(key);
   // Cursor from the newest ACKNOWLEDGED id: a placeholder's synthetic id
   // would ask for messages newer than one that does not exist.
-  var was = telNewestRealID(th);
-  var q = telHistoryQuery(peer, { limit: TEL_HISTORY_PAGE, minId: was });
+  var was = telFetchCursor(th);
   var run = async function () {
     telHistCtl = new AbortController();
-    var r = await telCall(q, undefined, undefined, telHistCtl.signal);
-    if (!r) return;
+    // Telegram answers with the NEWEST page above the cursor, so when more
+    // than a page arrived, the rest sits between the cursor and that page.
+    // Walk down to the cursor; bounded, as each page is a round trip.
+    var msgs = [], offset = 0;
+    for (var page = 0; page < TEL_NEW_MAX_PAGES; page++) {
+      var r = await telCall(telHistoryQuery(peer, { limit: TEL_HISTORY_PAGE, minId: was, offsetId: offset }),
+        undefined, undefined, telHistCtl.signal);
+      if (!r) { if (!msgs.length) return; break; }
+      var got = r.messages || [];
+      msgs = got.concat(msgs);
+      if (got.length < TEL_HISTORY_PAGE) break;
+      var lowest = got.reduce(function (lo, m) { return Math.min(lo, m.id); }, Infinity);
+      if (!(lowest > was + 1)) break;
+      offset = lowest;
+    }
     // Answered, so "no messages" is now a fact about the thread rather than
     // about how far we have got.
     th.fetched = true;
-    var msgs = r.messages || [];
     var added = telMergeMessages(th, msgs, true);
-    if (added) {
+    // Edits reach the backend's cache through its own check for changes,
+    // which this poll sets off; reading the cache costs no round trip. Only
+    // messages already on screen: the cache also holds older pages.
+    var cached = await telCallQuiet(telHistoryQuery(peer, {}) + '&cacheOnly=1');
+    if (cached && cached.messages) {
+      var held = {};
+      th.msgs.forEach(function (m) { held[m.id] = true; });
+      telMergeMessages(th, cached.messages.filter(function (m) { return held[m.id]; }), false);
+    }
+    if (added || th.edited) {
+      th.edited = 0;
       telTouchPreview(key, th);
       // Only what the other side sent is news; our own echo is not.
       var incoming = msgs.filter(function (m) { return !m.out && !m.service; }).length;
@@ -1617,6 +1640,18 @@ function telNewestRealID(th) {
   return 0;
 }
 
+// telFetchCursor is where "what is new" starts: the newest id a fetch brought
+// back. Not the newest id held: a chat numbers both sides' messages in one
+// sequence, so a message the other side sent just before ours has the lower
+// number, and starting after ours would skip it for good.
+function telFetchCursor(th) {
+  for (var i = th.msgs.length - 1; i >= 0; i--) {
+    var m = th.msgs[i];
+    if (m.id < TEL_PENDING_BASE && !m.sent) return m.id;
+  }
+  return 0;
+}
+
 // telMergeMessages folds an answer in, oldest-first; returns how many were new.
 // live says these came from Telegram just now, as opposed to off the disk.
 //
@@ -1630,14 +1665,27 @@ function telNewestRealID(th) {
 // reaction row for ever.
 function telMergeMessages(th, msgs, live) {
   var have = {};
-  th.msgs.forEach(function (m) { have[m.id] = true; });
+  th.msgs.forEach(function (m) { have[m.id] = m; });
   var added = 0;
   var now = Date.now();
   if (!th.statsAt) th.statsAt = {};
   msgs.forEach(function (m) {
     if (live) th.statsAt[m.id] = now;
-    if (have[m.id]) return;
-    have[m.id] = true;
+    var old = have[m.id];
+    if (old) {
+      // Same id, newer content: an edit, or Telegram's own copy of a message
+      // we only knew from our send. Counts it does not carry are kept.
+      if (old.sent || (m.editDate || 0) > (old.editDate || 0)) {
+        var views = old.views, reactions = old.reactions;
+        Object.keys(m).forEach(function (k) { old[k] = m[k]; });
+        delete old.sent;
+        if (m.views == null && views != null) old.views = views;
+        if (m.reactions == null && reactions != null) old.reactions = reactions;
+        th.edited = (th.edited || 0) + 1;
+      }
+      return;
+    }
+    have[m.id] = m;
     th.msgs.push(m);
     added++;
   });
@@ -1703,6 +1751,8 @@ async function telSend() {
       // trip -- about half the wait -- to learn something already known.
       pending.id = r.msgId;
       pending.pending = false;
+      // Known from our own answer, not fetched: see telFetchCursor.
+      pending.sent = true;
       // A placeholder sorts last on its synthetic id, so if anything the other
       // side sent arrived while this one was in flight, that message is now
       // sitting after ours. Nothing was ADDED here, so the merge's own sort
@@ -1716,7 +1766,7 @@ async function telSend() {
     // the delta -- one more round trip.
     telStepsMore(3);
     telStepAdvance();
-    var h = await telCall(telHistoryQuery(peer, { limit: 10, minId: telNewestRealID(th) }));
+    var h = await telCall(telHistoryQuery(peer, { limit: 10, minId: telFetchCursor(th) }));
     if (h) {
       telMergeMessages(th, h.messages || [], true);
       telDropPending(th, pending);
@@ -2006,6 +2056,14 @@ function telKeepComposer(pane, html) {
     if (n !== live) hydrateIcons(n);
   });
   return true;
+}
+
+// telEditedHTML marks a message whose text was changed after it was sent, the
+// way Telegram does, with the time of the change on hover.
+function telEditedHTML(m) {
+  if (!m.editDate || m.service) return '';
+  return '<span class="tel-msg-edited" title="' + telAttrQ(telFmtTime(m.editDate)) + '">' +
+    telEsc(telT('tel_edited')) + '</span>';
 }
 
 function telCaptureScroll(id) {
@@ -3167,7 +3225,7 @@ function telRenderPane() {
     }
     if (media && m.text) html += media;
     html += telReactionsHTML(m) + telButtonsHTML(m) +
-      '<span class="tel-msg-meta">' + telStatsHTML(m) + '<span class="tel-msg-time">' +
+      '<span class="tel-msg-meta">' + telStatsHTML(m) + telEditedHTML(m) + '<span class="tel-msg-time">' +
       telEsc(telFmtTime(m.date)) + '</span>' + telTickHTML(m, readOutbox) + '</span></div>';
   });
   html += '</div>';
@@ -3287,7 +3345,7 @@ async function telToggleMute(key) {
   // that does not move when tapped reads as broken.
   d.muted = want;
   telRender();
-  var r = await telCall('/api/tel/mute', telPost({ peer: d.peer, muted: want }), 'tel_err_generic');
+  var r = await telCall('/api/tel/mute', { peer: d.peer, muted: want }, 'tel_err_generic');
   if (!r || !r.ok) {
     d.muted = !want; // put it back: Telegram did not take it
     telRender();

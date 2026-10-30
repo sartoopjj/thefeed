@@ -694,6 +694,13 @@ func (s *Server) handleTelHistory(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, map[string]any{"ok": false, "reason": "tel_err_not_connected"})
 		return
 	}
+	// A poll of an open conversation also asks Telegram what changed, which
+	// is the only way edits to messages already held arrive: history only
+	// returns ids above the cursor. Deferred before endOp so it runs after
+	// it -- the refresh stands aside while any op is in flight.
+	if telAtoi(q.Get("offsetId"), 0) == 0 && telAtoi(q.Get("minId"), 0) > 0 {
+		defer h.refreshDialogs()
+	}
 	h.beginOp()
 	defer h.endOp()
 	ctx, cancel := context.WithTimeout(r.Context(), telCallTimeout)
