@@ -257,69 +257,10 @@ jobs:
           go install golang.org/x/mobile/cmd/gobind@latest
           gomobile init
 
-      # The AAR build is the heaviest step in the workflow: gomobile compiles
-      # the whole module once per ABI, and the Telegram library's generated
-      # package is enormous. Four of those at once on a 2-core/7 GB runner is
-      # what gets the step killed (exit 143) part way through.
-      #
-      # Reclaiming the preinstalled toolchains we do not use frees ~20 GB and
-      # some RAM pressure with it.
-      - name: Free runner space and pin the NDK
-        run: |
-          set -e
-          echo "before:"; df -h / | tail -1; free -h | head -2
-
-          # Never $AGENT_TOOLSDIRECTORY: setup-go puts the Go toolchain there.
-          sudo rm -rf \
-            /usr/share/dotnet /usr/share/swift /usr/local/share/powershell \
-            /usr/local/share/boost /opt/ghc /opt/az 2>/dev/null || true
-          sudo docker image prune --all --force >/dev/null 2>&1 || true
-          sudo apt-get clean || true
-
-          # Pick one that exists: the two NDK variables name different
-          # directories, and either can point at one that is gone.
-          NDK=""
-          for cand in "$ANDROID_NDK_HOME" "$ANDROID_NDK_LATEST_HOME"; do
-            if [ -n "$cand" ] && [ -d "$cand" ]; then NDK="$cand"; break; fi
-          done
-          if [ -z "$NDK" ]; then
-            NDK=$(ls -d /usr/local/lib/android/sdk/ndk/*/ 2>/dev/null | sort -V | tail -1)
-            NDK="${NDK%/}"
-          fi
-          if [ -z "$NDK" ]; then
-            echo "::error::no NDK on this runner. ANDROID_NDK_HOME='$ANDROID_NDK_HOME' ANDROID_NDK_LATEST_HOME='$ANDROID_NDK_LATEST_HOME' installed: $(ls /usr/local/lib/android/sdk/ndk/ 2>&1 | tr '\n' ' ')"
-            exit 1
-          fi
-          echo "ANDROID_NDK_HOME=$NDK" >> "$GITHUB_ENV"
-          echo "using NDK: $NDK"
-
-          for d in /usr/local/lib/android/sdk/ndk/*; do
-            [ -d "$d" ] && [ "$d" != "$NDK" ] && sudo rm -rf "$d" 2>/dev/null || true
-          done
-          echo "after:"; df -h / | tail -1; free -h | head -2
-
-      # The step above deletes things, so check it did not delete these.
-      - name: Check the toolchain survived
-        run: |
-          ok=1
-          command -v go >/dev/null 2>&1 \
-            && echo "go: $(go version)" \
-            || { echo "::error::go is gone from PATH"; ok=0; }
-          [ -n "$ANDROID_NDK_HOME" ] && [ -d "$ANDROID_NDK_HOME" ] \
-            && echo "ndk: $ANDROID_NDK_HOME" \
-            || { echo "::error::NDK gone: '${ANDROID_NDK_HOME:-<unset>}'"; ok=0; }
-          [ "$ok" = 1 ]
-
       - name: Build gomobile AAR
-        timeout-minutes: 45
-        env:
-          # Cap concurrent compiles. The default is one per core, and each
-          # one holds the generated Telegram package in memory; serialising a
-          # little is what keeps the peak under the runner's limit.
-          GOFLAGS: -p=2
+        timeout-minutes: 15
         run: |
-          # ANDROID_NDK_HOME is already resolved, and resolved to a directory
-          # that still exists -- see "Free runner space".
+          export ANDROID_NDK_HOME="${ANDROID_NDK_HOME:-$ANDROID_NDK_LATEST_HOME}"
           VERSION="${{ github.ref_type == 'tag' && github.ref_name || '0.0.1' }}"
           COMMIT=$(git rev-parse --short HEAD)
           DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
@@ -330,8 +271,6 @@ jobs:
           LDFLAGS="-s -w -X github.com/sartoopjj/thefeed/internal/version.Version=${VERSION} -X github.com/sartoopjj/thefeed/internal/version.Commit=${COMMIT} -X github.com/sartoopjj/thefeed/internal/version.Date=${DATE} -extldflags=-Wl,-z,max-page-size=16384"
           mkdir -p android/app/libs
           bash scripts/gomobile-android-aar.sh android/app/libs/mobile.aar "${LDFLAGS}"
-          echo "after the bind:"; df -h / | tail -1; free -h | head -2
-          ls -lh android/app/libs/mobile.aar
 
       - name: Decode signing keystore
         env:
@@ -424,20 +363,9 @@ jobs:
           COMMIT=$(git rev-parse --short HEAD)
           DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
           LDFLAGS="-X github.com/sartoopjj/thefeed/internal/version.Version=${VERSION} -X github.com/sartoopjj/thefeed/internal/version.Commit=${COMMIT} -X github.com/sartoopjj/thefeed/internal/version.Date=${DATE}"
-          # Once a minute: what is running and how much memory is left, so a
-          # slow bind shows which command it is stuck in.
-          ( while sleep 60; do
-              echo "::group::sample $(date -u +%H:%M:%S)"
-              sysctl -n vm.swapusage
-              vm_stat | grep -E 'Pages free|Swapouts'
-              ps -Ao pcpu=,rss=,etime=,args= -r | head -5 | cut -c1-220
-              echo "::endgroup::"
-            done ) &
-          SAMPLER=$!
-          trap 'kill $SAMPLER 2>/dev/null' EXIT
           # Device slice only: the archive is for a device, and every extra
           # slice is another concurrent compile of gotd/td/tg.
-          gomobile bind -x -iosversion=15.0 -target=ios/arm64 -ldflags="${LDFLAGS}" -o ios/Mobile.xcframework ./mobile
+          gomobile bind -iosversion=15.0 -target=ios/arm64 -ldflags="${LDFLAGS}" -o ios/Mobile.xcframework ./mobile
 
       - name: Archive (unsigned)
         run: |
