@@ -87,7 +87,12 @@ sudo bash -c "$(curl -Ls https://gitlab.com/sartoopjj/thefeed/-/raw/main/scripts
 
 脚本会下载最新二进制，询问你的域名 / 口令 / 频道 / X 账号，询问是否使用 Telegram 登录（推荐**否** —— 公开频道无需登录），并配置 systemd 服务。随时重跑即可**更新**。
 
-其他操作（把脚本管道给 `sudo bash -s -- <flag>`）：
+其他操作：把参数加在同一条命令的末尾，前面单独加一个 `--`。这个 `--` 必不可少，否则 bash 会吞掉参数，脚本收不到。
+
+```bash
+# 例如：安装最新的预发布版
+sudo bash -c "$(curl -Ls https://raw.githubusercontent.com/sartoopjj/thefeed/main/scripts/install.sh)" -- --pre
+```
 
 | Flag | 作用 |
 |------|------|
@@ -231,7 +236,7 @@ thefeed-server ... --chat-domains c.example.com     # 或 THEFEED_CHAT_DOMAINS=c
 - **端到端加密** —— 只有双方能读消息；服务器仅存储不透明数据块，在不读取内容的情况下验证发送者。联系人名称永不离开设备。
 - **身份** —— 客户端在本地生成恢复码；你的地址是由它派生的 20 个字符。通过其他渠道把地址告诉对方即可被联系；同一恢复码可在任何服务器上使用。
 - **失败即关闭** —— 只有配置固定了服务器公钥（`sk=`）且服务器已签名的私信能力通过校验，客户端才启用私信。feed 元数据里的一个签名比特让无密钥的客户端提示「此服务器有私信 —— 请用其密钥重新导入配置」，而不是静默失败。
-- **滥用限制**（自动告知客户端）：`--chat-send-per-hour`（30）、`--chat-inbox-cap`（50）、`--chat-per-pair-cap`（10）、`--chat-max-msg-bytes`（500）；未送达消息在 `--chat-ttl-hours`（72）后过期。`--chat-enabled=false` 保留域名但对外宣告私信停用。
+- **滥用限制**（自动告知客户端）：`--chat-send-per-hour`（30）、`--chat-inbox-cap`（50）、`--chat-per-pair-cap`（10）、`--chat-max-msg-bytes`（500）；未送达消息在 `--chat-ttl-hours`（72）后过期。`--chat-enabled=false` 保留域名但对外宣告私信停用。启用聊天时安装脚本会询问这些值，更新时会保留你手动设置的值。
 
 在客户端从底部导航栏打开 **Chat**。✓ = 已存到服务器，✓✓ = 对方已取走；两台设备上的安全表情一致即表示会话安全。
 

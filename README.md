@@ -83,7 +83,12 @@ sudo bash -c "$(curl -Ls https://gitlab.com/sartoopjj/thefeed/-/raw/main/scripts
 
 The script downloads the latest binary, asks for your domain / passphrase / channels / X accounts, asks whether to use Telegram login (recommended: **No** — public channels work without it), and sets up a systemd service. Re-run it any time to **update**.
 
-Other actions (pipe the script to `sudo bash -s -- <flag>`):
+Other actions: put the flag at the end of the same one-liner, after a lone `--`. The `--` is required; without it bash takes the flag as the script's own name (`$0`) and the script never sees it.
+
+```bash
+# e.g. install the newest pre-release
+sudo bash -c "$(curl -Ls https://raw.githubusercontent.com/sartoopjj/thefeed/main/scripts/install.sh)" -- --pre
+```
 
 | Flag | Action |
 |------|--------|
@@ -227,7 +232,7 @@ thefeed-server ... --chat-domains c.example.com     # or THEFEED_CHAT_DOMAINS=c.
 - **End-to-end encrypted** — only the two users can read a message; the server stores opaque blobs and verifies senders without reading anything. Contact names never leave the device.
 - **Identity** — the client generates a recovery code locally; your address is 20 characters derived from it. Share the address out-of-band; the same recovery code works on any server.
 - **Fail-closed** — chat activates only when the profile pins the server key (`sk=`) and the server's signed chat capability verifies. A signed bit in the feed metadata lets a keyless client tell you *"this server has a messenger — re-import the config with its key"* instead of failing silently.
-- **Abuse limits** (advertised to clients): `--chat-send-per-hour` (30), `--chat-inbox-cap` (50), `--chat-per-pair-cap` (10), `--chat-max-msg-bytes` (500); undelivered messages expire after `--chat-ttl-hours` (72). `--chat-enabled=false` keeps the domains but advertises chat as disabled.
+- **Abuse limits** (advertised to clients): `--chat-send-per-hour` (30), `--chat-inbox-cap` (50), `--chat-per-pair-cap` (10), `--chat-max-msg-bytes` (500); undelivered messages expire after `--chat-ttl-hours` (72). `--chat-enabled=false` keeps the domains but advertises chat as disabled. The install script asks for these when the messenger is on, and keeps values you set by hand when it updates.
 
 In the client, open **Chat** from the bottom nav. ✓ = stored on the server, ✓✓ = picked up by the recipient; matching safety emojis on both devices confirm the conversation is secure.
 

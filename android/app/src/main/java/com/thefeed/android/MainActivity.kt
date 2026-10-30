@@ -269,10 +269,11 @@ class MainActivity : ComponentActivity() {
             ) {
                 val secret = getLocalSecret()
                 if (handler == null) return
-                // Only ever to our own loopback server, and never a second
-                // time for the same request: proceed() on a retry would mean
-                // the secret is wrong, and looping would hammer it.
-                if (secret.isEmpty() || host != "127.0.0.1" || handler.useHttpAuthUsernamePassword()) {
+                // Only ever to our own loopback server, and only on the first
+                // attempt (useHttpAuthUsernamePassword() is true exactly then):
+                // a retry means the secret was refused, and looping would
+                // hammer the server.
+                if (secret.isEmpty() || host != "127.0.0.1" || !handler.useHttpAuthUsernamePassword()) {
                     handler.cancel()
                     return
                 }
