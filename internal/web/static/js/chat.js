@@ -11,8 +11,7 @@ var chatState = {
   view: 'list', // 'list' | 'thread'
   peer: null,
   info: null,      // { exists, address, backedUp, serverCount }
-  avail: null,     // { available, reason, limits, servers, needsCreate } | null = checking
-  quota: null,     // { remaining, resetUnix } last-known send quota
+  avail: null,     // { available, reason, servers (each with its own limits), needsCreate } | null = checking
   availChecking: false, // an availability probe is in flight
   threads: [],
   contacts: {},
@@ -38,6 +37,7 @@ var chatState = {
   guideAfterAvail: false, // show "checking servers" + open the server sheet once availability resolves
   draft: '', // current compose text — single source of truth (see chatRenderThread)
   curServer: '', // server the open conversation currently sends via
+  quotaByServer: {}, // serverKey -> { remaining, resetUnix }: each server counts its own sends
   safetyOpen: false, // inline safety-code explainer expanded
   connecting: false, // "connecting…" indicator currently shown for the in-flight send
   sendConnTimer: null, // delayed reveal of the "connecting…" indicator
@@ -462,10 +462,9 @@ async function chatCheckAvailability(force) {
       try {
         var r = await chatFetchTimeout(availURL, CHAT_AVAIL_TIMEOUT_MS);
         var fresh = await r.json();
-        // Cache-served responses omit limits; keep the last known ones.
-        if (fresh && !fresh.limits && chatState.avail && chatState.avail.limits) {
-          fresh.limits = chatState.avail.limits;
-        }
+        // A row can come back without limits (not probed this time); keep
+        // that server's last known ones.
+        chatKeepRowLimits(fresh, chatState.avail);
         chatState.avail = fresh;
       } catch (e) { chatState.avail = { available: false, reason: 'chat_err_generic' }; }
       if (!chatState.open) break;                 // user left — stop probing
@@ -599,9 +598,50 @@ function chatQuotaSvg(frac) {
     '</svg>';
 }
 
+// chatLimitsKey is the server the open conversation sends via, or '' when
+// there is none yet.
+function chatLimitsKey() {
+  return chatState.curServer || (chatState.peer && chatState.pendingServer[chatState.peer]) || '';
+}
+
+// chatKeepRowLimits copies each server's limits from prev into fresh where
+// fresh lacks them.
+function chatKeepRowLimits(fresh, prev) {
+  if (!fresh || !fresh.servers || !prev || !prev.servers) return;
+  var old = {};
+  prev.servers.forEach(function (s) { if (s.limits) old[s.key] = s.limits; });
+  fresh.servers.forEach(function (s) { if (!s.limits && old[s.key]) s.limits = old[s.key]; });
+}
+
+// chatCurLimits returns the limits of the server the conversation uses. With
+// no server chosen yet it takes the smallest of each limit across the usable
+// servers, so the UI never promises more than the strictest one allows.
+function chatCurLimits() {
+  var rows = (chatState.avail && chatState.avail.servers) || [];
+  var key = chatLimitsKey();
+  if (key) {
+    for (var i = 0; i < rows.length; i++) if (rows[i].key === key) return rows[i].limits || null;
+    return null;
+  }
+  var out = null;
+  rows.forEach(function (s) {
+    if (!s.limits || !s.available || !s.enabled) return;
+    if (!out) { out = Object.assign({}, s.limits); return; }
+    Object.keys(s.limits).forEach(function (k) {
+      if (s.limits[k] > 0 && (!(out[k] > 0) || s.limits[k] < out[k])) out[k] = s.limits[k];
+    });
+  });
+  return out;
+}
+
+function chatCurQuota() {
+  var key = chatLimitsKey();
+  return key ? chatState.quotaByServer[key] || null : null;
+}
+
 function chatQuotaIcon() {
-  var q = chatState.quota;
-  var lim = chatState.avail && chatState.avail.limits;
+  var q = chatCurQuota();
+  var lim = chatCurLimits();
   var cap = (lim && lim.sendPerHour) || 0;
   if (!cap) return null;
   var rem = (q && q.remaining != null) ? q.remaining : cap;
@@ -616,8 +656,8 @@ function chatQuotaIcon() {
 // chatQuotaCircleHTML renders the compose-row quota ring: a circle showing the
 // remaining-sends count with a progress ring. Tap shows the full detail.
 function chatQuotaCircleHTML() {
-  var q = chatState.quota;
-  var lim = chatState.avail && chatState.avail.limits;
+  var q = chatCurQuota();
+  var lim = chatCurLimits();
   var cap = (lim && lim.sendPerHour) || 0;
   if (!cap) return '';
   var rem = (q && q.remaining != null) ? q.remaining : cap;
@@ -1836,7 +1876,7 @@ function chatBindPullRefresh(el) {
 // chatMaxBytes is the server's per-message byte cap (from ChatInfo), or a safe
 // default until availability is known.
 function chatMaxBytes() {
-  var lim = chatState.avail && chatState.avail.limits;
+  var lim = chatCurLimits();
   return (lim && lim.maxMsgBytes) ? lim.maxMsgBytes : 500;
 }
 
@@ -2032,7 +2072,8 @@ async function chatFetchPeerStatus(addr, server) {
       d.accepted = chatMaxMap(prev && prev.accepted, d.accepted);
       d.delivered = chatMaxMap(prev && prev.delivered, d.delivered);
       chatState.peerStatus[addr] = d;
-      if (d.quota) chatState.quota = d.quota; // live "N sends left this hour"
+      // live "N sends left this hour", for the server that was asked
+      if (d.quota) chatState.quotaByServer[d.quota.server || server || chatLimitsKey()] = d.quota;
       if (chatState.view === 'thread' && chatState.peer === addr) {
         // Safety emojis arrived for the first time: inject directly into the
         // DOM so the user sees them immediately without a full re-render
@@ -2103,14 +2144,17 @@ async function sendChatMessage() {
     if (d.ok) {
       chatState.sending = false;
       chatState.sendProg = null;
-      if (d.remaining != null) chatState.quota = { remaining: d.remaining, resetUnix: d.resetUnix };
+      if (d.remaining != null) {
+        chatState.quotaByServer[d.server || chatState.pendingServer[peerAddr] || chatLimitsKey()] =
+          { remaining: d.remaining, resetUnix: d.resetUnix };
+      }
       delete chatState.pendingServer[peerAddr];
       chatBumpActivity();
       // First send to a NEW peer creates the thread server-side: reload so it
       // appears in the sidebar list.
       chatLoadThreads();
       // A send proves the server is reachable — probe availability if we don't
-      // have it yet so the timer + quota (which need avail.limits) populate
+      // have it yet so the timer + quota (which need the server's limits) populate
       // without a manual page refresh.
       if (!chatAvailable()) chatCheckAvailability();
       var stillViewing = chatState.view === 'thread' && chatState.peer === peerAddr;
@@ -2299,7 +2343,7 @@ function chatMergeServerResult(sv, limits) {
   if (sv.checking) return; // no verdict yet — leave the last one standing
   row.available = !!sv.available;
   row.reason = sv.reason || '';
-  if (limits) chatState.avail.limits = limits;
+  if (sv.limits || limits) row.limits = sv.limits || limits;
   chatState.avail.available = chatUsableServers().length > 0;
   if (!chatState.open) return;
   if (document.querySelector('.chat-server-sheet')) chatServerSheet();

@@ -1083,10 +1083,10 @@ async function telRefreshStats(key, peer) {
 
   var stats = [];
   for (var w = 0; w < wants.length; w++) {
-    // Through telOp like any other round trip: it holds the one tunnel for as
-    // long as a fetch does, and a wait with no progress bar is a wait the user
-    // cannot account for.
-    var part = await telOp(wants[w].label, function (wq) {
+    // In the background: it still holds the tunnel and draws its bar, but it
+    // is never something the user asked for, so it must not disable the
+    // composer or rebuild the page under someone typing. A send waits for it.
+    var part = await telBgOp(wants[w].label, function (wq) {
       return function () {
         return telCallQuiet('/api/tel/stats', { peer: peer, ids: ids, what: wq });
       };
@@ -1966,8 +1966,11 @@ function telRender() {
   }
   var pane = document.getElementById('telPane');
   if (pane) {
-    pane.innerHTML = telRenderPane();
-    hydrateIcons(pane);
+    if (!telKeepComposer(pane, telRenderPane())) {
+      pane.innerHTML = telRenderPane();
+      hydrateIcons(pane);
+    }
+    pane.setAttribute('data-peer', telState.peer ? telPeerKey(telState.peer) : '');
   }
   telRestoreScroll('telBody', listScroll, false);
   telRestoreScroll('telMsgs', msgScroll, true);
@@ -1977,6 +1980,32 @@ function telRender() {
   telRestoreFocus(focus);
   telPaintProgress();
   telPaintCountdown();
+}
+
+// telKeepComposer re-renders the pane for the same conversation without
+// touching the composer: it never leaves the document, so the keyboard keeps
+// the word it is composing and the caret stays where it was. Rebuilding it
+// dropped that word whenever anything else on the page changed. Returns false
+// when the pane has to be rebuilt whole.
+function telKeepComposer(pane, html) {
+  var live = pane.querySelector('.tel-compose');
+  var key = telState.peer ? telPeerKey(telState.peer) : '';
+  if (!live || live.parentNode !== pane || !key || pane.getAttribute('data-peer') !== key) return false;
+  var tmp = document.createElement('div');
+  tmp.innerHTML = html;
+  var fresh = tmp.querySelector('.tel-compose');
+  if (!fresh || fresh.parentNode !== tmp) return false;
+  while (pane.firstChild && pane.firstChild !== live) pane.removeChild(pane.firstChild);
+  while (live.nextSibling) pane.removeChild(live.nextSibling);
+  var after = false;
+  Array.prototype.slice.call(tmp.childNodes).forEach(function (n) {
+    if (n === fresh) { after = true; return; }
+    if (after) pane.appendChild(n); else pane.insertBefore(n, live);
+  });
+  Array.prototype.slice.call(pane.children).forEach(function (n) {
+    if (n !== live) hydrateIcons(n);
+  });
+  return true;
 }
 
 function telCaptureScroll(id) {
@@ -2046,7 +2075,9 @@ function telCaptureFocus() {
 function telRestoreFocus(f) {
   if (!f) return;
   var el = document.getElementById(f.id);
-  if (!el) return;
+  // Still the focused element: the render kept it. Setting the selection again
+  // would end the keyboard's composition and drop the word being typed.
+  if (!el || el === document.activeElement) return;
   el.focus();
   try { el.setSelectionRange(f.start, f.end); } catch (e) { /* type has no range */ }
 }
@@ -3152,7 +3183,7 @@ function telRenderPane() {
     '<textarea id="telInput" class="tel-compose-input" rows="1" dir="auto" placeholder="' +
     telAttrQ(telT('tel_write')) + '" oninput="telState.draft=this.value;telGrowInput(this)" ' +
     'onkeydown="telInputKey(event)">' + telEsc(telState.draft) + '</textarea>' +
-    '<button class="tel-send-btn" onclick="telSend()"' + (telState.busy ? ' disabled' : '') +
+    '<button class="tel-send-btn" onclick="telSend()"' +
     ' aria-label="' + telAttrQ(telT('tel_send')) + '" title="' + telAttrQ(telT('tel_send')) + '">' +
     icon('send') + '</button></div>';
   return html;

@@ -260,3 +260,31 @@ func TestJSChatDeliveryTicks(t *testing.T) {
 	}
 	t.Logf("%s", out)
 }
+
+// Every chat server sets its own limits and counts its own sends, so the
+// numbers shown must be those of the server the conversation uses.
+func TestJSChatLimitsPerServer(t *testing.T) {
+	node, err := exec.LookPath("node")
+	if err != nil {
+		t.Skip("node not installed")
+	}
+	out, err := exec.Command(node, "jstest/chat_limits.test.mjs").CombinedOutput()
+	if err != nil {
+		t.Fatalf("chat limits failed:\n%s", out)
+	}
+	t.Logf("%s", out)
+}
+
+// Typing in a Telegram conversation must survive round trips starting and
+// ending around it.
+func TestJSTelComposerSurvivesRenders(t *testing.T) {
+	node, err := exec.LookPath("node")
+	if err != nil {
+		t.Skip("node not installed")
+	}
+	out, err := exec.Command(node, "jstest/tel_composer.test.mjs").CombinedOutput()
+	if err != nil {
+		t.Fatalf("tel composer failed:\n%s", out)
+	}
+	t.Logf("%s", out)
+}
