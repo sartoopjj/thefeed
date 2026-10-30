@@ -794,8 +794,20 @@ func (h *chatHub) probeBackoff(ps *perServerChat, now time.Time) (bool, string) 
 // markReachable records a confirmed-reachable probe/register: clears the
 // failure backoff and stamps the positive availability cache.
 func (h *chatHub) markReachable(ps *perServerChat) {
+	// The call that proved it reachable went through this server's ChatInfo,
+	// so its limits are already known. Without them the cached availability
+	// rows carry none until the next full probe, and the quota ring is missing.
+	var lim map[string]any
+	if ps.client != nil {
+		if info := ps.client.CachedInfo(); info != nil {
+			lim = chatLimitsMap(info.Limits)
+		}
+	}
 	h.mu.Lock()
 	defer h.mu.Unlock()
+	if lim != nil {
+		ps.lastLimits = lim
+	}
 	ps.backoffUntil = time.Time{}
 	ps.lastReason = ""
 	ps.lastOKAt = time.Now()

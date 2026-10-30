@@ -311,6 +311,14 @@ func (c *ChatClient) updateQuota(remaining uint16, reset uint32) {
 	c.mu.Unlock()
 }
 
+// CachedInfo returns the verified ChatInfo this client already holds, or nil.
+// Never a round trip.
+func (c *ChatClient) CachedInfo() *protocol.ChatInfo {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.info
+}
+
 // EnsureInfo fetches and verifies the ChatInfo capability payload once (and
 // re-fetches after expiry or when marked stale). Fail-closed: chat requires a
 // pinned sk and a VERIFIED signature.

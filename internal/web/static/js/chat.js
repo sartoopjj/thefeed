@@ -1705,6 +1705,14 @@ async function chatRenderThread() {
     if (oldTopbar && newTopbar) modal.replaceChild(newTopbar, oldTopbar);
     if (oldPollBar && newPollBar) modal.replaceChild(newPollBar, oldPollBar);
     if (oldBodyWrap && newBodyWrap) modal.replaceChild(newBodyWrap, oldBodyWrap);
+    // The quota ring lives in the kept footer but is not the text box, so it
+    // can follow the count without disturbing what is being typed.
+    var newRing = tmp.querySelector('.chat-quota-btn');
+    var oldRing = modal.querySelector('.chat-quota-btn');
+    var inputRow = liveFooter.querySelector('.chat-input-row');
+    if (oldRing && newRing) oldRing.replaceWith(newRing);
+    else if (oldRing) oldRing.remove();
+    else if (newRing && inputRow) inputRow.insertBefore(newRing, inputRow.firstChild);
   } else {
     modal.innerHTML = html;
   }

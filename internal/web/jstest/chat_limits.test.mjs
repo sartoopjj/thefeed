@@ -100,6 +100,14 @@ const fresh = () => ({
   eq('the other server keeps its own count', c.chatCurQuota().remaining, 250);
 }
 
+// --- the ring follows the count while the composer is kept --------------------
+{
+  const keep = src.match(/var liveFooter = [\s\S]*?\} else \{\n    modal\.innerHTML = html;/);
+  eq('the kept footer branch exists', !!keep, true);
+  eq('and swaps in the new quota ring', /oldRing\.replaceWith\(newRing\)/.test(keep && keep[0]), true);
+  eq('without rebuilding the text box', /chatInput/.test(keep && keep[0]), false);
+}
+
 // --- every place that stores a quota names its server -----------------------
 eq('no shared quota left', /chatState\.quota\b/.test(src), false);
 eq('no shared limits left', /avail\.limits/.test(src), false);

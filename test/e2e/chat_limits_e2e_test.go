@@ -174,6 +174,31 @@ func TestChatLimitsArePerServer(t *testing.T) {
 		}
 	}
 
+	// Turning a server on registers through its ChatInfo, which already holds
+	// its limits: the very next list, served from the reachability cache
+	// without a probe, must carry them.
+	for _, k := range []string{"own.e2e.test", "other.e2e.test"} {
+		r := postJSON(t, base+"/api/chat/enable", `{"action":"server","server":"`+k+`","on":true}`)
+		var en map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&en)
+		r.Body.Close()
+		if en["available"] != true {
+			t.Fatalf("enable %s: %v", k, en)
+		}
+	}
+	{
+		var av struct {
+			Servers []limitsRow `json:"servers"`
+		}
+		getChatJSON(t, base+"/api/chat/availability", &av)
+		for _, row := range av.Servers {
+			if row.Limits == nil {
+				t.Fatalf("%s is reachable but its row has no limits: the quota ring has nothing to show", row.Key)
+			}
+			check("availability after enable", row)
+		}
+	}
+
 	// Wait until both servers have answered with their limits.
 	var keys []string
 	deadline := time.Now().Add(60 * time.Second)
