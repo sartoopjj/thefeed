@@ -235,18 +235,18 @@ GOMOBILE_ENV = GOFLAGS=-p=$(GOMOBILE_P)
 
 ios-bind: ios-deps
 	@command -v gomobile >/dev/null 2>&1 || { echo "gomobile not found. Run: go install golang.org/x/mobile/cmd/gomobile@latest && gomobile init"; exit 1; }
-	$(GOMOBILE_ENV) gomobile bind -iosversion=13.0 -target=ios,iossimulator -ldflags='$(IOS_LDFLAGS)' -o $(IOS_FRAMEWORK) ./mobile
+	$(GOMOBILE_ENV) gomobile bind -iosversion=15.0 -target=ios,iossimulator -ldflags='$(IOS_LDFLAGS)' -o $(IOS_FRAMEWORK) ./mobile
 
 # One slice instead of three, for running on the simulator while developing.
 # A third of the work, and only one heavy compile in flight at a time.
 # The full three-slice framework is only needed for a device/TestFlight build.
 ios-bind-sim: ios-deps
 	@command -v gomobile >/dev/null 2>&1 || { echo "gomobile not found. Run: go install golang.org/x/mobile/cmd/gomobile@latest && gomobile init"; exit 1; }
-	$(GOMOBILE_ENV) gomobile bind -iosversion=13.0 -target=iossimulator/arm64 -ldflags='$(IOS_LDFLAGS)' -o $(IOS_FRAMEWORK) ./mobile
+	$(GOMOBILE_ENV) gomobile bind -iosversion=15.0 -target=iossimulator/arm64 -ldflags='$(IOS_LDFLAGS)' -o $(IOS_FRAMEWORK) ./mobile
 
 ios-bind-catalyst: ios-deps
 	@command -v gomobile >/dev/null 2>&1 || { echo "gomobile not found"; exit 1; }
-	$(GOMOBILE_ENV) gomobile bind -iosversion=13.0 -target=ios,iossimulator,maccatalyst -ldflags='$(IOS_LDFLAGS)' -o $(IOS_FRAMEWORK) ./mobile
+	$(GOMOBILE_ENV) gomobile bind -iosversion=15.0 -target=ios,iossimulator,maccatalyst -ldflags='$(IOS_LDFLAGS)' -o $(IOS_FRAMEWORK) ./mobile
 
 ios-list-sims:
 	xcrun simctl list devices available

@@ -399,7 +399,7 @@ android-apk:
         curl -sSL -o /tmp/g.zip https://services.gradle.org/distributions/gradle-8.10.2-bin.zip
         unzip -q /tmp/g.zip -d /opt
         export PATH="/opt/gradle-8.10.2/bin:$PATH"
-        gradle wrapper --gradle-version 8.10.2
+        gradle wrapper --gradle-version 8.11.1
       fi
     # We only reach this point with app/keystore.jks present — the
     # KEYSTORE_BASE64 check above hard-fails otherwise. So always do a
@@ -478,6 +478,13 @@ ios-ipa:
     - COMMIT=$(git rev-parse --short HEAD)
     - DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
     - LDFLAGS="-X github.com/sartoopjj/thefeed/internal/version.Version=${VERSION} -X github.com/sartoopjj/thefeed/internal/version.Commit=${COMMIT} -X github.com/sartoopjj/thefeed/internal/version.Date=${DATE}"
+    # Deliberately BEHIND the Xcode project, which is 15.0 for the App
+    # Store (ITMS-90068: uploads must target 15.0+ from April 2027).
+    # This .ipa never goes through App Store Connect -- it is unsigned and
+    # re-signed by whoever sideloads it -- so it keeps iOS 13 and 14
+    # devices working. The xcodebuild below overrides the app to match;
+    # the two must move together, or the framework's minimum ends up
+    # above the app's and the link fails.
     - gomobile bind -iosversion=13.0 -target=ios,iossimulator -ldflags="${LDFLAGS}" -o ios/Mobile.xcframework ./mobile
     - MARKETING_VERSION="${VERSION#v}"
     - BUILD_NUMBER=$(git rev-list --count HEAD)
@@ -494,6 +501,7 @@ ios-ipa:
         CODE_SIGN_IDENTITY="" \
         CODE_SIGNING_REQUIRED=NO \
         CODE_SIGNING_ALLOWED=NO \
+        IPHONEOS_DEPLOYMENT_TARGET=13.0 \
         DEVELOPMENT_TEAM=""
     - mkdir -p build/Payload artifacts
     - cp -r build/Thefeed.xcarchive/Products/Applications/Thefeed.app build/Payload/
@@ -611,7 +619,7 @@ release:
       | iOS / iPadOS | TestFlight (**easiest — installs in one tap**) | [Join the TestFlight beta - نصب آسان روی آیفون](https://testflight.apple.com/join/J6bfxDdZ) |
       | iOS (unsigned) | universal \`.ipa\` | [thefeed-ios-${VERSION}-unsigned.ipa](${DL_BASE}/thefeed-ios-${VERSION}-unsigned.ipa) |
 
-      **iOS / iPadOS (preview, iOS 14+):** the easiest install is the public [TestFlight beta](https://testflight.apple.com/join/J6bfxDdZ) — one tap, no computer needed. Otherwise the \`.ipa\` below is unsigned: re-sign it with your own Apple ID and provisioning profile (AltStore, Sideloadly, or \`xcrun altool\`). The \`.ipa\` will not install directly from a download.
+      **iOS / iPadOS (preview, iOS 13+):** the easiest install is the public [TestFlight beta](https://testflight.apple.com/join/J6bfxDdZ) — one tap, no computer needed. Otherwise the \`.ipa\` below is unsigned: re-sign it with your own Apple ID and provisioning profile (AltStore, Sideloadly, or \`xcrun altool\`). The \`.ipa\` will not install directly from a download.
 
       **Windows (10/11):** the \`.exe\` is **unsigned**, so SmartScreen shows *"Windows protected your PC"* and Defender may flag it as a false positive — DNS-tunneling tools commonly trip AV heuristics; **this is not malware**. Click **More info → Run anyway**, and if it's quarantined restore it from Defender → *Protection history*. Verify the SHA-256 below if unsure. — این هشدار طبیعی است (فایل امضای دیجیتال ندارد)؛ روی **More info → Run anyway** بزنید.
 

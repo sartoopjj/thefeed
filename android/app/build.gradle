@@ -5,12 +5,15 @@ plugins {
 
 android {
     namespace 'com.thefeed.android'
-    compileSdk 35
+    compileSdk 36
 
     defaultConfig {
         applicationId 'com.thefeed.android'
+        // minSdk is NOT what the store requires. Google Play's rule is on the
+        // TARGET level only, so this stays where it is and the same APK keeps
+        // installing on Android 7 and up -- store build and GitHub build alike.
         minSdk 24
-        targetSdk 35
+        targetSdk 36
         // versionCode auto-increments from git commit count so each build can be installed over the previous one.
         // CI can override it with -PversionCode=<n> so the uploaded code strictly
         // increases even on a shallow clone where the commit count would be wrong.

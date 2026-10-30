@@ -326,7 +326,7 @@ jobs:
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
           VERSION="${{ github.ref_type == 'tag' && github.ref_name || '0.0.1' }}"
-          if [ ! -x ./gradlew ]; then gradle wrapper --gradle-version 8.10.2; fi
+          if [ ! -x ./gradlew ]; then gradle wrapper --gradle-version 8.11.1; fi
           if [ -f app/keystore.jks ]; then BT=release; TASK=assembleRelease; else BT=debug; TASK=assembleDebug; fi
 
           # Pass 1 — per-ABI split APKs (arm, arm64, x86, x86_64).
@@ -385,7 +385,7 @@ jobs:
           COMMIT=$(git rev-parse --short HEAD)
           DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
           LDFLAGS="-X github.com/sartoopjj/thefeed/internal/version.Version=${VERSION} -X github.com/sartoopjj/thefeed/internal/version.Commit=${COMMIT} -X github.com/sartoopjj/thefeed/internal/version.Date=${DATE}"
-          gomobile bind -iosversion=13.0 -target=ios,iossimulator -ldflags="${LDFLAGS}" -o ios/Mobile.xcframework ./mobile
+          gomobile bind -iosversion=15.0 -target=ios,iossimulator -ldflags="${LDFLAGS}" -o ios/Mobile.xcframework ./mobile
 
       - name: Archive (unsigned)
         run: |
