@@ -264,56 +264,50 @@ jobs:
       #
       # Reclaiming the preinstalled toolchains we do not use frees ~20 GB and
       # some RAM pressure with it.
-      - name: Free runner space
+      - name: Free runner space and pin the NDK
         run: |
+          set -e
           echo "before:"; df -h / | tail -1; free -h | head -2
-          # NEVER $AGENT_TOOLSDIRECTORY: that is where actions/setup-go puts
-          # the Go toolchain, so deleting it made the very next step die with
-          # `gomobile: 'go version' failed: exec: "go": executable file not
-          # found in $PATH` -- a zero-second failure with no hint of why.
-          #
-          # NEVER the NDK gomobile is about to use either. The old glob
-          # (ndk/2*) matched every installed version including that one.
+
+          # Never $AGENT_TOOLSDIRECTORY: setup-go puts the Go toolchain there.
           sudo rm -rf \
-            /usr/share/dotnet \
-            /usr/share/swift \
-            /usr/local/share/powershell \
-            /usr/local/share/boost \
-            /opt/ghc \
-            /opt/az \
-            2>/dev/null || true
-          # Other NDKs, but not the one in use.
-          if [ -n "$ANDROID_NDK_LATEST_HOME" ]; then
-            keep=$(basename "$ANDROID_NDK_LATEST_HOME")
-            for d in /usr/local/lib/android/sdk/ndk/*; do
-              [ -d "$d" ] || continue
-              [ "$(basename "$d")" = "$keep" ] && continue
-              sudo rm -rf "$d" 2>/dev/null || true
-            done
-          fi
+            /usr/share/dotnet /usr/share/swift /usr/local/share/powershell \
+            /usr/local/share/boost /opt/ghc /opt/az 2>/dev/null || true
           sudo docker image prune --all --force >/dev/null 2>&1 || true
           sudo apt-get clean || true
+
+          # Pick one that exists: the two NDK variables name different
+          # directories, and either can point at one that is gone.
+          NDK=""
+          for cand in "$ANDROID_NDK_HOME" "$ANDROID_NDK_LATEST_HOME"; do
+            if [ -n "$cand" ] && [ -d "$cand" ]; then NDK="$cand"; break; fi
+          done
+          if [ -z "$NDK" ]; then
+            NDK=$(ls -d /usr/local/lib/android/sdk/ndk/*/ 2>/dev/null | sort -V | tail -1)
+            NDK="${NDK%/}"
+          fi
+          if [ -z "$NDK" ]; then
+            echo "::error::no NDK on this runner. ANDROID_NDK_HOME='$ANDROID_NDK_HOME' ANDROID_NDK_LATEST_HOME='$ANDROID_NDK_LATEST_HOME' installed: $(ls /usr/local/lib/android/sdk/ndk/ 2>&1 | tr '\n' ' ')"
+            exit 1
+          fi
+          echo "ANDROID_NDK_HOME=$NDK" >> "$GITHUB_ENV"
+          echo "using NDK: $NDK"
+
+          for d in /usr/local/lib/android/sdk/ndk/*; do
+            [ -d "$d" ] && [ "$d" != "$NDK" ] && sudo rm -rf "$d" 2>/dev/null || true
+          done
           echo "after:"; df -h / | tail -1; free -h | head -2
 
-      # The step above frees space by deleting things, so it is one typo away
-      # from deleting something this job needs. Say so here, where the message
-      # is readable, instead of letting the next step fail in zero seconds.
+      # The step above deletes things, so check it did not delete these.
       - name: Check the toolchain survived
         run: |
           ok=1
-          if ! command -v go >/dev/null 2>&1; then
-            echo "::error::go is not on PATH after freeing space -- the Go toolchain was deleted (AGENT_TOOLSDIRECTORY?)"
-            ok=0
-          else
-            echo "go: $(go version)"
-          fi
-          ndk="${ANDROID_NDK_HOME:-$ANDROID_NDK_LATEST_HOME}"
-          if [ -z "$ndk" ] || [ ! -d "$ndk" ]; then
-            echo "::error::no Android NDK at '${ndk:-<unset>}' after freeing space"
-            ok=0
-          else
-            echo "ndk: $ndk"
-          fi
+          command -v go >/dev/null 2>&1 \
+            && echo "go: $(go version)" \
+            || { echo "::error::go is gone from PATH"; ok=0; }
+          [ -n "$ANDROID_NDK_HOME" ] && [ -d "$ANDROID_NDK_HOME" ] \
+            && echo "ndk: $ANDROID_NDK_HOME" \
+            || { echo "::error::NDK gone: '${ANDROID_NDK_HOME:-<unset>}'"; ok=0; }
           [ "$ok" = 1 ]
 
       - name: Build gomobile AAR
@@ -324,7 +318,8 @@ jobs:
           # little is what keeps the peak under the runner's limit.
           GOFLAGS: -p=2
         run: |
-          export ANDROID_NDK_HOME="${ANDROID_NDK_HOME:-$ANDROID_NDK_LATEST_HOME}"
+          # ANDROID_NDK_HOME is already resolved, and resolved to a directory
+          # that still exists -- see "Free runner space".
           VERSION="${{ github.ref_type == 'tag' && github.ref_name || '0.0.1' }}"
           COMMIT=$(git rev-parse --short HEAD)
           DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
