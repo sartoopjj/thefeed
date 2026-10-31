@@ -201,7 +201,7 @@
   <p class="label">Project Brief</p>
   <h1>TheFeed</h1>
   <p class="tagline">News and messaging over DNS — when everything else is taken away</p>
-  <p class="meta">June 2026 &nbsp;·&nbsp; Open-source &nbsp;·&nbsp; <a href="https://github.com/sartoopjj/thefeed">github.com/sartoopjj/thefeed</a></p>
+  <p class="meta">October 2026 &nbsp;·&nbsp; Open-source &nbsp;·&nbsp; <a href="https://github.com/sartoopjj/thefeed">github.com/sartoopjj/thefeed</a></p>
 </div>
 
 <!-- ==================== THE PROBLEM ==================== -->
@@ -286,8 +286,8 @@
 
 <h3>Key Technical Properties</h3>
 <ul>
-  <li><strong>No tunnel required</strong> — Unlike DNSTT and similar tools, TheFeed does not attempt to establish a TCP connection. It pulls content in small fragments through independent DNS queries, making it tolerant of high packet loss and slow resolvers.</li>
-  <li><strong>Two independent content paths</strong> — DNS-based feed retrieval and Google-based TeleMirror provide redundancy. If one path is blocked, the other continues working.</li>
+  <li><strong>No tunnel required</strong> — Unlike DNSTT and similar tools, TheFeed's news feed does not attempt to establish a TCP connection. It pulls content in small fragments through independent DNS queries, making it tolerant of high packet loss and slow resolvers.</li>
+  <li><strong>Independent content paths</strong> — DNS-based feed retrieval and Google-based TeleMirror provide redundancy. If one path is blocked, the other continues working. Telegram over DNS adds a third way in: the user's own Telegram account, with Telegram's MTProto protocol carried through DNS queries.</li>
   <li><strong>Three media delivery methods</strong> — Inline DNS encoding, DNS relay, and GitHub CDN relay — each independent, each difficult to block without significant collateral damage.</li>
   <li><strong>Cross-platform</strong> — Windows, macOS, Linux, Android, and iOS. Mobile apps use in-process Go via gomobile (no CGo dependency), ensuring a single codebase runs everywhere.</li>
   <li><strong>Self-updating</strong> — Users can download new versions and configurations from within the app itself, without needing an external browser or app store.</li>
@@ -300,9 +300,11 @@
 
 <p>When the internet was partially restored on May 26, I continued developing TheFeed. The threat of future shutdowns remains, and the tool needed to be ready — not as a wartime prototype, but as a mature, reliable application.</p>
 
-<p>The most significant addition since the shutdown has been <strong>an encrypted messenger</strong>: a store-and-forward messaging system that works entirely over DNS. If the internet is cut again, people will be able to send short text messages to contacts outside the country — to tell their families they are safe, to coordinate, to stay human.</p>
+<p>The first major addition since the shutdown was <strong>an encrypted messenger</strong>: a store-and-forward messaging system that works entirely over DNS. If the internet is cut again, people will be able to send short text messages to contacts outside the country — to tell their families they are safe, to coordinate, to stay human.</p>
 
-<p>The messenger did not reach users during the shutdown. But it exists now, ready for the next time.</p>
+<p>The second, released in beta in October 2026, is <strong>Telegram over DNS</strong>: a full Telegram client inside TheFeed. People sign in with their own Telegram account and keep using their own chats, groups and channels, with Telegram's protocol, MTProto, carried through ordinary DNS queries. When the way out is closed, they can still reach the people and channels they already rely on — without a VPN or a proxy app. The relay only moves Telegram's own encrypted packets and cannot read them.</p>
+
+<p>Neither reached users during the shutdown. But both exist now, ready for the next time.</p>
 
 <p>TheFeed is also applicable beyond a single country. Any population facing an internet shutdown — a pattern seen repeatedly across multiple regions — can deploy and use it.</p>
 
@@ -358,6 +360,10 @@
     <div class="tl-date">June 2026</div>
     <p>Encrypted DNS messenger built and tested. Feed signing (anti-tampering) and multi-domain support shipped. Saved Messages and storage management features added.</p>
   </div>
+  <div class="tl-item">
+    <div class="tl-date">October 28, 2026</div>
+    <p>Telegram over DNS released in beta: a full Telegram client inside TheFeed. Users sign in with their own account and read and write their own chats, groups and channels. Telegram's own protocol, MTProto, is carried through DNS queries — no VPN, no proxy app. Text only, to stay usable on slow resolvers.</p>
+  </div>
 </div>
 
 <!-- ==================== VISION ==================== -->
@@ -407,7 +413,7 @@
 
 <!-- ==================== FOOTER ==================== -->
 <div class="doc-footer">
-  <p>TheFeed Project Brief &nbsp;·&nbsp; June 2026</p>
+  <p>TheFeed Project Brief &nbsp;·&nbsp; October 2026</p>
 </div>
 
 </div><!-- .page -->
