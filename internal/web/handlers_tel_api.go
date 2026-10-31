@@ -49,7 +49,7 @@ func (s *Server) handleTelInfo(w http.ResponseWriter, r *http.Request) {
 	h.mu.Unlock()
 	cells := h.cells.Load()
 
-	apiID, apiHash := h.apiCredentials()
+	apiID, apiHash, isDefault := h.apiCredentials()
 	resp := map[string]any{
 		// Whether an account is signed in -- confirmed by Telegram, not guessed
 		// from a file that exists whenever gotd has minted any key at all.
@@ -62,12 +62,18 @@ func (s *Server) handleTelInfo(w http.ResponseWriter, r *http.Request) {
 		// Shared backend: the session lives on the machine running the client,
 		// so every browser pointed here shares the account.
 		"shared": s.sharedBackend,
-		// Echoed so a typo is visible and fixable; these identify the app, not
-		// the account.
-		"apiId":   apiID,
-		"apiHash": apiHash,
+		// The bundled pair is in use: the UI says it is shared and offers to
+		// replace it. Its values are never sent here.
+		"defaultCredentials": isDefault,
+		// Whether this build carries a default to go back to.
+		"defaultAvailable": telDefaultAvailable(),
 		// Background checking, so the menu can show its state.
 		"watch": h.telWatchEnabled(),
+	}
+	// The user's own pair is echoed so a typo is visible and fixable.
+	if !isDefault {
+		resp["apiId"] = apiID
+		resp["apiHash"] = apiHash
 	}
 	// connecting + cells let the UI show that a slow link is still moving
 	// rather than an unmoving spinner.
@@ -190,17 +196,29 @@ func (s *Server) handleTelCredentials(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		APIID   int    `json:"apiId"`
 		APIHash string `json:"apiHash"`
+		// UseDefault drops the user's own pair and goes back to the bundled one.
+		UseDefault bool `json:"useDefault"`
 	}
 	if err := s.telDecode(r, &req); err != nil {
 		http.Error(w, "bad request", 400)
 		return
 	}
-	if req.APIID <= 0 || strings.TrimSpace(req.APIHash) == "" {
+	oldID, oldHash, wasDefault := h.apiCredentials()
+	if req.UseDefault {
+		if !telDefaultAvailable() {
+			http.Error(w, "this build has no default credentials", 400)
+			return
+		}
+		req.APIID, req.APIHash = 0, ""
+	} else if req.APIID <= 0 || strings.TrimSpace(req.APIHash) == "" {
 		http.Error(w, "api id and hash required", 400)
 		return
 	}
-	oldID, oldHash := h.apiCredentials()
-	changed := oldID != req.APIID || oldHash != strings.TrimSpace(req.APIHash)
+	// Whether the app identity the session was made under changes.
+	changed := !wasDefault
+	if !req.UseDefault {
+		changed = wasDefault || oldID != req.APIID || oldHash != strings.TrimSpace(req.APIHash)
+	}
 	if err := s.setTelAPICredentials(req.APIID, req.APIHash); err != nil {
 		writeJSON(w, map[string]any{"ok": false, "error": err.Error()})
 		return
@@ -997,7 +1015,7 @@ func telFail(w http.ResponseWriter, h *telHub, err error) {
 	// A connection that is gone must not look like one failing call: drop it
 	// so the UI offers reconnecting instead of steps that can only fail.
 	h.dropDeadBridge(err)
-	writeJSON(w, map[string]any{"ok": false, "reason": telStatusKey(err), "error": err.Error()})
+	writeJSON(w, map[string]any{"ok": false, "reason": h.statusKey(err), "error": err.Error()})
 }
 
 // telStatusKey maps a bridge error to the UI's i18n key, mirroring how chat

@@ -16,16 +16,22 @@
 
 <table align="center">
 <tr>
-<td align="center"><img src="docs/screenshots/mainfeed.jpg" width="170" alt="فید اصلی"><br><sub>فید اصلی</sub></td>
-<td align="center"><img src="docs/screenshots/feed-post.jpg" width="170" alt="خواندن پست"><br><sub>خواندن پست</sub></td>
-<td align="center"><img src="docs/screenshots/telemirror.jpg" width="170" alt="تله‌میرور"><br><sub>تله‌میرور</sub></td>
-<td align="center"><img src="docs/screenshots/chat.jpg" width="170" alt="پیام‌رسان"><br><sub>پیام‌رسان</sub></td>
+<td align="center"><img src="docs/screenshots/feed-list.jpg" width="170" alt="کانال‌های فید"><br><sub>کانال‌های فید</sub></td>
+<td align="center"><img src="docs/screenshots/feed-channel.jpg" width="170" alt="خواندن یک کانال"><br><sub>خواندن یک کانال</sub></td>
+<td align="center"><img src="docs/screenshots/mirror-list.jpg" width="170" alt="کانال‌های میرور"><br><sub>کانال‌های میرور</sub></td>
+<td align="center"><img src="docs/screenshots/mirror-channel.jpg" width="170" alt="یک کانال در میرور"><br><sub>یک کانال در میرور</sub></td>
 </tr>
 <tr>
-<td align="center"><img src="docs/screenshots/chat-list.jpg" width="170" alt="گفتگوها"><br><sub>گفتگوها</sub></td>
-<td align="center"><img src="docs/screenshots/scanner.jpg" width="170" alt="اسکنر ریزالور"><br><sub>اسکنر ریزالور</sub></td>
+<td align="center"><img src="docs/screenshots/chat-list.jpg" width="170" alt="چتِ thefeed"><br><sub>چتِ thefeed</sub></td>
+<td align="center"><img src="docs/screenshots/chat.jpg" width="170" alt="چتِ thefeed، رمزنگاری سرتاسری"><br><sub>چتِ thefeed، رمزنگاری سرتاسری</sub></td>
 <td align="center"><img src="docs/screenshots/resolver-bank.jpg" width="170" alt="بانک ریزالور"><br><sub>بانک ریزالور</sub></td>
 <td align="center"><img src="docs/screenshots/settings.jpg" width="170" alt="تنظیمات"><br><sub>تنظیمات</sub></td>
+</tr>
+<tr>
+<td align="center"><img src="docs/screenshots/tel-chats.jpg" width="170" alt="گفتگوهای تلگرام"><br><sub>گفتگوهای تلگرام</sub></td>
+<td align="center"><img src="docs/screenshots/tel-chat.jpg" width="170" alt="گفتگو در تلگرام"><br><sub>گفتگو در تلگرام</sub></td>
+<td align="center"><img src="docs/screenshots/tel-channel.jpg" width="170" alt="کانال تلگرام"><br><sub>کانال تلگرام</sub></td>
+<td align="center"><img src="docs/screenshots/tel-intro.jpg" width="170" alt="تلگرام روی DNS"><br><sub>تلگرام روی DNS</sub></td>
 </tr>
 </table>
 
@@ -53,7 +59,7 @@
 
 سپس **تنظیمات → کانفیگ‌ها** را باز کنید و یک کانفیگ ایمپورت کنید (یا دامنه و رمز عبور را وارد کنید). ریزالورهای DNS در تب **ریزالور** مدیریت می‌شوند — یک بانک مشترک برای همهٔ کانفیگ‌ها، به‌علاوهٔ یک اسکنر برای یافتن ریزالورهای بیشتر.
 
-**کانفیگ‌های عمومی برای تست:** [@thefeedconfig](https://t.me/thefeedconfig).
+**اخبار پروژه:** [@networkti](https://t.me/networkti) — کانال اصلی اطلاع‌رسانی و انتشار نسخه‌های جدید.
 
 ---
 
@@ -322,7 +328,7 @@ thefeed-server ... --mtproto-domains m.example.com   # یا THEFEED_MTPROTO_DOMA
 - **سرور نمی‌تواند محتوا را کنترل کند** — جریان بین شما و تلگرام رمزنگاری‌شده است، پس سرور فقط بایت‌های بی‌معنی می‌بیند و نمی‌تواند پیام را از فایل تشخیص دهد. چیزی که می‌تواند محدود کند حجم است: `--mtproto-down-kb-per-min` (پیش‌فرض ۵۱۲ کیلوبایت در دقیقه برای هر تونل) هر کلاینتی را که بخواهد فایل بکشد کُند می‌کند، و `--mtproto-max-tunnels` تعداد تونل‌های هم‌زمان را محدود می‌کند.
 - **اعلان‌ها**: وقتی برنامه باز است صدا و اعلان دارد. برای حالت پس‌زمینه، «بررسی در پس‌زمینه» را از منوی ⋮ روشن کنید — کوئری مصرف می‌کند، پس پیش‌فرض خاموش است.
 - **به ریزالورهای خوب نیاز دارد.** فید و پیام‌رسان روی ریزالورهای خیلی کُند خیلی بهتر دوام می‌آورند؛ این بخش پرمصرف‌ترین قسمت برنامه است.
-- **اعتبارنامهٔ برنامه** — `api_id` / `api_hash` خودتان را از [my.telegram.org](https://my.telegram.org) بگیرید. اگر تلگرام یک جفت مشترک را غیرفعال کند، هر کسی که با آن وارد شده باشد یک‌باره از حساب خارج می‌شود.
+- **اعتبارنامهٔ برنامه** — نسخه‌های رسمی یک جفت مشترک پیش‌فرض دارند تا بدون آن هم بتوانید وارد شوید؛ تب تلگرام نشان می‌دهد که از آن استفاده می‌شود. بهتر است `api_id` / `api_hash` خودتان را از [my.telegram.org](https://my.telegram.org) بگیرید و همان‌جا وارد کنید: اگر تلگرام جفت مشترک را محدود کند، ممکن است هر کسی که با آن وارد شده از حساب خارج شود. نسخه‌ای که خودتان بیلد کنید پیش‌فرض ندارد، مگر اینکه یکی به آن بدهید (`TEL_LDFLAG`، نگاه کنید به `cmd/telseal`).
 - **محدودیت‌ها**: `--mtproto-enabled`، `--mtproto-max-tunnels`، `--mtproto-idle-minutes`، `--mtproto-buffer-kb`، `--mtproto-dial-seconds`.
 
 در کلاینت، **تلگرام** را از نوار پایین باز کنید. منوی ⋮ در همهٔ صفحه‌ها هست (انتخاب کانفیگ، اعتبارنامه، لاگ، خروج از حساب)؛ ✓ / ✓✓ یعنی ارسال‌شده و خوانده‌شده؛ حلقهٔ بالای صفحه تا بررسی خودکار بعدی می‌شمارد و هر عملیات پیشرفت و تعداد کوئری‌هایی که خرج کرده را نشان می‌دهد.

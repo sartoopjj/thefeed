@@ -143,6 +143,8 @@ jobs:
 
       - name: Build Client
         env:
+          TEL_API_ID: ${{ secrets.TEL_API_ID }}
+          TEL_API_HASH: ${{ secrets.TEL_API_HASH }}
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
           GOARM: ${{ matrix.goarm || '' }}
@@ -171,7 +173,10 @@ jobs:
           # false-positive submission.
           STRIP="-s -w"
           if [ "${{ matrix.goos }}" = "windows" ]; then STRIP=""; fi
-          LDFLAGS="${STRIP} -X github.com/sartoopjj/thefeed/internal/version.Version=${VERSION} -X github.com/sartoopjj/thefeed/internal/version.Commit=${COMMIT} -X github.com/sartoopjj/thefeed/internal/version.Date=${DATE} -X github.com/sartoopjj/thefeed/internal/version.AssetTemplate=${ASSET_TEMPLATE}"
+          TEL_LDFLAG=$(GOOS=$(go env GOHOSTOS) GOARCH=$(go env GOHOSTARCH) go run ./cmd/telseal)
+          # Hidden from every later line of this log.
+          for v in ${TEL_LDFLAG}; do case "$v" in *=*) echo "::add-mask::${v#*=}" ;; esac; done
+          LDFLAGS="${STRIP} -X github.com/sartoopjj/thefeed/internal/version.Version=${VERSION} -X github.com/sartoopjj/thefeed/internal/version.Commit=${COMMIT} -X github.com/sartoopjj/thefeed/internal/version.Date=${DATE} -X github.com/sartoopjj/thefeed/internal/version.AssetTemplate=${ASSET_TEMPLATE} ${TEL_LDFLAG}"
           # Modern Android requires PIE for executables launched via exec(),
           # and several heuristic AV engines (Kaspersky Boogr.gsh,
           # several VT vendors) flag non-PIE bundled binaries as suspicious.
@@ -259,6 +264,9 @@ jobs:
 
       - name: Build gomobile AAR
         timeout-minutes: 15
+        env:
+          TEL_API_ID: ${{ secrets.TEL_API_ID }}
+          TEL_API_HASH: ${{ secrets.TEL_API_HASH }}
         run: |
           export ANDROID_NDK_HOME="${ANDROID_NDK_HOME:-$ANDROID_NDK_LATEST_HOME}"
           VERSION="${{ github.ref_type == 'tag' && github.ref_name || '0.0.1' }}"
@@ -268,7 +276,10 @@ jobs:
           # ABI). 16 KB page alignment is required on Android 15+
           # devices configured for 16 KB pages — NDK r28+ defaults to
           # this; explicit flag works on older NDKs too.
-          LDFLAGS="-s -w -X github.com/sartoopjj/thefeed/internal/version.Version=${VERSION} -X github.com/sartoopjj/thefeed/internal/version.Commit=${COMMIT} -X github.com/sartoopjj/thefeed/internal/version.Date=${DATE} -extldflags=-Wl,-z,max-page-size=16384"
+          TEL_LDFLAG=$(GOOS=$(go env GOHOSTOS) GOARCH=$(go env GOHOSTARCH) go run ./cmd/telseal)
+          # Hidden from every later line of this log.
+          for v in ${TEL_LDFLAG}; do case "$v" in *=*) echo "::add-mask::${v#*=}" ;; esac; done
+          LDFLAGS="-s -w -X github.com/sartoopjj/thefeed/internal/version.Version=${VERSION} -X github.com/sartoopjj/thefeed/internal/version.Commit=${COMMIT} -X github.com/sartoopjj/thefeed/internal/version.Date=${DATE} -extldflags=-Wl,-z,max-page-size=16384 ${TEL_LDFLAG}"
           mkdir -p android/app/libs
           bash scripts/gomobile-android-aar.sh android/app/libs/mobile.aar "${LDFLAGS}"
 
@@ -358,11 +369,17 @@ jobs:
 
       - name: Build Mobile.xcframework
         timeout-minutes: 8
+        env:
+          TEL_API_ID: ${{ secrets.TEL_API_ID }}
+          TEL_API_HASH: ${{ secrets.TEL_API_HASH }}
         run: |
           VERSION="${{ github.ref_type == 'tag' && github.ref_name || '0.0.1' }}"
           COMMIT=$(git rev-parse --short HEAD)
           DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-          LDFLAGS="-X github.com/sartoopjj/thefeed/internal/version.Version=${VERSION} -X github.com/sartoopjj/thefeed/internal/version.Commit=${COMMIT} -X github.com/sartoopjj/thefeed/internal/version.Date=${DATE}"
+          TEL_LDFLAG=$(GOOS=$(go env GOHOSTOS) GOARCH=$(go env GOHOSTARCH) go run ./cmd/telseal)
+          # Hidden from every later line of this log.
+          for v in ${TEL_LDFLAG}; do case "$v" in *=*) echo "::add-mask::${v#*=}" ;; esac; done
+          LDFLAGS="-X github.com/sartoopjj/thefeed/internal/version.Version=${VERSION} -X github.com/sartoopjj/thefeed/internal/version.Commit=${COMMIT} -X github.com/sartoopjj/thefeed/internal/version.Date=${DATE} ${TEL_LDFLAG}"
           # Device slice only: the archive is for a device, and every extra
           # slice is another concurrent compile of gotd/td/tg.
           gomobile bind -iosversion=15.0 -target=ios/arm64 -ldflags="${LDFLAGS}" -o ios/Mobile.xcframework ./mobile
@@ -424,7 +441,15 @@ jobs:
       - name: Build macOS DMG
         env:
           VERSION: ${{ github.ref_type == 'tag' && github.ref_name || '0.0.1' }}
+          TEL_API_ID: ${{ secrets.TEL_API_ID }}
+          TEL_API_HASH: ${{ secrets.TEL_API_HASH }}
         run: |
+          # Its own line: a failure inside make's arguments would not stop the
+          # step. Exported, not passed as an argument: make then prints the
+          # variable's name in its command lines, not its value.
+          TEL_LDFLAG=$(go run ./cmd/telseal)
+          for v in ${TEL_LDFLAG}; do case "$v" in *=*) echo "::add-mask::${v#*=}" ;; esac; done
+          export TEL_LDFLAG
           make mac-dmg VERSION="${VERSION}"
           ls -lh build/thefeed-macos-*.dmg
 

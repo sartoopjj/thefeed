@@ -41,5 +41,20 @@ eq('the mute request carries the conversation and the setting',
   sent.map((s) => s.body), [{ peer, muted: true }]);
 eq('and the switch stays where it was flipped', dialog.muted, true);
 
+// --- the shared-key warning ----------------------------------------------------
+{
+  const banner = new Function('telEsc', 'telT', fn('telDefaultCredsBanner') + '; return telDefaultCredsBanner;')(
+    (x) => x, (k) => '[' + k + ']');
+  eq('the shared key in use: warn and offer the user\'s own',
+    /\[tel_default_creds_warn\][\s\S]*telEditCredentials\(\)[\s\S]*\[tel_use_own_creds\]/.test(banner({ defaultCredentials: true })), true);
+  eq('the user\'s own key in use: no warning', banner({ defaultCredentials: false }), '');
+  eq('no info yet: no warning', banner(null), '');
+  const creds = fn('telRenderCredentials');
+  eq('back-to-default is offered only when the build has one and it is not in use',
+    /info\.defaultAvailable && !info\.defaultCredentials/.test(creds), true);
+  eq('switching back sends useDefault, never a pair',
+    /telCall\('\/api\/tel\/credentials', \{ useDefault: true \}\)/.test(fn('telUseDefaultCredentials')), true);
+}
+
 console.log(`tel_calls: ${pass} passed, ${fail} failed`);
 if (fail) process.exit(1);

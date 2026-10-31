@@ -14,16 +14,22 @@ DNS-based **feed reader and lite messenger** for networks where only DNS gets th
 
 <table align="center">
 <tr>
-<td align="center"><img src="docs/screenshots/mainfeed.jpg" width="170" alt="Main feed"><br><sub>Main feed</sub></td>
-<td align="center"><img src="docs/screenshots/feed-post.jpg" width="170" alt="Reading a post"><br><sub>Reading a post</sub></td>
-<td align="center"><img src="docs/screenshots/telemirror.jpg" width="170" alt="Telemirror"><br><sub>Telemirror</sub></td>
-<td align="center"><img src="docs/screenshots/chat.jpg" width="170" alt="Messenger"><br><sub>Messenger</sub></td>
+<td align="center"><img src="docs/screenshots/feed-list.jpg" width="170" alt="Feed channels"><br><sub>Feed channels</sub></td>
+<td align="center"><img src="docs/screenshots/feed-channel.jpg" width="170" alt="Reading a channel"><br><sub>Reading a channel</sub></td>
+<td align="center"><img src="docs/screenshots/mirror-list.jpg" width="170" alt="Mirror channels"><br><sub>Mirror channels</sub></td>
+<td align="center"><img src="docs/screenshots/mirror-channel.jpg" width="170" alt="A channel in Mirror"><br><sub>A channel in Mirror</sub></td>
 </tr>
 <tr>
-<td align="center"><img src="docs/screenshots/chat-list.jpg" width="170" alt="Chats"><br><sub>Chats</sub></td>
-<td align="center"><img src="docs/screenshots/scanner.jpg" width="170" alt="Resolver scanner"><br><sub>Resolver scanner</sub></td>
+<td align="center"><img src="docs/screenshots/chat-list.jpg" width="170" alt="thefeed Chat"><br><sub>thefeed Chat</sub></td>
+<td align="center"><img src="docs/screenshots/chat.jpg" width="170" alt="thefeed Chat, end-to-end encrypted"><br><sub>thefeed Chat, end-to-end encrypted</sub></td>
 <td align="center"><img src="docs/screenshots/resolver-bank.jpg" width="170" alt="Resolver bank"><br><sub>Resolver bank</sub></td>
 <td align="center"><img src="docs/screenshots/settings.jpg" width="170" alt="Settings"><br><sub>Settings</sub></td>
+</tr>
+<tr>
+<td align="center"><img src="docs/screenshots/tel-chats.jpg" width="170" alt="Telegram chats"><br><sub>Telegram chats</sub></td>
+<td align="center"><img src="docs/screenshots/tel-chat.jpg" width="170" alt="Telegram chat"><br><sub>Telegram chat</sub></td>
+<td align="center"><img src="docs/screenshots/tel-channel.jpg" width="170" alt="Telegram channel"><br><sub>Telegram channel</sub></td>
+<td align="center"><img src="docs/screenshots/tel-intro.jpg" width="170" alt="Telegram over DNS"><br><sub>Telegram over DNS</sub></td>
 </tr>
 </table>
 
@@ -45,7 +51,7 @@ Download the client for your platform from the latest release — pick the mirro
 
 Then open **Settings → Configs** and import a config (or paste your domain + passphrase). DNS resolvers are managed in the **Resolver** tab — a shared Bank used by all configs, plus a Scanner to find more.
 
-**Public configs to try:** [@thefeedconfig](https://t.me/thefeedconfig).
+**Project news:** [@networkti](https://t.me/networkti) — the main channel for announcements and releases.
 
 ---
 
@@ -261,7 +267,7 @@ thefeed-server ... --mtproto-domains m.example.com   # or THEFEED_MTPROTO_DOMAIN
 - **The relay cannot police content** — the stream is encrypted end to end with Telegram, so the server sees opaque bytes and cannot tell a message from a file. What it *can* limit is volume: `--mtproto-down-kb-per-min` (512 KB/min per tunnel by default) throttles any client that tries to pull files through it, and `--mtproto-max-tunnels` bounds how many run at once.
 - **Notifications**: while the app is open it rings and notifies. For a backgrounded app, turn on background checking in the ⋮ menu — it costs queries around the clock, so it is off by default.
 - **It needs good resolvers.** The Feed and the Messenger hold up far better on very slow resolvers; this is the most bandwidth-hungry part of the app.
-- **App credentials** — register your own `api_id` / `api_hash` at [my.telegram.org](https://my.telegram.org). If Telegram disables a shared pair, everyone signed in with it is signed out at once.
+- **App credentials** — official release builds carry a shared default pair, so you can sign in without one; the tab says when it is in use. It is better to register your own `api_id` / `api_hash` at [my.telegram.org](https://my.telegram.org) and enter it there: if Telegram restricts the shared pair, everyone signed in with it may be signed out. Builds you make yourself have no default unless you pass one in (`TEL_LDFLAG`, see `cmd/telseal`).
 - **Limits**: `--mtproto-enabled`, `--mtproto-max-tunnels`, `--mtproto-idle-minutes`, `--mtproto-buffer-kb`, `--mtproto-dial-seconds`.
 
 In the client, open **Telegram** from the bottom nav. The ⋮ menu is on every screen (config picker, credentials, log, sign out); ✓ / ✓✓ mean sent and read; the ring in the title bar counts down to the next automatic check, and every operation reports its progress and the number of queries it has spent.

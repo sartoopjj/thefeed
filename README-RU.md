@@ -14,16 +14,22 @@
 
 <table align="center">
 <tr>
-<td align="center"><img src="docs/screenshots/mainfeed.jpg" width="170" alt="Main feed"><br><sub>Главная лента</sub></td>
-<td align="center"><img src="docs/screenshots/feed-post.jpg" width="170" alt="Reading a post"><br><sub>Чтение поста</sub></td>
-<td align="center"><img src="docs/screenshots/telemirror.jpg" width="170" alt="Telemirror"><br><sub>Telemirror</sub></td>
-<td align="center"><img src="docs/screenshots/chat.jpg" width="170" alt="Messenger"><br><sub>Мессенджер</sub></td>
+<td align="center"><img src="docs/screenshots/feed-list.jpg" width="170" alt="Feed channels"><br><sub>Каналы ленты</sub></td>
+<td align="center"><img src="docs/screenshots/feed-channel.jpg" width="170" alt="Reading a channel"><br><sub>Чтение канала</sub></td>
+<td align="center"><img src="docs/screenshots/mirror-list.jpg" width="170" alt="Mirror channels"><br><sub>Каналы Mirror</sub></td>
+<td align="center"><img src="docs/screenshots/mirror-channel.jpg" width="170" alt="A channel in Mirror"><br><sub>Канал в Mirror</sub></td>
 </tr>
 <tr>
-<td align="center"><img src="docs/screenshots/chat-list.jpg" width="170" alt="Chats"><br><sub>Чаты</sub></td>
-<td align="center"><img src="docs/screenshots/scanner.jpg" width="170" alt="Resolver scanner"><br><sub>Сканер резолверов</sub></td>
+<td align="center"><img src="docs/screenshots/chat-list.jpg" width="170" alt="thefeed Chat"><br><sub>Чат thefeed</sub></td>
+<td align="center"><img src="docs/screenshots/chat.jpg" width="170" alt="thefeed Chat, end-to-end encrypted"><br><sub>Чат thefeed, сквозное шифрование</sub></td>
 <td align="center"><img src="docs/screenshots/resolver-bank.jpg" width="170" alt="Resolver bank"><br><sub>Банк резолверов</sub></td>
 <td align="center"><img src="docs/screenshots/settings.jpg" width="170" alt="Settings"><br><sub>Настройки</sub></td>
+</tr>
+<tr>
+<td align="center"><img src="docs/screenshots/tel-chats.jpg" width="170" alt="Telegram chats"><br><sub>Чаты Telegram</sub></td>
+<td align="center"><img src="docs/screenshots/tel-chat.jpg" width="170" alt="Telegram chat"><br><sub>Чат в Telegram</sub></td>
+<td align="center"><img src="docs/screenshots/tel-channel.jpg" width="170" alt="Telegram channel"><br><sub>Канал Telegram</sub></td>
+<td align="center"><img src="docs/screenshots/tel-intro.jpg" width="170" alt="Telegram over DNS"><br><sub>Telegram через DNS</sub></td>
 </tr>
 </table>
 
@@ -47,7 +53,7 @@
 
 Затем откройте **Настройки → Конфиги** и импортируйте конфиг (или введите домен + пароль). DNS-резолверы управляются во вкладке **Резолвер** — общий банк для всех конфигов плюс сканер для поиска новых.
 
-**Публичные конфиги для теста:** [@thefeedconfig](https://t.me/thefeedconfig).
+**Новости проекта:** [@networkti](https://t.me/networkti) — основной канал объявлений и релизов.
 
 ---
 
@@ -274,7 +280,7 @@ thefeed-server ... --mtproto-domains m.example.com   # или THEFEED_MTPROTO_DO
 - **Ретранслятор не контролирует содержимое** — поток зашифрован между вами и Telegram, сервер видит непрозрачные байты и не отличает сообщение от файла. Ограничить он может объём: `--mtproto-down-kb-per-min` (по умолчанию 512 КБ/мин на туннель) притормаживает клиента, который тянет файлы, а `--mtproto-max-tunnels` ограничивает их число.
 - **Уведомления**: пока приложение открыто, оно звучит и уведомляет. Для свёрнутого включите фоновую проверку в меню ⋮ — она расходует запросы, поэтому выключена по умолчанию.
 - **Нужны хорошие резолверы.** Лента и мессенджер гораздо лучше переживают очень медленные резолверы; этот раздел — самый требовательный к полосе.
-- **Учётные данные приложения** — зарегистрируйте свои `api_id` / `api_hash` на [my.telegram.org](https://my.telegram.org). Если Telegram отключит общую пару, все вошедшие с ней выйдут из аккаунта одновременно.
+- **Учётные данные приложения** — официальные сборки содержат общую пару по умолчанию, так что войти можно и без своей; вкладка сообщает, когда она используется. Лучше зарегистрировать свои `api_id` / `api_hash` на [my.telegram.org](https://my.telegram.org) и ввести их там: если Telegram ограничит общую пару, все вошедшие с ней могут выйти из аккаунта. В собственных сборках пары по умолчанию нет, если её не передать (`TEL_LDFLAG`, см. `cmd/telseal`).
 - **Ограничения**: `--mtproto-enabled`, `--mtproto-max-tunnels`, `--mtproto-idle-minutes`, `--mtproto-buffer-kb`, `--mtproto-dial-seconds`.
 
 В клиенте откройте **Telegram** в нижней навигации. Меню ⋮ доступно на каждом экране (выбор конфига, учётные данные, журнал, выход); ✓ / ✓✓ — отправлено и прочитано; кольцо в заголовке отсчитывает время до следующей автоматической проверки, а каждая операция показывает свой прогресс и число потраченных запросов.

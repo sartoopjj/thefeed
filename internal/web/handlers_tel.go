@@ -20,6 +20,7 @@ import (
 
 	"github.com/sartoopjj/thefeed/internal/client"
 	"github.com/sartoopjj/thefeed/internal/protocol"
+	"github.com/sartoopjj/thefeed/internal/telcreds"
 	"github.com/sartoopjj/thefeed/internal/tgbridge"
 )
 
@@ -66,13 +67,18 @@ const (
 	telPingTimeout = 4 * time.Minute
 )
 
-// Telegram app credentials: they identify the app, not the user. Empty until
-// whoever ships the build registers a pair at my.telegram.org; until then the
-// tab asks the user for their own.
-const (
-	defaultTelAPIID   = 0
-	defaultTelAPIHash = ""
-)
+// telDefaultBlob is the bundled Telegram app credentials, sealed (see
+// internal/telcreds). Set only by release builds, from CI secrets:
+//
+//	-X github.com/sartoopjj/thefeed/internal/web.telDefaultBlob=...
+//
+// Empty in every other build, which then asks the user for their own pair.
+var telDefaultBlob string
+
+func telDefaultAvailable() bool {
+	_, _, ok := telcreds.Open(telDefaultBlob)
+	return ok
+}
 
 // telHub owns the Telegram bridge for this backend.
 type telHub struct {
@@ -224,12 +230,16 @@ func (h *telHub) store() *telCache {
 }
 
 // apiCredentials returns the user's own app id/hash, or the bundled default.
-func (h *telHub) apiCredentials() (int, string) {
+// isDefault says which: the default must never be shown, logged or stored.
+func (h *telHub) apiCredentials() (id int, hash string, isDefault bool) {
 	pl, err := h.s.loadProfiles()
 	if err == nil && pl.TelAPIID > 0 && strings.TrimSpace(pl.TelAPIHash) != "" {
-		return pl.TelAPIID, strings.TrimSpace(pl.TelAPIHash)
+		return pl.TelAPIID, strings.TrimSpace(pl.TelAPIHash), false
 	}
-	return defaultTelAPIID, defaultTelAPIHash
+	if id, hash, ok := telcreds.Open(telDefaultBlob); ok {
+		return id, hash, true
+	}
+	return 0, "", false
 }
 
 // reset points the hub at a new lifetime context and drops any live bridge,
@@ -378,7 +388,7 @@ func (h *telHub) connect(ctx context.Context, cfg Config, nickname string) error
 	}
 
 	h.setPhase(telPhaseTelegram)
-	apiID, apiHash := h.apiCredentials()
+	apiID, apiHash, _ := h.apiCredentials()
 	b := tgbridge.NewBridge()
 	if err := b.Start(runCtx, tgbridge.Options{
 		APIID:     apiID,
@@ -844,8 +854,21 @@ func (h *telHub) current() (*tgbridge.Bridge, error) {
 	return h.bridge, nil
 }
 
-func (h *telHub) setErr(err error) {
+// statusKey is telStatusKey, except that a rejected built-in key is said to be
+// the built-in one: the user typed nothing, so "edit them" would point at
+// empty fields.
+func (h *telHub) statusKey(err error) string {
 	key := telStatusKey(err)
+	if key == "tel_err_bad_credentials" {
+		if _, _, isDefault := h.apiCredentials(); isDefault {
+			return "tel_err_default_creds_rejected"
+		}
+	}
+	return key
+}
+
+func (h *telHub) setErr(err error) {
+	key := h.statusKey(err)
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	if err == nil {
@@ -938,9 +961,13 @@ func (s *Server) configForServerKey(key string) (Config, string, bool) {
 func (s *Server) setTelAPICredentials(id int, hash string) error {
 	s.profilesMu.Lock()
 	defer s.profilesMu.Unlock()
-	pl, err := s.loadProfiles()
+	// A fresh install has no profile list yet; that is not a reason to refuse.
+	pl, err := s.loadProfilesExisting()
 	if err != nil {
 		return err
+	}
+	if pl == nil {
+		pl = &ProfileList{}
 	}
 	pl.TelAPIID = id
 	pl.TelAPIHash = strings.TrimSpace(hash)

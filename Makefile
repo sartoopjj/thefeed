@@ -17,6 +17,14 @@ LDFLAGS = -s -w \
 	-X github.com/sartoopjj/thefeed/internal/version.Date=$(DATE)
 
 GOFLAGS = -trimpath -ldflags="$(LDFLAGS)"
+
+# Bundled Telegram app credentials for the client: linker flags from
+# cmd/telseal (see internal/telcreds). Empty unless set; release CI exports
+#   TEL_LDFLAG=$(go run ./cmd/telseal)   (with TEL_API_ID / TEL_API_HASH set)
+# The desktop client reads it from the environment ($$TEL_LDFLAG), so make
+# echoes the name rather than the value.
+TEL_LDFLAG ?=
+export TEL_LDFLAG
 export CGO_ENABLED = 0
 
 # CLIENT_GOFLAGS appends the platform-specific AssetTemplate so the
@@ -25,7 +33,7 @@ export CGO_ENABLED = 0
 # string read from the public VERSION file. Pass the asset filename as
 # the first argument.
 #   $(call CLIENT_GOFLAGS,thefeed-client-{V}-linux-amd64)
-CLIENT_GOFLAGS = -trimpath -ldflags="$(LDFLAGS) -X github.com/sartoopjj/thefeed/internal/version.AssetTemplate=$(1)"
+CLIENT_GOFLAGS = -trimpath -ldflags="$(LDFLAGS) $$TEL_LDFLAG -X github.com/sartoopjj/thefeed/internal/version.AssetTemplate=$(1)"
 
 all: test build
 
@@ -205,7 +213,8 @@ IOS_MARKETING_VERSION = $(patsubst v%,%,$(VERSION))
 IOS_BUILD_NUMBER ?= $(shell git rev-list --count HEAD 2>/dev/null || echo 1)
 IOS_LDFLAGS = -X github.com/sartoopjj/thefeed/internal/version.Version=$(VERSION) \
               -X github.com/sartoopjj/thefeed/internal/version.Commit=$(COMMIT) \
-              -X github.com/sartoopjj/thefeed/internal/version.Date=$(DATE)
+              -X github.com/sartoopjj/thefeed/internal/version.Date=$(DATE) \
+              $(TEL_LDFLAG)
 IOS_XCODE_VERSIONS = MARKETING_VERSION="$(IOS_MARKETING_VERSION)" CURRENT_PROJECT_VERSION="$(IOS_BUILD_NUMBER)"
 
 ios-deps:
@@ -277,6 +286,7 @@ ANDROID_LDFLAGS = -s -w \
                   -X github.com/sartoopjj/thefeed/internal/version.Version=$(VERSION) \
                   -X github.com/sartoopjj/thefeed/internal/version.Commit=$(COMMIT) \
                   -X github.com/sartoopjj/thefeed/internal/version.Date=$(DATE) \
+                  $(TEL_LDFLAG) \
                   -extldflags=-Wl,-z,max-page-size=16384
 
 # The 32-bit ARM crash: Go 1.26.0-1.26.8 have a runtime bug that kills the app

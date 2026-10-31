@@ -6,6 +6,12 @@ function chatIsMobile() {
   return 'ontouchstart' in window && window.innerWidth < 768;
 }
 
+// CHAT_KEEP_FOCUS goes on buttons pressed while typing (send, refresh). A
+// press moves focus to the button, and on a phone losing focus closes the
+// keyboard; cancelling mousedown keeps focus where it is and the click still
+// fires.
+var CHAT_KEEP_FOCUS = ' onmousedown="event.preventDefault()"';
+
 var chatState = {
   open: false,
   view: 'list', // 'list' | 'thread'
@@ -773,7 +779,7 @@ function chatRenderList(keepView) {
   if (chatAvailable()) html += chatTimerBtnHTML();
   if (chatAvailable()) {
     html += '<button id="chatRefreshBtn" class="chat-icon-btn' + (chatState.polling ? ' spinning' : '') + '" ' +
-      (chatState.polling ? 'disabled ' : '') + 'title="' + escAttr(chatT('chat_refresh')) + '" onclick="chatPollNow()">' + icon('refresh') + '</button>';
+      (chatState.polling ? 'disabled ' : '') + 'title="' + escAttr(chatT('chat_refresh')) + '"' + CHAT_KEEP_FOCUS + ' onclick="chatPollNow()">' + icon('refresh') + '</button>';
   }
   // ⋮ shows a red dot until the recovery code has been backed up (the breadcrumb
   // leads the user: ⋮ → Recovery → "I saved it").
@@ -1584,7 +1590,7 @@ async function chatRenderThread() {
   // into the contact panel (⋮) so the topbar isn't cramped next to the name.
   if (chatAvailable()) html += chatTimerBtnHTML();
   html += '<button id="chatRefreshBtn" class="chat-icon-btn' + (chatState.polling ? ' spinning' : '') + '" ' +
-    (chatState.polling ? 'disabled ' : '') + 'title="' + escAttr(chatT('chat_refresh')) + '" onclick="chatThreadRefresh()">' + icon('refresh') + '</button>';
+    (chatState.polling ? 'disabled ' : '') + 'title="' + escAttr(chatT('chat_refresh')) + '"' + CHAT_KEEP_FOCUS + ' onclick="chatThreadRefresh()">' + icon('refresh') + '</button>';
   // ⋮ opens the SAME merged contact panel as tapping the name.
   html += '<button class="chat-icon-btn" title="' + escAttr(chatT('chat_menu')) +
     '" aria-label="' + escAttr(chatT('chat_menu')) + '" onclick="chatContactInfo()">' + icon('more') + '</button>';
@@ -1685,7 +1691,7 @@ async function chatRenderThread() {
   html += '<div class="chat-input-row">' +
     chatQuotaCircleHTML() +
     '<textarea id="chatInput" dir="auto" placeholder="' + escAttr(chatT('chat_send_ph')) + '" rows="1" oninput="chatInputResize()" onkeydown="chatInputKey(event)"></textarea>' +
-    '<button class="chat-send-btn" id="chatSendBtn" onclick="sendChatMessage()" aria-label="' + escAttr(chatT('chat_send')) + '">' + icon('send') + '</button></div>';
+    '<button class="chat-send-btn" id="chatSendBtn"' + CHAT_KEEP_FOCUS + ' onclick="sendChatMessage()" aria-label="' + escAttr(chatT('chat_send')) + '">' + icon('send') + '</button></div>';
   html += '<div class="chat-charcount" id="chatCharCount"></div>';
   html += '</div>';
 

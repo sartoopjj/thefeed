@@ -45,5 +45,21 @@ const upd = body('telUpdateScrollDown');
 ok('it hides near the bottom and sits above the composer',
   /classList\.toggle\('hidden', !far\)/.test(upd) && /tel-compose/.test(upd));
 
+// Buttons pressed while typing must not take focus from the text box: on a
+// phone that closes the keyboard after every send or refresh.
+const chatSrc = readFileSync(join(here, '..', 'static', 'js', 'chat.js'), 'utf8');
+ok('Tel: the keep-focus attribute cancels mousedown',
+  /var TEL_KEEP_FOCUS = ' onmousedown="event\.preventDefault\(\)"';/.test(src));
+ok('Messenger: the same',
+  /var CHAT_KEEP_FOCUS = ' onmousedown="event\.preventDefault\(\)"';/.test(chatSrc));
+for (const [where, text, btn] of [
+  ['Tel send', src, /class="tel-send-btn"' \+ TEL_KEEP_FOCUS \+ ' onclick="telSend\(\)"/],
+  ['Tel list refresh', src, /TEL_KEEP_FOCUS \+ ' onclick="telRefreshNow\(\\'list\\'\)"/],
+  ['Tel thread refresh', src, /TEL_KEEP_FOCUS \+ ' onclick="telRefreshNow\(\\'thread\\'\)"/],
+  ['Messenger send', chatSrc, /id="chatSendBtn"' \+ CHAT_KEEP_FOCUS \+ ' onclick="sendChatMessage\(\)"/],
+  ['Messenger list refresh', chatSrc, /CHAT_KEEP_FOCUS \+ ' onclick="chatPollNow\(\)"/],
+  ['Messenger thread refresh', chatSrc, /CHAT_KEEP_FOCUS \+ ' onclick="chatThreadRefresh\(\)"/],
+]) ok(where + ' keeps the keyboard open', btn.test(text));
+
 console.log(`tel_composer: ${pass} passed, ${fail} failed`);
 if (fail) process.exit(1);

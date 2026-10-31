@@ -14,16 +14,22 @@
 
 <table align="center">
 <tr>
-<td align="center"><img src="docs/screenshots/mainfeed.jpg" width="170" alt="Main feed"><br><sub>主信息流</sub></td>
-<td align="center"><img src="docs/screenshots/feed-post.jpg" width="170" alt="Reading a post"><br><sub>阅读消息</sub></td>
-<td align="center"><img src="docs/screenshots/telemirror.jpg" width="170" alt="Telemirror"><br><sub>Telemirror</sub></td>
-<td align="center"><img src="docs/screenshots/chat.jpg" width="170" alt="Messenger"><br><sub>私信</sub></td>
+<td align="center"><img src="docs/screenshots/feed-list.jpg" width="170" alt="Feed channels"><br><sub>订阅频道</sub></td>
+<td align="center"><img src="docs/screenshots/feed-channel.jpg" width="170" alt="Reading a channel"><br><sub>阅读频道</sub></td>
+<td align="center"><img src="docs/screenshots/mirror-list.jpg" width="170" alt="Mirror channels"><br><sub>Mirror 频道</sub></td>
+<td align="center"><img src="docs/screenshots/mirror-channel.jpg" width="170" alt="A channel in Mirror"><br><sub>Mirror 中的频道</sub></td>
 </tr>
 <tr>
-<td align="center"><img src="docs/screenshots/chat-list.jpg" width="170" alt="Chats"><br><sub>私信列表</sub></td>
-<td align="center"><img src="docs/screenshots/scanner.jpg" width="170" alt="Resolver scanner"><br><sub>解析器扫描</sub></td>
+<td align="center"><img src="docs/screenshots/chat-list.jpg" width="170" alt="thefeed Chat"><br><sub>thefeed 私信</sub></td>
+<td align="center"><img src="docs/screenshots/chat.jpg" width="170" alt="thefeed Chat, end-to-end encrypted"><br><sub>thefeed 私信（端到端加密）</sub></td>
 <td align="center"><img src="docs/screenshots/resolver-bank.jpg" width="170" alt="Resolver bank"><br><sub>解析器池</sub></td>
 <td align="center"><img src="docs/screenshots/settings.jpg" width="170" alt="Settings"><br><sub>设置</sub></td>
+</tr>
+<tr>
+<td align="center"><img src="docs/screenshots/tel-chats.jpg" width="170" alt="Telegram chats"><br><sub>Telegram 会话</sub></td>
+<td align="center"><img src="docs/screenshots/tel-chat.jpg" width="170" alt="Telegram chat"><br><sub>Telegram 聊天</sub></td>
+<td align="center"><img src="docs/screenshots/tel-channel.jpg" width="170" alt="Telegram channel"><br><sub>Telegram 频道</sub></td>
+<td align="center"><img src="docs/screenshots/tel-intro.jpg" width="170" alt="Telegram over DNS"><br><sub>通过 DNS 使用 Telegram</sub></td>
 </tr>
 </table>
 
@@ -47,7 +53,7 @@
 
 然后打开 **设置 → 配置**，导入一个配置（或填入域名 + 口令）。DNS 解析器在 **解析器** 标签页管理 —— 一个所有配置共享的解析器池，外加一个用于发现更多解析器的扫描器。
 
-**可用来测试的公开配置：** [@thefeedconfig](https://t.me/thefeedconfig)。
+**项目动态：** [@networkti](https://t.me/networkti) —— 发布公告和新版本的主要频道。
 
 ---
 
@@ -267,7 +273,7 @@ thefeed-server ... --mtproto-domains m.example.com   # 或 THEFEED_MTPROTO_DOMAI
 - **中继无法管控内容** —— 数据流在你与 Telegram 之间端到端加密，服务器只看到不透明的字节，分不清消息和文件。它能限制的是流量：`--mtproto-down-kb-per-min`（默认每条隧道 512 KB/分钟）会拖慢任何试图拉取文件的客户端，`--mtproto-max-tunnels` 则限制并发数量。
 - **通知**：应用打开时会响铃并提醒。应用退到后台时，可在 ⋮ 菜单中开启后台检查——它会持续消耗查询，因此默认关闭。
 - **需要好的解析器。** 订阅和私信在极慢的解析器上表现好得多；这是整个应用中最吃带宽的部分。
-- **应用凭据** — 在 [my.telegram.org](https://my.telegram.org) 申请你自己的 `api_id` / `api_hash`。如果 Telegram 停用了一对共享凭据，所有用它登录的人会同时被登出。
+- **应用凭据** — 官方发布版内置一对共享的默认凭据，没有自己的也能登录；Telegram 标签页会提示正在使用它。更好的做法是在 [my.telegram.org](https://my.telegram.org) 申请你自己的 `api_id` / `api_hash` 并在那里填入：如果 Telegram 限制了共享凭据，所有用它登录的人可能会被登出。自己构建的版本没有默认凭据，除非你传入一份（`TEL_LDFLAG`，见 `cmd/telseal`）。
 - **限制项**：`--mtproto-enabled`、`--mtproto-max-tunnels`、`--mtproto-idle-minutes`、`--mtproto-buffer-kb`、`--mtproto-dial-seconds`。
 
 在客户端中，从底部导航打开 **Telegram**。⋮ 菜单在每个界面都有（配置选择、凭据、日志、退出登录）；✓ / ✓✓ 表示已发送和已读；标题栏的圆环倒计时显示下一次自动检查的时间，每个操作都会显示自己的进度和已消耗的查询数。

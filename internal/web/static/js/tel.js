@@ -775,6 +775,25 @@ async function telSaveCredentials() {
 }
 window.telSaveCredentials = telSaveCredentials;
 
+// telUseDefaultCredentials drops the user's own key for the built-in one. Like
+// any change of key, it signs the account out.
+async function telUseDefaultCredentials() {
+  var info = telState.info || {};
+  if (info.hasSession && !confirm(telT('tel_creds_signout_confirm'))) return;
+  await telOp('tel_working', async function () {
+    var r = await telCall('/api/tel/credentials', { useDefault: true });
+    if (!r) return;
+    telState.editCreds = false;
+    if (r.signedOut) {
+      telState.authorized = false;
+      telState.user = null;
+      telResetData();
+    }
+    await telRefreshInfo();
+  });
+}
+window.telUseDefaultCredentials = telUseDefaultCredentials;
+
 function telEditCredentials() { telState.editCreds = true; telCloseSheet(); telRender(); }
 function telCancelCreds() { telState.editCreds = false; telRender(); }
 window.telEditCredentials = telEditCredentials;
@@ -2033,6 +2052,12 @@ function telRender() {
   telPaintCountdown();
 }
 
+// TEL_KEEP_FOCUS goes on buttons pressed while typing (send, refresh). A
+// press moves focus to the button, and on a phone losing focus closes the
+// keyboard; cancelling mousedown keeps focus where it is and the click still
+// fires.
+var TEL_KEEP_FOCUS = ' onmousedown="event.preventDefault()"';
+
 // telKeepComposer re-renders the pane for the same conversation without
 // touching the composer: it never leaves the document, so the keyboard keeps
 // the word it is composing and the caret stays where it was. Rebuilding it
@@ -2216,7 +2241,7 @@ function telRenderTopbar() {
   if (telReady()) html += telSearchBtnHTML('list') + telCountdownHTML();
   html += '<button class="tel-icon-btn tel-refresh-btn' + ((telState.busy || telState.bg) ? ' spinning' : '') + '"' +
     (telState.busy ? ' disabled' : '') + ' title="' + telAttrQ(telT('tel_refresh')) +
-    '" aria-label="' + telAttrQ(telT('tel_refresh')) + '" onclick="telRefreshNow(\'list\')">' +
+    '" aria-label="' + telAttrQ(telT('tel_refresh')) + '"' + TEL_KEEP_FOCUS + ' onclick="telRefreshNow(\'list\')">' +
     icon('refresh') + '</button>';
   // ALWAYS present, never conditional. The re-check lives inside the sheet it
   // opens, so hiding the shield when nothing looks usable removes the one
@@ -2550,6 +2575,12 @@ function telRenderCredentials(info) {
   if (telState.editCreds) {
     html += '<button class="tel-btn" onclick="telCancelCreds()">' + telEsc(telT('tel_cancel')) + '</button>';
   }
+  // Back to the built-in key: only when this build has one and it is not
+  // already the one in use.
+  if (info.defaultAvailable && !info.defaultCredentials) {
+    html += '<button class="tel-btn" onclick="telUseDefaultCredentials()">' +
+      telEsc(telT('tel_use_default_creds')) + '</button>';
+  }
   html += '<div class="tel-hint" dir="auto">' + telEsc(telT('tel_creds_hint')) + '</div></div>';
   return html;
 }
@@ -2611,8 +2642,15 @@ function telRenderPickServer(info) {
   return html;
 }
 
+// telDefaultCredsBanner says the shared key is in use and offers to replace it.
+function telDefaultCredsBanner(info) {
+  if (!info || !info.defaultCredentials) return '';
+  return '<div class="tel-banner tel-banner-warn" dir="auto">' + telEsc(telT('tel_default_creds_warn')) +
+    '</div><button class="tel-btn" onclick="telEditCredentials()">' + telEsc(telT('tel_use_own_creds')) + '</button>';
+}
+
 function telRenderLogin() {
-  var html = '<div class="tel-step">';
+  var html = '<div class="tel-step">' + telDefaultCredsBanner(telState.info);
   if (telState.needPassword) {
     html += '<div class="tel-step-head" dir="auto">' + telEsc(telT('tel_password_intro')) + '</div>';
     // Telegram stores the user's own reminder for exactly this moment.
@@ -3171,7 +3209,7 @@ function telRenderPane() {
     telSearchBtnHTML('thread') + telCountdownHTML() +
     '<button class="tel-icon-btn' + ((telState.busy || telState.bg) ? ' spinning' : '') + '"' +
     (telState.busy ? ' disabled' : '') + ' title="' + telAttrQ(telT('tel_refresh')) +
-    '" aria-label="' + telAttrQ(telT('tel_refresh')) + '" onclick="telRefreshNow(\'thread\')">' +
+    '" aria-label="' + telAttrQ(telT('tel_refresh')) + '"' + TEL_KEEP_FOCUS + ' onclick="telRefreshNow(\'thread\')">' +
     icon('refresh') + '</button>' +
     '<button class="tel-icon-btn" title="' + telAttrQ(telT('tel_menu')) +
     '" aria-label="' + telAttrQ(telT('tel_menu')) + '" onclick="telThreadMenu()">' +
@@ -3269,7 +3307,7 @@ function telRenderPane() {
     '<textarea id="telInput" class="tel-compose-input" rows="1" dir="auto" placeholder="' +
     telAttrQ(telT('tel_write')) + '" oninput="telState.draft=this.value;telGrowInput(this)" ' +
     'onkeydown="telInputKey(event)">' + telEsc(telState.draft) + '</textarea>' +
-    '<button class="tel-send-btn" onclick="telSend()"' +
+    '<button class="tel-send-btn"' + TEL_KEEP_FOCUS + ' onclick="telSend()"' +
     ' aria-label="' + telAttrQ(telT('tel_send')) + '" title="' + telAttrQ(telT('tel_send')) + '">' +
     icon('send') + '</button></div>';
   return html;

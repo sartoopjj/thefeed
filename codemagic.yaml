@@ -74,6 +74,10 @@ workflows:
     integrations:
       app_store_connect: "CodeMagic API Key"
     environment:
+      # Same group as Android: it also holds TEL_API_ID / TEL_API_HASH,
+      # the bundled Telegram app credentials (sealed in by cmd/telseal).
+      groups:
+        - google_credentials
       xcode: latest
       ios_signing:
         # Codemagic auto-creates/fetches the distribution certificate and
@@ -101,7 +105,8 @@ workflows:
           go mod tidy
           COMMIT=$(git rev-parse --short HEAD)
           DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-          LDFLAGS="-X github.com/sartoopjj/thefeed/internal/version.Version=v${APP_MARKETING_VERSION} -X github.com/sartoopjj/thefeed/internal/version.Commit=${COMMIT} -X github.com/sartoopjj/thefeed/internal/version.Date=${DATE}"
+          TEL_LDFLAG=$(GOOS=$(go env GOHOSTOS) GOARCH=$(go env GOHOSTARCH) go run ./cmd/telseal)
+          LDFLAGS="-X github.com/sartoopjj/thefeed/internal/version.Version=v${APP_MARKETING_VERSION} -X github.com/sartoopjj/thefeed/internal/version.Commit=${COMMIT} -X github.com/sartoopjj/thefeed/internal/version.Date=${DATE} ${TEL_LDFLAG}"
           # Device slice only; see the same step in .github/workflows/build.yml.
           gomobile bind -iosversion=15.0 -target=ios/arm64 -ldflags="${LDFLAGS}" -o ios/Mobile.xcframework ./mobile
       - name: Set up provisioning profiles
@@ -172,7 +177,8 @@ workflows:
           DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
           # -s -w strips symbols (~12 MB/ABI); max-page-size=16384 keeps the
           # .so loadable on Android 15+ 16 KB-page devices.
-          LDFLAGS="-s -w -X github.com/sartoopjj/thefeed/internal/version.Version=v${APP_MARKETING_VERSION} -X github.com/sartoopjj/thefeed/internal/version.Commit=${COMMIT} -X github.com/sartoopjj/thefeed/internal/version.Date=${DATE} -extldflags=-Wl,-z,max-page-size=16384"
+          TEL_LDFLAG=$(GOOS=$(go env GOHOSTOS) GOARCH=$(go env GOHOSTARCH) go run ./cmd/telseal)
+          LDFLAGS="-s -w -X github.com/sartoopjj/thefeed/internal/version.Version=v${APP_MARKETING_VERSION} -X github.com/sartoopjj/thefeed/internal/version.Commit=${COMMIT} -X github.com/sartoopjj/thefeed/internal/version.Date=${DATE} -extldflags=-Wl,-z,max-page-size=16384 ${TEL_LDFLAG}"
           mkdir -p android/app/libs
           bash scripts/gomobile-android-aar.sh android/app/libs/mobile.aar "${LDFLAGS}"
       - name: Wire signing keystore

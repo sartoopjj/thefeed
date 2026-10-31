@@ -328,7 +328,7 @@ func TestTelCredentialsFlow(t *testing.T) {
 	}
 
 	// They must actually reach the bridge.
-	id, hash := s.tel.apiCredentials()
+	id, hash, _ := s.tel.apiCredentials()
 	if id != 12345 || hash != "abcdef" {
 		t.Fatalf("bridge sees %d/%q", id, hash)
 	}
