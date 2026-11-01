@@ -277,7 +277,7 @@ thefeed-server ... --mtproto-domains m.example.com   # 或 THEFEED_MTPROTO_DOMAI
 - **通知**：应用打开时会响铃并提醒。应用退到后台时，可在 ⋮ 菜单中开启后台检查——它会持续消耗查询，因此默认关闭。
 - **需要好的解析器。** 订阅和私信在极慢的解析器上表现好得多；这是整个应用中最吃带宽的部分。
 - **Telegram 的广告** —— Telegram 的 API 条款要求所有展示频道内容的客户端都显示 Telegram 的赞助消息，因此频道最后一条帖子下方可能出现一条赞助消息，明确标注为广告，并注明由 Telegram 投放、而非频道发布。它最后才获取、优先级最低，你的任何操作都会取消它，因此绝不会拖慢其他内容。
-- **应用凭据** — 官方发布版内置一对共享的默认凭据，没有自己的也能登录；Telegram 标签页会提示正在使用它。更好的做法是在 [my.telegram.org](https://my.telegram.org) 申请你自己的 `api_id` / `api_hash` 并在那里填入：如果 Telegram 限制了共享凭据，所有用它登录的人可能会被登出。自己构建的版本没有默认凭据，除非你传入一份（`TEL_LDFLAG`，见 `cmd/telseal`）。
+- **应用凭据** — 官方发布版内置一对共享的默认凭据，没有自己的也能登录；Telegram 标签页会提示正在使用它。更好的做法是在 [my.telegram.org](https://my.telegram.org) 申请你自己的 `api_id` / `api_hash` 并在那里填入：如果 Telegram 限制了共享凭据，所有用它登录的人可能会被登出（账号本身不会被封，用自己的凭据即可重新登录）。自己构建的版本没有默认凭据，除非你传入一份（`TEL_LDFLAG`，见 `cmd/telseal`）。
 - **限制项**：`--mtproto-enabled`、`--mtproto-max-tunnels`、`--mtproto-idle-minutes`、`--mtproto-buffer-kb`、`--mtproto-dial-seconds`。
 
 在客户端中，从底部导航打开 **Telegram**。⋮ 菜单在每个界面都有（配置选择、凭据、日志、退出登录）；✓ / ✓✓ 表示已发送和已读；标题栏的圆环倒计时显示下一次自动检查的时间，每个操作都会显示自己的进度和已消耗的查询数。
