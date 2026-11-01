@@ -2,6 +2,8 @@
 
 DNS-based **feed reader and lite messenger** for networks where only DNS gets through. Read Telegram channels and public X accounts, and exchange end-to-end-encrypted messages with other users — all over plain DNS.
 
+Built during Iran's 2026 internet shutdown — [read the story behind the project →](https://sartoopjj.github.io/thefeed/project-brief.html)
+
 [English](README.md) · [فارسی](README-FA.md) · [简体中文](README-ZH.md) · [Русский](README-RU.md)
 
 [![Google Play](https://img.shields.io/badge/Google%20Play-Install-3DDC84?style=for-the-badge&logo=googleplay&logoColor=white)](https://play.google.com/store/apps/details?id=com.thefeed.android)
@@ -37,7 +39,7 @@ DNS-based **feed reader and lite messenger** for networks where only DNS gets th
 
 ## Install the app
 
-*For anyone who just wants to read feeds and chat — you don't need a server, just import a config into the client.*
+*For anyone who just wants to read feeds and chat — you don't need a server: the app comes with public configs built in, or you can import your own.*
 
 Download the client for your platform from the latest release — pick the mirror that's reachable for you: **[GitHub](https://github.com/sartoopjj/thefeed/releases/latest)** · **[GitLab](https://gitlab.com/sartoopjj/thefeed/-/releases)**.
 
@@ -49,7 +51,7 @@ Download the client for your platform from the latest release — pick the mirro
 | **macOS** | Universal `.dmg` (Intel + Apple Silicon), drag-installs `Thefeed.app`. Unsigned, so on first launch either right-click → **Open**, or run `xattr -dr com.apple.quarantine /Applications/Thefeed.app`. |
 | **Linux / Termux** | `thefeed-client` binary — run it and open `http://127.0.0.1:8080`. |
 
-Then open **Settings → Configs** and import a config (or paste your domain + passphrase). DNS resolvers are managed in the **Resolver** tab — a shared Bank used by all configs, plus a Scanner to find more.
+Then open **Settings → Configs**. A few public configs ship with the app under **Default configs** — add one in a tap. Or import your own config (or paste your domain + passphrase). DNS resolvers are managed in the **Resolver** tab — a shared Bank used by all configs, plus a Scanner to find more.
 
 **Project news:** [@networkti](https://t.me/networkti) — the main channel for announcements and releases.
 
@@ -68,8 +70,9 @@ You need one **A** record and one **NS** delegation. Example: your server IP is 
 | 1 | A  | `ns.example.com` | `203.0.113.10`   | Point a hostname at your server |
 | 2 | NS | `t.example.com`  | `ns.example.com` | Delegate the **feed** subdomain to your server |
 | 3 *(optional)* | NS | `c.example.com` | `ns.example.com` | Delegate a **messenger** subdomain — only if you enable [chat](#messenger) |
+| 4 *(optional)* | NS | `m.example.com` | `ns.example.com` | Delegate a **Telegram** subdomain — only if you enable [Telegram over DNS](#telegram-over-dns-beta) |
 
-Records **1–2** are required for the feed. Record **3** is only needed for the optional [messenger](#messenger), which must use a **separate** subdomain from the feed (e.g. `c.example.com`).
+Records **1–2** are required for the feed. Record **3** is only needed for the optional [messenger](#messenger), which must use a **separate** subdomain from the feed (e.g. `c.example.com`). Record **4** is only needed for the optional [Telegram over DNS](#telegram-over-dns-beta); it too needs its **own** subdomain, separate from the feed and the messenger (e.g. `m.example.com`). The install script asks for it; otherwise pass `--mtproto-domains m.example.com`.
 
 ### 2. Install the server
 
@@ -462,6 +465,7 @@ X posts are fetched via RSS/XML only. Instance URLs are validated (`http`/`https
 
 ## Links & donate
 
+- [Project brief](https://sartoopjj.github.io/thefeed/project-brief.html) — the story behind TheFeed, its impact and timeline
 - Telegram channel: [@networkti](https://t.me/networkti) · Public configs: [@thefeedconfig](https://t.me/thefeedconfig)
 - Roadmap / task board: [GitHub project](https://github.com/users/sartoopjj/projects/1/views/1)
 

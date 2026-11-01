@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="zh-Hans">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TheFeed —— 项目简介</title>
+<link rel="stylesheet" href="project-brief.css">
+<link rel="alternate" hreflang="en" href="project-brief.html">
+<link rel="alternate" hreflang="fa" href="project-brief-fa.html">
+<link rel="alternate" hreflang="zh" href="project-brief-zh.html">
+<link rel="alternate" hreflang="ru" href="project-brief-ru.html">
+</head>
+<body>
+<div class="page">
+
+<nav class="lang-nav"><a href="project-brief.html" lang="en">English</a><a href="project-brief-fa.html" lang="fa">فارسی</a><strong>中文</strong><a href="project-brief-ru.html" lang="ru">Русский</a></nav>
+
+<!-- ==================== HEADER ==================== -->
+<div class="doc-header">
+  <p class="label">项目简介</p>
+  <h1>TheFeed</h1>
+  <p class="tagline">当其他一切都被夺走，新闻与消息仍能经由 DNS 送达</p>
+  <p class="meta">2026年10月 &nbsp;·&nbsp; 开源 &nbsp;·&nbsp; <a href="https://github.com/sartoopjj/thefeed">github.com/sartoopjj/thefeed</a></p>
+</div>
+
+<!-- ==================== THE PROBLEM ==================== -->
+<h2>1. 问题所在</h2>
+
+<p>抗议期间，政府一旦切断互联网，数以百万计的人一夜之间就与外部世界断了联系。他们看不到独立新闻，联系不上身在海外的家人，也无从得知身边究竟发生了什么。</p>
+
+<p>TheFeed 从两个方面着手解决这一问题，核心功能都建立在 DNS 查询之上——DNS 是互联网最基础、也最难封锁的一层。它通过 DNS 传递独立新闻。内置的加密私信通道同样走 DNS，即便在全面断网期间，人们也能给境外的联系人发送简短的文字消息。自 2026年10月起，它还推出了 DNS 上的 Telegram（测试版）：用户可以用自己的 Telegram 账号登录，继续使用原有的聊天、群组和频道，无需 VPN 或代理。而当只剩 Google 还能访问时，TeleMirror 又提供了另一条路：通过 Google 的服务查看任意 Telegram 频道。</p>
+
+<p>断网期间，人们平时依赖的工具纷纷失灵。VPN 贵得让人用不起，有的卖到每 GB 6 美元。使用卫星网络则要冒极大的法律风险：仅仅持有设备，就可能招来间谍罪指控。即便是负担得起翻墙工具的人，也时刻面临设备被没收、本人遭起诉的威胁。</p>
+
+<p>与此同时，当局自己的网络始终畅通。亲政府人员能领到不受限制的 SIM 卡，用来散布宣传；普通人却被困在信息真空里，既无法核实传言，也联系不上亲人，更没法记录下亲眼所见的一切。</p>
+
+<p>现有的翻墙工具都有一个根本局限：它们试图穿过防火墙，打通一条完整的 TCP 隧道。一旦断网严重，这条路就走不通了。DNS 解析器慢如蜗牛，丢包率超过 80%，想建立一条稳定的连接几乎不可能。DNSTT 这类专为 DNS 隧道设计的工具，需要速度足够快的解析器，而找到这样的解析器往往要扫描好几天——人们等不起。</p>
+
+<!-- ==================== ORIGIN STORY ==================== -->
+<h2>2. TheFeed 的诞生</h2>
+
+<p>2026年1月8日（伊朗历1404年10月18日），星期四，伊朗全国性抗议进入第十二天，政府切断了互联网。就在同一天，政府安全部队杀害了大批民众。NetBlocks 证实，当地时间上午 8:30 左右，网络已全面中断。1月28日，限制有所放松；可到了2月28日，战争爆发，互联网再次被彻底切断。第二轮断网持续了 88 天，直到5月26日才结束。前后合计，这场断网历时近五个月，是有记录以来全球最长的全国性断网，波及伊朗 9200 万人。</p>
+
+<p>我花大价钱买过翻墙工具，靠 VPN 勉强维持着时断时续的连接。那段时间，约 90% 的人完全上不了网，只有极少数人还有能用的 VPN，我是其中之一。可这样撑了几个星期之后，我手上最后一个 VPN 也失效了。我再也找不到任何不受审查的新闻来源。剩下的唯一选择是电视，而电视里不是干扰信号就是宣传。何况我家里根本没有电视。</p>
+
+<blockquote>
+  <p>我脑子里一直在想：能不能有这样一种协议，通过 DNS 一点点地接收数据？不去打通完整的隧道，而是把内容分片取回来。这样从原理上就会比 DNSTT 这类工具快得多，因为它根本不需要持久连接。它只需把文字一段段搬过来。</p>
+</blockquote>
+
+<p>VPN 断掉的那几天，我在脑子里反复打磨这个想法。等连接终于恢复，我立刻动手写代码，借助 AI 编程工具一直干到凌晨 4 点。天亮时，一个能用的原型已经在我那台境外服务器上跑起来了。</p>
+
+<p>原型跑通后，我随即把 TheFeed 发布到了 GitHub，又在几个 Telegram 群组和一些大频道的评论区里发帖介绍，然后才去睡觉。</p>
+
+<p>醒来时，VPN 又断了，这一次整整断了三天。但有一点不一样了：<strong>我依然能看到新闻。</strong>我自己写的工具，让我始终与外界保持着联系。那种身陷信息封锁、像囚徒一样透不过气的感觉，消失了。</p>
+
+<p>三天后我重新连上网，发现已经有人在自己的频道里转发 TheFeed 了。</p>
+
+<!-- ==================== WHAT I BUILT ==================== -->
+<h2>3. 我做了什么</h2>
+
+<p>从那天晚上起，我几乎没日没夜地扑在 TheFeed 上：每天常常要写 10 个小时以上，有时一坐就是 20 多个小时，同时白天还要上 8 小时的班。我趁上班的间隙写，整夜整夜地写，能挤出几个小时就赶紧睡一会儿。速度是关键：我永远不知道 VPN 什么时候又会断，所以每一段能联网的时间，我都拿来推送更新。</p>
+
+<p>以下几项关键成果，全都是在断网仍在持续时开发并发布的：</p>
+
+<ul>
+  <li><strong>核心 DNS 协议</strong>——一个信息流阅读器，通过标准 DNS 查询拉取 Telegram 和 X（Twitter）上的内容。不需要隧道，也不需要持久连接。内容分片送达，再在设备上拼装完整。</li>
+  <li><strong>Android 应用</strong>——原生移动客户端，在第一个原型问世 6 天后发布。从此人们不必借助终端模拟器，用手机就能看新闻。</li>
+  <li><strong>公共配置</strong>——预置好的服务器配置。没有自己的服务器（或者没钱租一台）的用户，也能借助社区运营的基础设施接入、阅读新闻。</li>
+  <li><strong>通过 DNS 和 GitHub 下载媒体</strong>——照片、视频和文件可以经由 DNS 查询和 GitHub 的 CDN 送达。用户因此能观看演讲视频、查看证据，甚至直接在 TheFeed 里下载应用更新。</li>
+  <li><strong>TeleMirror（Google 中继）</strong>——Google 在伊朗国内恢复可访问后加入的第二条独立内容通道，借 Google 的服务充当代理，让用户可以关注任意 Telegram 频道，不再局限于服务器运营者预先配置的那些。</li>
+  <li><strong>iOS 和 macOS 应用</strong>——断网尚未结束，TheFeed 就已覆盖所有主流平台。</li>
+  <li><strong>性能优化</strong>——打开一个频道所需的时间，从第一版的好几分钟缩短到了 10 秒以内。</li>
+</ul>
+
+<p>断网期间，能用上 Telegram 的人不到总人口的 1%。他们下载 TheFeed 的新版本，再转发到伊朗国内的论坛，供其他人获取。这个项目就是这样，在人们的互相帮助中自发地传播开来。</p>
+
+<p>后来伊朗国内能访问 GitHub 了，我便加入了 GitHub 中继功能。用户可以直接在 TheFeed 里下载更新、配置和项目动态，不必另开浏览器，也不用借助其他工具。</p>
+
+<!-- ==================== IMPACT ==================== -->
+<h2>4. 影响</h2>
+
+<div class="key-figures">
+  <div class="fig">
+    <div class="num">约 10 万</div>
+    <div class="lbl">断网期间的<br>用户数</div>
+  </div>
+  <div class="fig">
+    <div class="num">244</div>
+    <div class="lbl">不到 3 个月<br>发布的版本数</div>
+  </div>
+  <div class="fig">
+    <div class="num">1.9 万 / 2.2 万</div>
+    <div class="lbl">Telegram 频道订阅人数<br>（主频道 / 配置频道）</div>
+  </div>
+</div>
+
+<p>在伊朗长达 88 天的断网期间，TheFeed 让大约 10 万人得以看到独立新闻。它是许多人通往外部世界的唯一窗口。</p>
+
+<p>这个项目证明，即便在审查最严酷的条件下，DNS——互联网最基础、也最难封锁的一层——依然可以成为一条切实可行的信息传递渠道。</p>
+
+<!-- ==================== HOW IT WORKS ==================== -->
+<h2>5. 工作原理</h2>
+
+<p>TheFeed 的思路很简单：即使互联网被全面切断，DNS 解析通常仍在运转，因为封锁它会让政府自己的基础设施也跟着瘫痪。TheFeed 正是利用这一点，把内容编码进 DNS 查询和响应之中。</p>
+
+<h3>关键技术特性</h3>
+<ul>
+  <li><strong>无需隧道</strong>——与 DNSTT 等工具不同，TheFeed 的信息流不会尝试建立 TCP 连接，而是通过一个个彼此独立的 DNS 查询，把内容分成小片拉取下来。因此它能承受高丢包率，在缓慢的解析器上也照样可用。</li>
+  <li><strong>相互独立的内容通道</strong>——基于 DNS 的信息流获取和基于 Google 的 TeleMirror 互为备份：一条路被封，另一条照常可用。DNS 上的 Telegram 又开辟了第三条路：用户用自己的 Telegram 账号登录，Telegram 的 MTProto 协议则通过 DNS 查询传输。</li>
+  <li><strong>三种媒体传输方式</strong>——DNS 内联编码、DNS 中继和 GitHub CDN 中继。三者各自独立，而且无论想封锁哪一种，都难免造成大面积的附带损害。</li>
+  <li><strong>跨平台</strong>——支持 Windows、macOS、Linux、Android 和 iOS。移动应用通过 gomobile 在进程内运行 Go 代码（不依赖 CGo），从而用同一套代码库覆盖所有平台。</li>
+  <li><strong>应用内更新</strong>——用户可以直接在应用里下载新版本和配置，不需要外部浏览器，也不需要应用商店。</li>
+  <li><strong>信息流经过加密签名</strong>——内容由服务器密钥签名，可防止篡改和冒充。</li>
+  <li><strong>没有可识别的流量特征</strong>——这些 DNS 查询看上去和普通的域名查询没有两样：没有持久连接，没有异常的数据包大小，也没有可供识别的协议指纹。</li>
+</ul>
+
+<!-- ==================== POST-SHUTDOWN ==================== -->
+<h2>6. 断网之后</h2>
+
+<p>5月26日网络部分恢复后，我继续开发 TheFeed。断网的威胁并没有消失，这个工具必须做好准备：它不能再是战时赶出来的原型，而要成为一款成熟、可靠的应用。</p>
+
+<p>断网结束后的第一项重要新功能是<strong>加密私信通道</strong>：一套完全基于 DNS 的存储转发通信系统。一旦互联网再次被切断，人们仍能给境外的联系人发送简短的文字消息：向家人报一声平安，彼此协调，也守住人与人之间的那份温度。</p>
+
+<p>第二项是 <strong>DNS 上的 Telegram</strong>，于 2026年10月推出测试版：它是直接内置在 TheFeed 里的完整 Telegram 客户端。人们用自己的 Telegram 账号登录，继续使用原有的会话、群组和频道，而 Telegram 的协议 MTProto 则通过普通的 DNS 查询传输。当通往外界的路被堵死，他们依然能联系上自己一直依靠的那些人和频道，不需要 VPN，也不需要代理应用。中继只负责搬运 Telegram 自己加密过的数据包，无法读取其中的内容。</p>
+
+<p>这两项功能都没能赶在断网期间送到用户手中。但它们如今已经就位，随时准备应对下一次断网。</p>
+
+<p>TheFeed 的用处也不限于伊朗。断网在许多地区一再上演，任何地方的民众一旦面临断网，都可以部署和使用它。</p>
+
+<!-- ==================== TIMELINE ==================== -->
+<h2>7. 项目时间线</h2>
+
+<div class="timeline">
+  <div class="tl-item">
+    <div class="tl-date">2026年1月8日（伊朗历1404年10月18日）</div>
+    <p>伊朗全国性抗议进入第十二天，断网开始。同一天，政府安全部队杀害了大批民众。NetBlocks 证实当地时间上午 8:30 前后网络全面中断。9200 万人与外界失联。</p>
+  </div>
+  <div class="tl-item">
+    <div class="tl-date">2026年1月28日</div>
+    <p>限制部分放松。</p>
+  </div>
+  <div class="tl-item">
+    <div class="tl-date">2026年2月28日</div>
+    <p>战争爆发，互联网再度全面中断。这一轮断网持续了 88 天，是有记录以来最长的一次不间断全国性断网。</p>
+  </div>
+  <div class="tl-item">
+    <div class="tl-date">2026年3月前后</div>
+    <p>VPN 时断时续了几个星期之后，我手上最后一个翻墙工具也失效了。在随后的几天里，基于 DNS 的新闻协议构想逐渐成形。</p>
+  </div>
+  <div class="tl-item">
+    <div class="tl-date">2026年3月25日</div>
+    <p>我的 VPN 短暂恢复——当时为数不多还能连上的 VPN 之一。原型一夜写成，第一天就发布了 5 个版本。项目在 GitHub 上公开，并在多个 Telegram 群组中传开。第一批用户接入。</p>
+  </div>
+  <div class="tl-item">
+    <div class="tl-date">2026年3月26日至31日</div>
+    <p>第二天又发布了 8 个版本。Android 应用发布（v0.1.1）。完成端到端测试，自动刷新和公共服务器配置相继上线。项目在伊朗国内论坛上流传开来。第一周共发布 19 个版本。</p>
+  </div>
+  <div class="tl-item">
+    <div class="tl-date">2026年4月</div>
+    <p>重写前端，加入解析器池、数据块校验，并支持 X（Twitter）公开账号。GitHub 在伊朗国内恢复可访问后，新增 GitHub 中继功能，用户可以在应用内下载更新和配置。</p>
+  </div>
+  <div class="tl-item">
+    <div class="tl-date">2026年4月29日至30日</div>
+    <p>通过 DNS 查询和 GitHub CDN 中继下载媒体的功能上线。用户可以查看照片、观看视频、下载应用新版本——全都在 TheFeed 里完成，全都发生在断网期间。</p>
+  </div>
+  <div class="tl-item">
+    <div class="tl-date">2026年5月5日</div>
+    <p>Google 在伊朗国内恢复可访问后，TeleMirror（Google 中继）上线，用户可以关注任意 Telegram 频道，不再局限于预先配置的频道。</p>
+  </div>
+  <div class="tl-item">
+    <div class="tl-date">2026年5月7日至25日</div>
+    <p>iOS 应用和 macOS 客户端发布。TheFeed 至此覆盖所有主流平台——这一切都完成于断网期间。</p>
+  </div>
+  <div class="tl-item">
+    <div class="tl-date">2026年5月26日</div>
+    <p>断网 2093 小时后，网络部分恢复。截至此时，共发布稳定版 90 多个、各类版本累计 244 个，服务用户约 10 万人。</p>
+  </div>
+  <div class="tl-item">
+    <div class="tl-date">2026年6月</div>
+    <p>基于 DNS 的加密私信通道开发完成并通过测试。信息流签名（防篡改）和多域名支持上线。新增“保存的消息”和存储管理功能。</p>
+  </div>
+  <div class="tl-item">
+    <div class="tl-date">2026年10月28日</div>
+    <p>DNS 上的 Telegram 推出测试版：这是直接内置在 TheFeed 里的完整 Telegram 客户端。用户用自己的账号登录，在自己的会话、群组和频道里阅读和发送消息。Telegram 自己的协议 MTProto 通过 DNS 查询传输，不需要 VPN，也不需要代理应用。为保证在慢速解析器上可用，目前仅支持文本。</p>
+  </div>
+</div>
+
+<!-- ==================== VISION ==================== -->
+<h2>8. 愿景</h2>
+
+<p>TheFeed 起初只是一个应急工具，如今已远不止于此：它成长为一个在断网中保障信息畅通的平台，可以服务于任何被隔绝在开放互联网之外的人群。</p>
+
+<h3>近期目标</h3>
+<ul>
+  <li>打磨加密私信通道，使其达到正式投入使用的水准</li>
+  <li>扩充公共服务器基础设施，覆盖更广的地理范围</li>
+  <li>改进上手流程，让不懂技术的用户也能在几分钟内装好 TheFeed</li>
+  <li>为公共配置建立自动化的健康监测</li>
+  <li>让应用界面在现有的英语和波斯语之外支持更多语言（文档已有英语、波斯语、中文和俄语版本）</li>
+</ul>
+
+<h3>长期愿景</h3>
+<ul>
+  <li>让 TheFeed 成为数字权利领域的标准工具之一：无论世界上哪里发生断网，都能随时部署</li>
+  <li>建立一个去中心化的服务器网络，在新的断网发生时能够迅速启用</li>
+  <li>探索 DNS 之外的其他低带宽通道（蓝牙 Mesh、短信中继），以应对连 DNS 都受到限制的环境</li>
+  <li>与数字权利组织建立合作，在高风险地区预先部署基础设施</li>
+</ul>
+
+<!-- ==================== ABOUT ==================== -->
+<h2>9. 关于开发者</h2>
+
+<p>TheFeed 由一名开发者独自开发和维护，他亲身经历了那场断网。这个项目诞生于切身之需，而非为了申请资助或做学术研究。它的每一处设计都针对严苛审查下的现实处境：连接不稳定，翻墙工具既昂贵又有风险，网络随时可能中断。</p>
+
+<p>开发者在本职工作之余，仍投入近乎全职的精力持续维护和改进 TheFeed，并承诺让项目始终保持开源，对所有用户免费。</p>
+
+<div class="callout">
+  <h3>项目概览</h3>
+  <ul>
+    <li><strong>名称：</strong>TheFeed</li>
+    <li><strong>类型：</strong>开源抗审查工具</li>
+    <li><strong>核心技术：</strong>基于 DNS 的内容传输</li>
+    <li><strong>平台：</strong>Windows、macOS、Linux、Android、iOS</li>
+    <li><strong>开发语言：</strong>Go（后端 + 跨平台核心）、JavaScript（Web UI）</li>
+    <li><strong>许可证：</strong>开源</li>
+    <li><strong>代码仓库：</strong><a href="https://github.com/sartoopjj/thefeed">github.com/sartoopjj/thefeed</a></li>
+    <li><strong>用户（估计）：</strong>断网期间约 10 万人</li>
+    <li><strong>版本：</strong>不到 3 个月发布 244 个</li>
+    <li><strong>社区：</strong>Telegram 主频道 1.9 万成员 · 配置频道逾 2.2 万订阅者</li>
+  </ul>
+</div>
+
+<!-- ==================== FOOTER ==================== -->
+<div class="doc-footer">
+  <p>TheFeed 项目简介 &nbsp;·&nbsp; 2026年10月</p>
+</div>
+
+</div><!-- .page -->
+</body>
+</html>

@@ -1,0 +1,212 @@
+/* Shared by project-brief.html and its -fa / -zh / -ru translations.
+   Logical properties (inline-start) so the RTL page mirrors itself. */
+@page { margin: 1in; }
+*, *::before, *::after { box-sizing: border-box; }
+html { font-size: 17px; }
+body {
+  margin: 0; padding: 0;
+  font-family: "Georgia", "Times New Roman", serif;
+  line-height: 1.72;
+  color: #1a1a1a;
+  background: #fff;
+  -webkit-font-smoothing: antialiased;
+}
+.page {
+  max-width: 740px;
+  margin: 0 auto;
+  padding: 60px 32px 80px;
+}
+/* — Language bar — */
+.lang-nav {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  font-size: 13px;
+  margin: 0 0 32px;
+  color: #999;
+}
+.lang-nav a, .lang-nav strong { margin-inline-end: 14px; }
+.lang-nav strong { color: #1a1a1a; }
+/* — Header — */
+.doc-header {
+  border-bottom: 3px solid #1a1a1a;
+  padding-bottom: 24px;
+  margin-bottom: 48px;
+}
+.doc-header .label {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  color: #888;
+  margin: 0 0 8px;
+}
+.doc-header h1 {
+  font-size: 42px;
+  font-weight: 700;
+  line-height: 1.1;
+  margin: 0 0 6px;
+  letter-spacing: -0.5px;
+}
+.doc-header .tagline {
+  font-size: 20px;
+  font-style: italic;
+  color: #555;
+  margin: 0 0 16px;
+}
+.doc-header .meta {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  font-size: 13px;
+  color: #999;
+}
+/* — Sections — */
+h2 {
+  font-size: 26px;
+  font-weight: 700;
+  margin: 56px 0 16px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #ddd;
+  letter-spacing: -0.3px;
+}
+h3 {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  font-size: 16px;
+  font-weight: 700;
+  margin: 32px 0 8px;
+  color: #333;
+}
+p { margin: 0 0 16px; }
+blockquote {
+  margin: 24px 0;
+  padding: 16px 24px;
+  border-inline-start: 4px solid #0e7490;
+  background: #f0fafb;
+  font-style: italic;
+  color: #333;
+}
+blockquote p { margin: 0; }
+/* — Key figures — */
+.key-figures {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 20px;
+  margin: 32px 0;
+}
+.fig {
+  text-align: center;
+  padding: 24px 16px;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  background: #fafafa;
+}
+.fig .num {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  font-size: 36px;
+  font-weight: 800;
+  color: #0e7490;
+  line-height: 1;
+}
+.fig .lbl {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  color: #666;
+  margin-top: 8px;
+}
+/* — Timeline — */
+.timeline {
+  position: relative;
+  padding-inline-start: 32px;
+  margin: 32px 0;
+}
+.timeline::before {
+  content: "";
+  position: absolute;
+  inset-inline-start: 6px;
+  top: 4px;
+  bottom: 4px;
+  width: 2px;
+  background: #0e7490;
+}
+.tl-item {
+  position: relative;
+  margin-bottom: 28px;
+}
+.tl-item::before {
+  content: "";
+  position: absolute;
+  inset-inline-start: -32px;
+  top: 6px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #0e7490;
+  border: 2px solid #fff;
+  box-shadow: 0 0 0 2px #0e7490;
+}
+.tl-item .tl-date {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  font-size: 13px;
+  font-weight: 700;
+  color: #0e7490;
+  margin: 0 0 4px;
+}
+.tl-item p { margin: 0; font-size: 15px; color: #444; }
+/* — Bullet list — */
+ul {
+  margin: 12px 0 20px;
+  padding-inline-start: 24px;
+}
+li {
+  margin-bottom: 8px;
+  line-height: 1.6;
+}
+/* — Callout box — */
+.callout {
+  margin: 32px 0;
+  padding: 24px 28px;
+  background: #f7f7f7;
+  border-radius: 8px;
+  border: 1px solid #e0e0e0;
+}
+.callout h3 { margin-top: 0; }
+/* — Footer — */
+.doc-footer {
+  margin-top: 64px;
+  padding-top: 24px;
+  border-top: 1px solid #ddd;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  font-size: 13px;
+  color: #999;
+  text-align: center;
+}
+a { color: #0e7490; text-decoration: none; }
+a:hover { text-decoration: underline; }
+/* — Scripts Georgia has no glyphs for: system fonts only, nothing downloaded.
+   No italics (neither script has them) and no letter-spacing (it breaks
+   joined Persian letters). — */
+:lang(fa) body, :lang(fa) h3, :lang(fa) .doc-header .label, :lang(fa) .doc-header .meta,
+:lang(fa) .fig .num, :lang(fa) .fig .lbl, :lang(fa) .tl-item .tl-date, :lang(fa) .doc-footer {
+  font-family: "Vazirmatn", "Vazir", "Segoe UI", Tahoma, "Geeza Pro", sans-serif;
+}
+:lang(fa) body { line-height: 1.95; }
+:lang(zh) body {
+  font-family: "Georgia", "Songti SC", "Noto Serif CJK SC", "Source Han Serif SC", "SimSun", serif;
+}
+:lang(fa) .doc-header .tagline, :lang(fa) blockquote,
+:lang(zh) .doc-header .tagline, :lang(zh) blockquote { font-style: normal; }
+:lang(fa) *, :lang(zh) .doc-header .label { letter-spacing: 0 !important; }
+/* — Print — */
+@media print {
+  body { font-size: 11pt; }
+  .page { padding: 0; max-width: none; }
+  .lang-nav { display: none; }
+  h2 { page-break-after: avoid; }
+  .key-figures, .timeline { page-break-inside: avoid; }
+}
+@media (max-width: 600px) {
+  html { font-size: 16px; }
+  .page { padding: 32px 20px 48px; }
+  .doc-header h1 { font-size: 30px; }
+  .key-figures { grid-template-columns: 1fr; }
+  h2 { font-size: 22px; }
+}

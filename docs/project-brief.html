@@ -4,197 +4,16 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>TheFeed — Project Brief</title>
-<style>
-  @page { margin: 1in; }
-  *, *::before, *::after { box-sizing: border-box; }
-  html { font-size: 17px; }
-  body {
-    margin: 0; padding: 0;
-    font-family: "Georgia", "Times New Roman", serif;
-    line-height: 1.72;
-    color: #1a1a1a;
-    background: #fff;
-    -webkit-font-smoothing: antialiased;
-  }
-  .page {
-    max-width: 740px;
-    margin: 0 auto;
-    padding: 60px 32px 80px;
-  }
-  /* — Header — */
-  .doc-header {
-    border-bottom: 3px solid #1a1a1a;
-    padding-bottom: 24px;
-    margin-bottom: 48px;
-  }
-  .doc-header .label {
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
-    font-size: 12px;
-    font-weight: 700;
-    letter-spacing: 3px;
-    text-transform: uppercase;
-    color: #888;
-    margin: 0 0 8px;
-  }
-  .doc-header h1 {
-    font-size: 42px;
-    font-weight: 700;
-    line-height: 1.1;
-    margin: 0 0 6px;
-    letter-spacing: -0.5px;
-  }
-  .doc-header .tagline {
-    font-size: 20px;
-    font-style: italic;
-    color: #555;
-    margin: 0 0 16px;
-  }
-  .doc-header .meta {
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
-    font-size: 13px;
-    color: #999;
-  }
-  /* — Sections — */
-  h2 {
-    font-size: 26px;
-    font-weight: 700;
-    margin: 56px 0 16px;
-    padding-bottom: 8px;
-    border-bottom: 1px solid #ddd;
-    letter-spacing: -0.3px;
-  }
-  h3 {
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
-    font-size: 16px;
-    font-weight: 700;
-    margin: 32px 0 8px;
-    color: #333;
-  }
-  p { margin: 0 0 16px; }
-  blockquote {
-    margin: 24px 0;
-    padding: 16px 24px;
-    border-left: 4px solid #0e7490;
-    background: #f0fafb;
-    font-style: italic;
-    color: #333;
-  }
-  blockquote p { margin: 0; }
-  /* — Key figures — */
-  .key-figures {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 20px;
-    margin: 32px 0;
-  }
-  .fig {
-    text-align: center;
-    padding: 24px 16px;
-    border: 1px solid #e0e0e0;
-    border-radius: 8px;
-    background: #fafafa;
-  }
-  .fig .num {
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
-    font-size: 36px;
-    font-weight: 800;
-    color: #0e7490;
-    line-height: 1;
-  }
-  .fig .lbl {
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
-    font-size: 13px;
-    font-weight: 600;
-    color: #666;
-    margin-top: 8px;
-  }
-  /* — Timeline — */
-  .timeline {
-    position: relative;
-    padding-left: 32px;
-    margin: 32px 0;
-  }
-  .timeline::before {
-    content: "";
-    position: absolute;
-    left: 6px;
-    top: 4px;
-    bottom: 4px;
-    width: 2px;
-    background: #0e7490;
-  }
-  .tl-item {
-    position: relative;
-    margin-bottom: 28px;
-  }
-  .tl-item::before {
-    content: "";
-    position: absolute;
-    left: -32px;
-    top: 6px;
-    width: 12px;
-    height: 12px;
-    border-radius: 50%;
-    background: #0e7490;
-    border: 2px solid #fff;
-    box-shadow: 0 0 0 2px #0e7490;
-  }
-  .tl-item .tl-date {
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
-    font-size: 13px;
-    font-weight: 700;
-    color: #0e7490;
-    margin: 0 0 4px;
-  }
-  .tl-item p { margin: 0; font-size: 15px; color: #444; }
-  /* — Bullet list — */
-  ul {
-    margin: 12px 0 20px;
-    padding-left: 24px;
-  }
-  li {
-    margin-bottom: 8px;
-    line-height: 1.6;
-  }
-  /* — Callout box — */
-  .callout {
-    margin: 32px 0;
-    padding: 24px 28px;
-    background: #f7f7f7;
-    border-radius: 8px;
-    border: 1px solid #e0e0e0;
-  }
-  .callout h3 { margin-top: 0; }
-  /* — Footer — */
-  .doc-footer {
-    margin-top: 64px;
-    padding-top: 24px;
-    border-top: 1px solid #ddd;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
-    font-size: 13px;
-    color: #999;
-    text-align: center;
-  }
-  a { color: #0e7490; text-decoration: none; }
-  a:hover { text-decoration: underline; }
-  /* — Print — */
-  @media print {
-    body { font-size: 11pt; }
-    .page { padding: 0; max-width: none; }
-    h2 { page-break-after: avoid; }
-    .key-figures, .timeline { page-break-inside: avoid; }
-  }
-  @media (max-width: 600px) {
-    html { font-size: 16px; }
-    .page { padding: 32px 20px 48px; }
-    .doc-header h1 { font-size: 30px; }
-    .key-figures { grid-template-columns: 1fr; }
-    h2 { font-size: 22px; }
-  }
-</style>
+<link rel="stylesheet" href="project-brief.css">
+<link rel="alternate" hreflang="en" href="project-brief.html">
+<link rel="alternate" hreflang="fa" href="project-brief-fa.html">
+<link rel="alternate" hreflang="zh" href="project-brief-zh.html">
+<link rel="alternate" hreflang="ru" href="project-brief-ru.html">
 </head>
 <body>
 <div class="page">
+
+<nav class="lang-nav"><strong>English</strong><a href="project-brief-fa.html" lang="fa">فارسی</a><a href="project-brief-zh.html" lang="zh">中文</a><a href="project-brief-ru.html" lang="ru">Русский</a></nav>
 
 <!-- ==================== HEADER ==================== -->
 <div class="doc-header">
@@ -209,7 +28,7 @@
 
 <p>When governments shut down the internet during protests, millions of people are cut off from the outside world overnight. They lose access to independent news, to their families abroad, and to any way of knowing what is actually happening around them.</p>
 
-<p>TheFeed addresses both sides of this problem: it delivers independent news through DNS queries — the most basic and hardest-to-block layer of the internet — and includes an encrypted messenger that allows people to send short text messages to contacts outside the country, even during a total shutdown.</p>
+<p>TheFeed addresses both sides of this problem, and its core runs over DNS queries — the most basic and hardest-to-block layer of the internet. Over DNS it delivers independent news. Its encrypted messenger runs over DNS too, so people can send short text messages to contacts outside the country even during a total shutdown. And since October 2026, in beta, it carries Telegram itself over DNS: people sign in with their own account and keep their chats, groups and channels, with no VPN or proxy app. For times when Google is the only thing still reachable, TeleMirror offers yet another way in: it shows any Telegram channel through Google's services.</p>
 
 <p>During these shutdowns, the tools people normally rely on stop working. VPNs become unaffordable — some sold for as much as $6 per gigabyte. Satellite internet carries severe legal risk: possession alone can lead to espionage charges. Even those who can afford circumvention tools face the constant threat of confiscation and prosecution.</p>
 
@@ -220,9 +39,9 @@
 <!-- ==================== ORIGIN STORY ==================== -->
 <h2>2. How TheFeed Was Born</h2>
 
-<p>On Thursday, January 8, 2026 (18 Dey 1404), on the twelfth day of nationwide protests, the government shut down the internet. NetBlocks confirmed the total blackout at approximately 8:30 AM local time. Restrictions partially eased on January 28, but on February 28 — when the war began — the internet was cut completely again. This second phase lasted 88 days, until May 26. Combined, the disruption spanned nearly five months and became the longest nationwide internet shutdown ever recorded in any country, affecting 92 million people.</p>
+<p>On Thursday, January 8, 2026 (18 Dey 1404), on the twelfth day of nationwide protests in Iran, the government shut down the internet — the same day its forces killed large numbers of people. NetBlocks confirmed the total blackout at approximately 8:30 AM local time. Restrictions partially eased on January 28, but on February 28 — when the war began — the internet was cut completely again. This second phase lasted 88 days, until May 26. Combined, the disruption spanned nearly five months and became the longest nationwide internet shutdown ever recorded in any country, affecting 92 million people in Iran.</p>
 
-<p>I had purchased expensive circumvention tools and managed to keep a fragile connection alive through VPNs. But after weeks of instability, my last VPN went dead. I had no access to free news. The only remaining option was television — which was jammed with interference and propaganda. I didn't even own a TV.</p>
+<p>I had purchased expensive circumvention tools and managed to keep a fragile connection alive through VPNs. I was one of the few: about 90% of people had no connection at all, and only a small share had a VPN that still worked. But after weeks of instability, my last VPN went dead. I had no access to free news. The only remaining option was television — which was jammed with interference and propaganda. I didn't even own a TV.</p>
 
 <blockquote>
   <p>I kept thinking: what if there was a protocol that could receive data gradually through DNS — not by trying to open a full tunnel, but by pulling content fragment by fragment? That would be fundamentally faster than tools like DNSTT, because it wouldn't need a persistent connection at all. It just needed to move text, piece by piece.</p>
@@ -248,14 +67,14 @@
   <li><strong>Android app</strong> — A native mobile client released 6 days after the first prototype, so people could read news on their phones without needing a terminal emulator.</li>
   <li><strong>Public configurations</strong> — Pre-configured server profiles so users without their own server (or the money to rent one) could still connect and read news through community-run infrastructure.</li>
   <li><strong>Media downloads via DNS and GitHub</strong> — Photos, videos, and files delivered through DNS queries and GitHub's CDN, so users could watch speeches, view evidence, and even download app updates from within TheFeed itself.</li>
-  <li><strong>TeleMirror (Google relay)</strong> — A second, independent content path using Google's services as a proxy, allowing users to follow any Telegram channel — not just the ones pre-configured by server operators.</li>
+  <li><strong>TeleMirror (Google relay)</strong> — Once Google became reachable from inside Iran, a second, independent content path using Google's services as a proxy, allowing users to follow any Telegram channel — not just the ones pre-configured by server operators.</li>
   <li><strong>iOS and macOS apps</strong> — TheFeed expanded to all major platforms while people were still using it under shutdown conditions.</li>
   <li><strong>Performance optimization</strong> — Loading time for a channel went from several minutes in the first version to under 10 seconds.</li>
 </ul>
 
-<p>Less than 1% of the population had access to Telegram during the shutdown. Those who did would download new versions of TheFeed and post them on domestic forums, where the rest of the population could find them. This is how the project spread — organically, through people helping each other.</p>
+<p>Less than 1% of the population had access to Telegram during the shutdown. Those who did would download new versions of TheFeed and post them on Iranian forums, where the rest of the population could find them. This is how the project spread — organically, through people helping each other.</p>
 
-<p>After GitHub became accessible from inside the country, I added a GitHub relay feature. Users could download updates, configurations, and project news directly from within TheFeed — no separate browser or external tool needed.</p>
+<p>After GitHub became accessible from inside Iran, I added a GitHub relay feature. Users could download updates, configurations, and project news directly from within TheFeed — no separate browser or external tool needed.</p>
 
 <!-- ==================== IMPACT ==================== -->
 <h2>4. Impact</h2>
@@ -275,7 +94,7 @@
   </div>
 </div>
 
-<p>TheFeed gave approximately 100,000 people access to independent news during an 88-day internet shutdown. For many, it was their only window to the outside world.</p>
+<p>TheFeed gave approximately 100,000 people access to independent news during Iran's 88-day internet shutdown. For many, it was their only window to the outside world.</p>
 
 <p>The project demonstrated that DNS — the most basic and hardest-to-block layer of the internet — can serve as a viable channel for information delivery during the most severe censorship conditions.</p>
 
@@ -306,7 +125,7 @@
 
 <p>Neither reached users during the shutdown. But both exist now, ready for the next time.</p>
 
-<p>TheFeed is also applicable beyond a single country. Any population facing an internet shutdown — a pattern seen repeatedly across multiple regions — can deploy and use it.</p>
+<p>TheFeed is also applicable beyond Iran. Any population facing an internet shutdown — a pattern seen repeatedly across multiple regions — can deploy and use it.</p>
 
 <!-- ==================== TIMELINE ==================== -->
 <h2>7. Project Timeline</h2>
@@ -314,7 +133,7 @@
 <div class="timeline">
   <div class="tl-item">
     <div class="tl-date">January 8, 2026 (18 Dey 1404)</div>
-    <p>Internet shutdown begins on the twelfth day of nationwide protests. NetBlocks confirms total blackout at ~8:30 AM local time. 92 million people cut off.</p>
+    <p>Iran's internet shutdown begins on the twelfth day of nationwide protests — the day the government's forces killed large numbers of people. NetBlocks confirms total blackout at ~8:30 AM local time. 92 million people cut off.</p>
   </div>
   <div class="tl-item">
     <div class="tl-date">January 28, 2026</div>
@@ -330,15 +149,15 @@
   </div>
   <div class="tl-item">
     <div class="tl-date">March 25, 2026</div>
-    <p>VPN briefly reconnects. Prototype built in a single night — 5 versions released on day one. Published on GitHub and shared across Telegram groups. First users connect.</p>
+    <p>My VPN — one of the few still working — briefly reconnects. Prototype built in a single night — 5 versions released on day one. Published on GitHub and shared across Telegram groups. First users connect.</p>
   </div>
   <div class="tl-item">
     <div class="tl-date">March 26–31, 2026</div>
-    <p>8 more versions on day two. Android app released (v0.1.1). End-to-end tests, auto-refresh, public server configurations deployed. Project spreads through domestic forums. 19 releases in the first week.</p>
+    <p>8 more versions on day two. Android app released (v0.1.1). End-to-end tests, auto-refresh, public server configurations deployed. Project spreads through Iranian forums. 19 releases in the first week.</p>
   </div>
   <div class="tl-item">
     <div class="tl-date">April 2026</div>
-    <p>Frontend rewrite, resolver bank, block verification, X (Twitter) public account support. GitHub relay feature added — users download updates and configs from within the app.</p>
+    <p>Frontend rewrite, resolver bank, block verification, X (Twitter) public account support. GitHub becomes reachable from inside Iran, and a GitHub relay feature is added — users download updates and configs from within the app.</p>
   </div>
   <div class="tl-item">
     <div class="tl-date">April 29–30, 2026</div>
@@ -346,7 +165,7 @@
   </div>
   <div class="tl-item">
     <div class="tl-date">May 5, 2026</div>
-    <p>TeleMirror (Google relay) launched — users can follow any Telegram channel, not just pre-configured ones.</p>
+    <p>Google becomes reachable from inside Iran, and TeleMirror (Google relay) launches — users can follow any Telegram channel, not just pre-configured ones.</p>
   </div>
   <div class="tl-item">
     <div class="tl-date">May 7–25, 2026</div>

@@ -2,6 +2,8 @@
 
 **基于 DNS 的消息流阅读器 + 轻量私信**，专为只有 DNS 能通过的网络设计。阅读 Telegram 频道和公开 X 账号，并与其他用户交换端到端加密消息 —— 全部走普通 DNS。
 
+诞生于伊朗断网期间——[阅读项目背后的故事 →](https://sartoopjj.github.io/thefeed/project-brief-zh.html)
+
 [English](README.md) · [فارسی](README-FA.md) · 简体中文 · [Русский](README-RU.md)
 
 [![Google Play](https://img.shields.io/badge/Google%20Play-Install-3DDC84?style=for-the-badge&logo=googleplay&logoColor=white)](https://play.google.com/store/apps/details?id=com.thefeed.android)
@@ -39,7 +41,7 @@
 
 ## 安装应用
 
-*只想阅读信息流和聊天的用户 —— 不需要自己搭服务器，导入一个配置即可。*
+*只想阅读信息流和聊天的用户 —— 不需要自己搭服务器：应用里自带公共配置，也可以导入自己的配置。*
 
 从最新版本下载对应平台的客户端 —— 选一个能访问的镜像：**[GitHub](https://github.com/sartoopjj/thefeed/releases/latest)** · **[GitLab](https://gitlab.com/sartoopjj/thefeed/-/releases)**。
 
@@ -51,7 +53,7 @@
 | **macOS** | 通用 `.dmg`（Intel + Apple Silicon），拖动安装 `Thefeed.app`。未签名，首次启动请右键 → **Open**，或运行 `xattr -dr com.apple.quarantine /Applications/Thefeed.app`。 |
 | **Linux / Termux** | `thefeed-client` 二进制 —— 运行后打开 `http://127.0.0.1:8080`。 |
 
-然后打开 **设置 → 配置**，导入一个配置（或填入域名 + 口令）。DNS 解析器在 **解析器** 标签页管理 —— 一个所有配置共享的解析器池，外加一个用于发现更多解析器的扫描器。
+然后打开 **设置 → 配置**。应用自带几个公共配置，在 **默认配置**（Default configs）里点一下即可添加；也可以导入自己的配置（或填入域名 + 口令）。DNS 解析器在 **解析器** 标签页管理 —— 一个所有配置共享的解析器池，外加一个用于发现更多解析器的扫描器。
 
 **项目动态：** [@networkti](https://t.me/networkti) —— 发布公告和新版本的主要频道。
 
@@ -72,8 +74,9 @@
 | 1 | A  | `ns.example.com` | `203.0.113.10`   | 让一个主机名指向你的服务器 |
 | 2 | NS | `t.example.com`  | `ns.example.com` | 将 **feed** 子域名委派给你的服务器 |
 | 3 *（可选）* | NS | `c.example.com` | `ns.example.com` | 委派 **私信** 子域名 —— 仅当你启用 [私信](#messenger) 时 |
+| 4 *（可选）* | NS | `m.example.com` | `ns.example.com` | 委派 **Telegram** 子域名 —— 仅当你启用 [DNS 上的 Telegram](#telegram-over-dns) 时 |
 
-**1–2** 是信息流必需的。**3** 仅在启用可选的 [私信](#messenger) 时需要，且它必须用与 feed **不同**的子域名（如 `c.example.com`）。
+**1–2** 是信息流必需的。**3** 仅在启用可选的 [私信](#messenger) 时需要，且它必须用与 feed **不同**的子域名（如 `c.example.com`）。**4** 仅在启用可选的 [DNS 上的 Telegram](#telegram-over-dns) 时需要，它同样要有**单独**的子域名，与 feed 和私信都分开（如 `m.example.com`）。安装脚本会询问这个域名；不用脚本时，传入 `--mtproto-domains m.example.com`。
 
 ### 2. 安装服务器
 
@@ -474,6 +477,7 @@ X 帖子仅通过 RSS/XML 抓取。实例 URL 会被校验（`http`/`https`、�
 
 ## 链接与赞助
 
+- [项目简介](https://sartoopjj.github.io/thefeed/project-brief-zh.html)：TheFeed 的缘起、影响与大事记
 - Telegram 频道：[@networkti](https://t.me/networkti) · 公开配置：[@thefeedconfig](https://t.me/thefeedconfig)
 - 路线图 / 任务板：[GitHub project](https://github.com/users/sartoopjj/projects/1/views/1)
 
