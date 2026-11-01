@@ -147,6 +147,9 @@ type Options struct {
 	// handshake is completely silent: gotd just retries behind a backoff and
 	// the caller sees an unexplained stall.
 	Log func(string)
+	// LangCode is the language Telegram writes its own texts in, such as an
+	// ad's button. Empty means English.
+	LangCode string
 }
 
 // NewClient builds a Telegram client whose every byte travels through the DNS
@@ -182,6 +185,10 @@ func NewClient(opts Options) (*telegram.Client, error) {
 		// suppresses, and so acks are not delayed by gotd's 15-second default
 		// when a round trip costs more than that.
 		AckInterval: ackInterval,
+	}
+	if opts.LangCode != "" {
+		tgOpts.Device.LangCode = opts.LangCode
+		tgOpts.Device.SystemLangCode = opts.LangCode
 	}
 	if opts.TestDCs {
 		tgOpts.DC = 2

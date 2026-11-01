@@ -130,8 +130,14 @@ func (s *Server) handleTelConnect(w http.ResponseWriter, r *http.Request) {
 	}
 	var req struct {
 		Server string `json:"server"`
+		Lang   string `json:"lang"`
 	}
 	_ = s.telDecode(r, &req)
+	if req.Lang == "fa" || req.Lang == "en" {
+		h.mu.Lock()
+		h.lang = req.Lang
+		h.mu.Unlock()
+	}
 
 	cfg, nickname, ok := s.configForServerKey(chatServerKey(req.Server))
 	if !ok {
@@ -1052,6 +1058,10 @@ func telStatusKey(err error) string {
 		return "tel_err_auth_restart"
 	case tgerr.Is(err, "SEND_CODE_UNAVAILABLE"):
 		return "tel_err_send_code_unavailable"
+	case tgerr.Is(err, "PREMIUM_ACCOUNT_REQUIRED"):
+		return "tel_err_ad_premium"
+	case tgerr.Is(err, "AD_EXPIRED"):
+		return "tel_err_ad_expired"
 	// Last of the named causes: the call never got its answer back. Telegram
 	// may have carried it out anyway, so the user has to be told to look before
 	// asking again. Placed after every Telegram error name so a real refusal is

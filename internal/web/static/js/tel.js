@@ -310,6 +310,7 @@ function telStepsDone() {
 
 async function telOp(label, fn) {
   if (telState.busy || telState.bg) return null;
+  telAdAbort();
   telState.busy = true;
   telState.busyLabel = label || 'tel_working';
   // One step of the declared plan, counted as it starts.
@@ -329,6 +330,7 @@ async function telOp(label, fn) {
 // telBgOp is the same for a background refresh, disabling nothing.
 async function telBgOp(label, fn) {
   if (telState.busy || telState.bg) return null;
+  telAdAbort();
   if (telState.stepTotal) telState.stepNo++;
   telState.bg = true;
   telState.bgLabel = label || 'tel_checking_new';
@@ -641,7 +643,9 @@ async function telConnect(serverKey, attempt) {
   telState.server = serverKey;
   telState.attempt = attempt || 1;
   await telOp('tel_connecting', async function () {
-    var r = await telCall('/api/tel/connect', { server: serverKey }, 'tel_err_connect');
+    // The UI language goes along, so Telegram's own texts (an ad's button)
+    // come back in it.
+    var r = await telCall('/api/tel/connect', { server: serverKey, lang: (typeof lang === 'string' ? lang : '') }, 'tel_err_connect');
     if (!r) return;
     await telRefreshInfo();
     telFollowConnect();
@@ -1534,6 +1538,7 @@ async function telOpenPeer(key) {
     telRender();
     telMarkRead(peer, telNewestRealID(th) || d.topMsg || 0);
   }
+  if (telPeerKey(telState.peer) === key) telLoadAds(key, peer);
 }
 window.telOpenPeer = telOpenPeer;
 
@@ -3220,7 +3225,7 @@ function telRenderPane() {
   // One listener on the container, not one per link: the list is rebuilt on
   // every render and per-link handlers would be re-bound each time.
   html += '<div class="tel-msgs" id="telMsgs" onclick="telLinkClick(event)"' +
-    ' onscroll="telStatsOnScroll();telUpdateScrollDown()">';
+    ' onscroll="telStatsOnScroll();telUpdateScrollDown();telAdCheckView()">';
   if (peer.kind === 'forum') {
     html += '<div class="tel-banner" dir="auto">' + telEsc(telT('tel_forum_note')) + '</div>';
   }
@@ -3290,6 +3295,7 @@ function telRenderPane() {
       '<span class="tel-msg-meta">' + telStatsHTML(m) + telEditedHTML(m) + '<span class="tel-msg-time">' +
       telEsc(telFmtTime(m.date)) + '</span>' + telTickHTML(m, readOutbox) + '</span></div>';
   });
+  if (!telSearchFor('thread') && th.ads && th.ads.length) html += telAdHTML(th.ads[0]);
   html += '</div>';
   // The messenger's button, reused: the same look in both sections.
   html += '<button id="telScrollDown" class="chat-scroll-down hidden" onclick="telScrollToBottom()" aria-label="' +
@@ -3312,6 +3318,148 @@ function telRenderPane() {
     icon('send') + '</button></div>';
   return html;
 }
+
+// ------------------------------------------------------------ sponsored -----
+// Telegram's ads in channels. The API terms require showing them, so they are
+// fetched -- but last: after the messages and their counters, never through
+// telOp (the link stays free), and any operation that starts cancels it.
+
+var telAdCtl = null;
+var telAdViewed = {};
+var telAdReportOpts = null;
+
+function telAdAbort() {
+  if (telAdCtl) {
+    try { telAdCtl.abort(); } catch (e) { }
+    telAdCtl = null;
+  }
+}
+
+async function telLoadAds(key, peer) {
+  if (!peer || peer.kind !== 'channel' || telState.busy || telState.bg) return;
+  telAdAbort();
+  var ctl = new AbortController();
+  telAdCtl = ctl;
+  var r = null;
+  try {
+    r = await telFetch('/api/tel/sponsored', Object.assign(telPost({ peer: peer }), { signal: ctl.signal }));
+  } catch (e) { r = null; }
+  if (telAdCtl === ctl) telAdCtl = null;
+  if (!r || !r.ok || telPeerKey(telState.peer) !== key) return;
+  telThread(key).ads = r.ads || [];
+  telRender();
+  telAdCheckView();
+}
+
+// telAdAct reports a view or a click. Fire and forget: it never shows an error.
+function telAdAct(action, ad) {
+  try {
+    fetch('/api/tel/sponsored/act', telPost({ action: action, randomId: ad.randomId }))
+      .catch(function () { });
+  } catch (e) { }
+}
+
+function telAdAt(i) {
+  if (!telState.peer) return null;
+  var ads = telThread(telPeerKey(telState.peer)).ads || [];
+  return ads[i] || null;
+}
+
+// telAdCheckView counts a view once the ad's whole text is on screen.
+function telAdCheckView() {
+  var box = document.getElementById('telMsgs');
+  var el = box && box.querySelector('.tel-ad');
+  var ad = telAdAt(0);
+  if (!el || !ad || telAdViewed[ad.randomId]) return;
+  var body = el.querySelector('.tel-ad-text') || el;
+  var r = body.getBoundingClientRect(), b = box.getBoundingClientRect();
+  if (r.height <= 0 || r.top < b.top || r.bottom > b.bottom) return;
+  telAdViewed[ad.randomId] = true;
+  telAdAct('view', ad);
+}
+
+// telAdHTML draws one ad under the last post, marked as an ad from Telegram.
+function telAdHTML(ad) {
+  var html = '<div class="tel-msg in tel-ad" dir="auto">' +
+    '<span class="tel-ad-head"><span class="tel-ad-badge" dir="auto">' +
+    telEsc(telT(ad.recommended ? 'tel_ad_recommended' : 'tel_ad_label')) + '</span>' +
+    '<button class="tel-ad-more" onclick="telAdMenu(0)" aria-label="' + telAttrQ(telT('tel_ad_menu')) +
+    '" title="' + telAttrQ(telT('tel_ad_menu')) + '">' + icon('more') + '</button></span>' +
+    '<span class="tel-ad-note" dir="auto">' + telEsc(telT('tel_ad_note')) + '</span>';
+  if (ad.title) html += '<span class="tel-msg-from" dir="auto">' + telEsc(telSafeText(ad.title)) + '</span>';
+  if (ad.text) html += '<span class="tel-msg-text tel-ad-text" dir="auto">' + telEsc(telSafeText(ad.text)) + '</span>';
+  if (telSafeURL(ad.url)) {
+    html += '<span class="tel-btns"><button class="tel-kbd tel-kbd-url" dir="auto" onclick="telAdOpen(0)">' +
+      telEsc(telSafeText(ad.button || telT('tel_ad_open'))) + '</button></span>';
+  }
+  return html + '</div>';
+}
+
+// telAdOpen counts the click and shows the address before anything opens it.
+function telAdOpen(i) {
+  var ad = telAdAt(i);
+  var url = ad && telSafeURL(ad.url);
+  if (!url) return;
+  telAdAct('click', ad);
+  var tg = (typeof parseTgLink === 'function') ? parseTgLink(url) : null;
+  var extra = (tg && tg.user) ? {
+    label: telT('tel_open_channel').replace('{u}', tg.user),
+    action: function () { telOpenByUsername(tg.user, tg.msgId); },
+  } : null;
+  if (typeof showLinkSheet === 'function') showLinkSheet(url, extra);
+}
+window.telAdOpen = telAdOpen;
+
+function telAdMenu(i) {
+  var ad = telAdAt(i);
+  if (!ad) return;
+  var items = '<div class="tel-sheet-head" dir="auto">' + telEsc(telT('tel_ad_note')) + '</div>';
+  if (ad.sponsorInfo || ad.additionalInfo) {
+    items += telSheetItem('info', telT('tel_ad_about'), 'telCloseSheet();telAdAbout(' + i + ')');
+  }
+  if (ad.canReport) items += telSheetItem('fail', telT('tel_ad_report'), 'telAdReport(' + i + ')');
+  telSheet(items);
+}
+window.telAdMenu = telAdMenu;
+
+function telAdAbout(i) {
+  var ad = telAdAt(i);
+  if (!ad || typeof showInfoDialog !== 'function') return;
+  showInfoDialog([ad.sponsorInfo, ad.additionalInfo].filter(Boolean).map(telSafeText).join('\n\n'));
+}
+window.telAdAbout = telAdAbout;
+
+// telAdReport walks Telegram's report dialogue: reasons to pick, then done.
+// k is the picked reason; none on the first step.
+async function telAdReport(i, k) {
+  telCloseSheet();
+  var ad = telAdAt(i);
+  if (!ad) return;
+  var option = (k !== undefined && telAdReportOpts && telAdReportOpts[k]) ? telAdReportOpts[k].option : '';
+  await telWhenIdle();
+  var rep = null;
+  await telOp('tel_working', async function () {
+    var r = await telCall('/api/tel/sponsored/act', { action: 'report', randomId: ad.randomId, option: option });
+    if (r) rep = r.report || {};
+  });
+  if (!rep) return;
+  if (rep.options && rep.options.length) {
+    telAdReportOpts = rep.options;
+    var items = rep.title ? '<div class="tel-sheet-head" dir="auto">' + telEsc(telSafeText(rep.title)) + '</div>' : '';
+    rep.options.forEach(function (o, n) {
+      items += telSheetItem('fail', telSafeText(o.text), 'telAdReport(' + i + ',' + n + ')');
+    });
+    telSheet(items);
+    return;
+  }
+  telAdReportOpts = null;
+  if (!telState.peer) return;
+  var th = telThread(telPeerKey(telState.peer));
+  th.ads = (th.ads || []).filter(function (a) { return a !== ad; });
+  telRender();
+  if (typeof showToast === 'function') showToast(telT(rep.done === 'hidden' ? 'tel_ad_hidden' : 'tel_ad_reported'));
+}
+window.telAdReport = telAdReport;
 
 // --------------------------------------------------------------- sheets ------
 // One bottom sheet at a time, dismissed by the backdrop or Cancel.

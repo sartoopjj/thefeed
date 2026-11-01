@@ -315,3 +315,16 @@ func TestJSTelCallsSendTheirPayload(t *testing.T) {
 	}
 	t.Logf("%s", out)
 }
+
+// Telegram's ads must be shown, marked as ads, and never hold the link.
+func TestJSTelSponsoredMessages(t *testing.T) {
+	node, err := exec.LookPath("node")
+	if err != nil {
+		t.Skip("node not installed")
+	}
+	out, err := exec.Command(node, "jstest/tel_ads.test.mjs").CombinedOutput()
+	if err != nil {
+		t.Fatalf("tel ads failed:\n%s", out)
+	}
+	t.Logf("%s", out)
+}

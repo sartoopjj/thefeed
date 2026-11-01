@@ -119,6 +119,12 @@ type telHub struct {
 	// same key as the session. Built once on first use.
 	cacheOnce sync.Once
 	cache     *telCache
+	// lang is the UI language the page connected with, declared to Telegram
+	// so its own texts come back in it. Kept for automatic reconnects.
+	lang string
+	// ads holds each channel's sponsored messages for telAdTTL.
+	adsMu sync.Mutex
+	ads   map[string]telAdEntry
 
 	// resyncedChannels remembers which unknown channels have already cost a
 	// dialog-list rebuild, so one can never cost two.
@@ -389,8 +395,12 @@ func (h *telHub) connect(ctx context.Context, cfg Config, nickname string) error
 
 	h.setPhase(telPhaseTelegram)
 	apiID, apiHash, _ := h.apiCredentials()
+	h.mu.Lock()
+	langCode := h.lang
+	h.mu.Unlock()
 	b := tgbridge.NewBridge()
 	if err := b.Start(runCtx, tgbridge.Options{
+		LangCode:  langCode,
 		APIID:     apiID,
 		APIHash:   apiHash,
 		Dial:      dial,
@@ -887,6 +897,9 @@ func (h *telHub) wipeSession() error {
 	// The conversations belong to the account being signed out of. Leaving
 	// them would show one person's chats to whoever signs in next.
 	h.store().Forget()
+	h.adsMu.Lock()
+	h.ads = nil
+	h.adsMu.Unlock()
 	h.forgetResume()
 	h.rememberAuthorized(false)
 	err := os.Remove(h.sessionFile().Path)

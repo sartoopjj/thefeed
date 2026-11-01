@@ -631,6 +631,8 @@ func (s *Server) serve(ln net.Listener) error {
 	mux.HandleFunc("/api/tel/stats", s.handleTelStats)
 	mux.HandleFunc("/api/tel/react", s.handleTelReact)
 	mux.HandleFunc("/api/tel/join", s.handleTelJoin)
+	mux.HandleFunc("/api/tel/sponsored", s.handleTelSponsored)
+	mux.HandleFunc("/api/tel/sponsored/act", s.handleTelSponsoredAct)
 	mux.HandleFunc("/api/chat/poll", s.handleChatPoll)
 	mux.HandleFunc("/api/chat/peer-status", s.handleChatPeerStatus)
 	mux.HandleFunc("/api/chat/settings", s.handleChatSettings)
