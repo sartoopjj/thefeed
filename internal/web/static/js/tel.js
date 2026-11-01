@@ -1472,6 +1472,7 @@ function telEnterThread(key, peer) {
   th.peer = peer;
   telState.peer = peer;
   telState.draft = '';
+  telState.reply = null;
   telState.search = '';
   telState.searchIn = '';
   // Each conversation opens at its newest message, whatever the last one did.
@@ -1743,12 +1744,16 @@ async function telSend() {
   var peer = telState.peer;
   var key = telPeerKey(peer);
   var th = telThread(key);
+  var rp = telReplyFor(peer);
+  var replyTo = rp ? rp.id : 0;
+  telState.reply = null;
 
   // Shown at once with a clock: a send takes seconds to minutes here.
   var pending = {
     id: TEL_PENDING_BASE + (++telPendingSeq),
     date: Math.floor(Date.now() / 1000), text: text, out: true, pending: true
   };
+  if (replyTo) pending.replyTo = replyTo;
   th.msgs.push(pending);
   telState.draft = '';
   if (box) box.value = '';
@@ -1761,7 +1766,9 @@ async function telSend() {
   // Telegram does not name the message in its answer.
   telSteps(2, peer.title);
   var ran = await telOp('tel_sending', async function () {
-    var r = await telCall('/api/tel/send', { peer: peer, text: text }, 'tel_err_send');
+    var body = { peer: peer, text: text };
+    if (replyTo) body.replyTo = replyTo;
+    var r = await telCall('/api/tel/send', body, 'tel_err_send');
     if (!r) {
       // Kept on screen, marked, so the text is not lost.
       pending.pending = false;
@@ -1822,6 +1829,7 @@ async function telRetrySend(id) {
   if (!msg) return;
   telDropPending(th, msg);
   telState.draft = msg.text;
+  telState.reply = msg.replyTo ? { key: telPeerKey(telState.peer), id: msg.replyTo, who: '', text: '' } : null;
   var box = document.getElementById('telInput');
   if (box) box.value = msg.text;
   await telSend();
@@ -1868,6 +1876,7 @@ function telTicksPending(key) {
 }
 function telInputKey(e) {
   if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); telSend(); }
+  else if (e.key === 'Escape' && telState.reply) telCancelReply();
 }
 window.telInputKey = telInputKey;
 
@@ -1875,6 +1884,7 @@ window.telInputKey = telInputKey;
 function telGrowInput(el) {
   el.style.height = 'auto';
   el.style.height = el.scrollHeight + 'px';
+  telUpdateScrollDown();
 }
 window.telGrowInput = telGrowInput;
 
@@ -2110,7 +2120,13 @@ function telUpdateScrollDown() {
   var far = box.scrollHeight - box.scrollTop - box.clientHeight > TEL_SCROLL_DOWN_PX;
   btn.classList.toggle('hidden', !far);
   var comp = document.querySelector('#telPane .tel-compose');
-  btn.style.bottom = ((comp ? comp.offsetHeight : 0) + 14) + 'px';
+  var h = comp ? comp.offsetHeight : 0;
+  var bar = document.getElementById('telReplyBar');
+  if (bar) {
+    bar.style.bottom = h + 'px';
+    h += bar.offsetHeight;
+  }
+  btn.style.bottom = (h + 14) + 'px';
 }
 window.telUpdateScrollDown = telUpdateScrollDown;
 
@@ -3224,7 +3240,8 @@ function telRenderPane() {
 
   // One listener on the container, not one per link: the list is rebuilt on
   // every render and per-link handlers would be re-bound each time.
-  html += '<div class="tel-msgs" id="telMsgs" onclick="telLinkClick(event)"' +
+  var rp = telReplyFor(peer);
+  html += '<div class="tel-msgs' + (rp ? ' replying' : '') + '" id="telMsgs" onclick="telLinkClick(event)"' +
     ' onscroll="telStatsOnScroll();telUpdateScrollDown();telAdCheckView()">';
   if (peer.kind === 'forum') {
     html += '<div class="tel-banner" dir="auto">' + telEsc(telT('tel_forum_note')) + '</div>';
@@ -3275,7 +3292,8 @@ function telRenderPane() {
     html += '<div class="tel-msg ' + (m.out ? 'out' : 'in') +
       (m.failed ? ' failed' : '') + '" dir="auto" data-mid="' + (m.id | 0) + '"' +
       (m.failed ? ' onclick="telRetrySend(' + m.id + ')" title="' +
-        telAttrQ(telT('tel_retry')) + '"' : '') + '>';
+        telAttrQ(telT('tel_retry')) + '"' :
+        (!m.pending && !m.service ? ' onclick="telMsgTap(event,' + (m.id | 0) + ')"' : '')) + '>';
     // Consecutive messages from one person are named once, like Telegram.
     if (showFrom && !m.out && m.from && m.from !== lastFrom) {
       html += '<span class="tel-msg-from" dir="auto">' + telEsc(m.from) + '</span>';
@@ -3309,6 +3327,7 @@ function telRenderPane() {
   if (peer.readOnly) {
     return html;
   }
+  if (rp) html += telReplyBarHTML(rp);
   html += '<div class="tel-compose">' +
     '<textarea id="telInput" class="tel-compose-input" rows="1" dir="auto" placeholder="' +
     telAttrQ(telT('tel_write')) + '" oninput="telState.draft=this.value;telGrowInput(this)" ' +
@@ -3317,6 +3336,96 @@ function telRenderPane() {
     ' aria-label="' + telAttrQ(telT('tel_send')) + '" title="' + telAttrQ(telT('tel_send')) + '">' +
     icon('send') + '</button></div>';
   return html;
+}
+
+// ---------------------------------------------------------------- reply ------
+// Tapping a message offers Reply and Copy, as in Telegram. The reply strip
+// lives outside the composer, which telKeepComposer never redraws.
+
+function telFindMsg(id) {
+  if (!telState.peer) return null;
+  var msgs = telThread(telPeerKey(telState.peer)).msgs;
+  for (var i = 0; i < msgs.length; i++) if (msgs[i].id === id) return msgs[i];
+  return null;
+}
+
+// telReplyFor is the reply being written in this conversation, if any.
+function telReplyFor(peer) {
+  var rp = telState.reply;
+  return (rp && peer && rp.key === telPeerKey(peer)) ? rp : null;
+}
+
+// telMsgTap leaves alone a tap that has its own meaning -- a link, a button,
+// a reaction, the quote, a spoiler -- or that ends a text selection.
+function telMsgTap(e, id) {
+  var el = e && e.target;
+  if (el && el.closest && el.closest('a, button, .tel-reacts, .tel-reply, .tel-spoiler, .tel-kbd')) return;
+  var sel = window.getSelection ? String(window.getSelection()) : '';
+  if (sel) return;
+  telMsgMenu(id);
+}
+window.telMsgTap = telMsgTap;
+
+function telMsgMenu(id) {
+  var m = telFindMsg(id);
+  if (!m) return;
+  var items = '';
+  if (telState.peer && !telState.peer.readOnly) {
+    items += telSheetItem('reply', telT('tel_reply'), 'telStartReply(' + (id | 0) + ')');
+  }
+  if (m.text) items += telSheetItem('copy', telT('copy'), 'telCopyMsg(' + (id | 0) + ')');
+  if (items) telSheet(items);
+}
+
+function telStartReply(id) {
+  telCloseSheet();
+  var m = telFindMsg(id);
+  if (!m || !telState.peer) return;
+  telState.reply = {
+    key: telPeerKey(telState.peer), id: id,
+    who: m.out ? telT('tel_you') : (m.from || telState.peer.title || ''),
+    text: m.text || telMediaLabel(m),
+  };
+  telRender();
+  var box = document.getElementById('telInput');
+  if (box) box.focus();
+}
+window.telStartReply = telStartReply;
+
+function telCancelReply() {
+  telState.reply = null;
+  telRender();
+}
+window.telCancelReply = telCancelReply;
+
+function telCopyMsg(id) {
+  telCloseSheet();
+  var m = telFindMsg(id);
+  if (!m || !m.text) return;
+  try {
+    if (navigator.clipboard) navigator.clipboard.writeText(m.text).catch(function () { });
+    else {
+      var ta = document.createElement('textarea');
+      ta.value = m.text;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      ta.remove();
+    }
+  } catch (e) { }
+  if (typeof showToast === 'function') showToast(telT('tel_copied'));
+}
+window.telCopyMsg = telCopyMsg;
+
+function telReplyBarHTML(rp) {
+  var who = rp.who ? '<span class="tel-reply-who" dir="auto">' + telEsc(telSafeText(rp.who)) + '</span>' : '';
+  var text = rp.text ? telEsc(telSafeText(rp.text)) : telEsc(telT('tel_reply_to'));
+  return '<div class="tel-compose-reply" id="telReplyBar">' + icon('reply') +
+    '<span class="tel-compose-reply-body" onclick="telJumpToMsg(' + (rp.id | 0) + ')">' + who +
+    '<span class="tel-reply-text" dir="auto">' + text + '</span></span>' +
+    '<button class="tel-compose-reply-x"' + TEL_KEEP_FOCUS + ' onclick="telCancelReply()" aria-label="' +
+    telAttrQ(telT('tel_reply_cancel')) + '" title="' + telAttrQ(telT('tel_reply_cancel')) + '">' +
+    icon('x') + '</button></div>';
 }
 
 // ------------------------------------------------------------ sponsored -----

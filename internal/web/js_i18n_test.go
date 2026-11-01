@@ -328,3 +328,16 @@ func TestJSTelSponsoredMessages(t *testing.T) {
 	}
 	t.Logf("%s", out)
 }
+
+// Tapping a message must offer Reply, and the send must go out as an answer.
+func TestJSTelReply(t *testing.T) {
+	node, err := exec.LookPath("node")
+	if err != nil {
+		t.Skip("node not installed")
+	}
+	out, err := exec.Command(node, "jstest/tel_reply.test.mjs").CombinedOutput()
+	if err != nil {
+		t.Fatalf("tel reply failed:\n%s", out)
+	}
+	t.Logf("%s", out)
+}

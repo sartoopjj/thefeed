@@ -1331,6 +1331,49 @@ a.tel-kbd-url:hover {
   pointer-events: auto;
 }
 
+/* The message being answered, floating just above the composer (its bottom
+   follows the composer's height, set in telUpdateScrollDown). */
+.tel-compose-reply {
+  position: absolute;
+  inset-inline: 10px;
+  bottom: calc(66px + var(--safe-bottom));
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-inline-start: 3px solid var(--accent);
+  border-radius: var(--radius-lg);
+  background: var(--msg-in);
+  color: var(--accent);
+}
+
+.tel-compose-reply-body {
+  flex: 1;
+  min-width: 0;
+  cursor: pointer;
+}
+
+.tel-compose-reply .tel-reply-text {
+  color: var(--text);
+  font-size: var(--text-sm);
+}
+
+.tel-compose-reply-x {
+  display: inline-flex;
+  padding: 2px;
+  border: 0;
+  background: none;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+
+/* Room under the last message while the reply strip is up. */
+.tel-msgs.replying {
+  padding-bottom: calc(130px + var(--safe-bottom));
+}
+
 /* Channels the user may only read: a line instead of a composer. */
 .tel-compose-input {
   flex: 1;
