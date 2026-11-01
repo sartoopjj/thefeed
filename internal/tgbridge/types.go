@@ -43,6 +43,17 @@ type Peer struct {
 	// this transport is tens of round trips PER avatar. That is why only this
 	// one is taken.
 	Thumb []byte `json:"thumb,omitempty"`
+	// DirectID is set on a channel that takes direct messages: the id of the
+	// conversation (Telegram's "monoforum") that carries them.
+	DirectID int64 `json:"directId,string,omitempty"`
+	// Direct marks that conversation itself: messages to a channel's admins.
+	Direct bool `json:"direct,omitempty"`
+	// PaidStars is what each message to it costs in Telegram Stars, if the
+	// channel charges; this client does not pay.
+	PaidStars int64 `json:"paidStars,omitempty"`
+	// Protected is Telegram's content protection: nothing here may be copied
+	// or forwarded.
+	Protected bool `json:"protected,omitempty"`
 }
 
 // Dialog is one row in the chat list.
@@ -104,6 +115,17 @@ type Message struct {
 	// EditDate is when the text was last changed; an edit keeps the id, so
 	// this is how a newer copy of a held message is told apart.
 	EditDate int `json:"editDate,omitempty"`
+	// Expires is when a self-destructing message (ttl_period) is gone. Telegram
+	// deletes it then and requires clients to drop it locally as well.
+	Expires int `json:"expires,omitempty"`
+	// Forwarded marks a forwarded message; Fwd names its source when Telegram
+	// says who that is.
+	Forwarded bool   `json:"forwarded,omitempty"`
+	Fwd       string `json:"fwd,omitempty"`
+	// Protected forbids copying or forwarding this one message.
+	Protected bool `json:"protected,omitempty"`
+	// Timed marks self-destructing media, which is never forwarded or saved.
+	Timed bool `json:"timed,omitempty"`
 	// Entities is the message's formatting: bold, links, spoilers,
 	// blockquotes and the rest. It arrives with the message at no extra cost,
 	// and without it a post written with any of them reads as flat text --
@@ -239,22 +261,26 @@ func buttonURL(t tg.InlineButtonTypeClass) string {
 
 // Media kinds. Short keys: the UI translates them.
 const (
-	MediaPhoto     = "photo"
-	MediaVideo     = "video"
-	MediaVideoNote = "videonote"
-	MediaVoice     = "voice"
-	MediaAudio     = "audio"
-	MediaSticker   = "sticker"
-	MediaGIF       = "gif"
-	MediaFile      = "file"
-	MediaGeo       = "geo"
-	MediaContact   = "contact"
-	MediaPoll      = "poll"
-	MediaGame      = "game"
-	MediaInvoice   = "invoice"
-	MediaDice      = "dice"
-	MediaStory     = "story"
-	MediaOther     = "other"
+	MediaPhoto = "photo"
+	// A self-destructing photo or video whose time is up: Telegram keeps the
+	// message and drops the file.
+	MediaPhotoExpired = "photo_expired"
+	MediaVideoExpired = "video_expired"
+	MediaVideo        = "video"
+	MediaVideoNote    = "videonote"
+	MediaVoice        = "voice"
+	MediaAudio        = "audio"
+	MediaSticker      = "sticker"
+	MediaGIF          = "gif"
+	MediaFile         = "file"
+	MediaGeo          = "geo"
+	MediaContact      = "contact"
+	MediaPoll         = "poll"
+	MediaGame         = "game"
+	MediaInvoice      = "invoice"
+	MediaDice         = "dice"
+	MediaStory        = "story"
+	MediaOther        = "other"
 )
 
 // mediaOf names an attachment. A link preview is not one: the link is already
@@ -264,7 +290,11 @@ func mediaOf(m tg.MessageMediaClass) (kind, name string, size int64) {
 	case *tg.MessageMediaPhoto:
 		return MediaPhoto, "", 0
 	case *tg.MessageMediaDocument:
-		doc, ok := v.Document.AsNotEmpty()
+		d, has := v.GetDocument()
+		if !has {
+			return MediaFile, "", 0
+		}
+		doc, ok := d.AsNotEmpty()
 		if !ok {
 			return MediaFile, "", 0
 		}
@@ -289,6 +319,31 @@ func mediaOf(m tg.MessageMediaClass) (kind, name string, size int64) {
 		return "", "", 0
 	}
 	return MediaOther, "", 0
+}
+
+// selfDestruct reports a photo or video with a view timer, and whether its
+// time is already up: the timer stays on the message, the file does not.
+func selfDestruct(m tg.MessageMediaClass) (timed, expired bool) {
+	switch v := m.(type) {
+	case *tg.MessageMediaPhoto:
+		_, timed = v.GetTTLSeconds()
+		p, ok := v.GetPhoto()
+		_, real := p.(*tg.Photo)
+		return timed, timed && (!ok || !real)
+	case *tg.MessageMediaDocument:
+		_, timed = v.GetTTLSeconds()
+		d, ok := v.GetDocument()
+		_, real := d.(*tg.Document)
+		return timed, timed && (!ok || !real)
+	}
+	return false, false
+}
+
+func expiredKind(m tg.MessageMediaClass) string {
+	if _, ok := m.(*tg.MessageMediaDocument); ok {
+		return MediaVideoExpired
+	}
+	return MediaPhotoExpired
 }
 
 // documentKind tells apart what Telegram models as one "document" — sticker,
@@ -360,7 +415,7 @@ func peerFromChat(c *tg.Chat) Peer {
 	if b, ok := c.GetDefaultBannedRights(); ok && b.SendMessages && !c.Creator {
 		readOnly = true
 	}
-	return Peer{Kind: PeerGroup, ID: c.ID, Title: c.Title, ReadOnly: readOnly, Thumb: chatThumb(c.Photo)}
+	return Peer{Kind: PeerGroup, ID: c.ID, Title: c.Title, ReadOnly: readOnly, Thumb: chatThumb(c.Photo), Protected: c.Noforwards}
 }
 
 // peerFromChannel maps a channel, supergroup or forum, which Telegram models
@@ -373,11 +428,22 @@ func peerFromChannel(c *tg.Channel) Peer {
 			kind = PeerForum
 		}
 	}
-	return Peer{
+	p := Peer{
 		Kind: kind, ID: c.ID, AccessHash: c.AccessHash,
 		Title: c.Title, Username: c.Username, ReadOnly: channelReadOnly(c),
-		Thumb: chatThumb(c.Photo),
+		Thumb: chatThumb(c.Photo), Protected: c.Noforwards,
 	}
+	if c.BroadcastMessagesAllowed {
+		p.DirectID, _ = c.GetLinkedMonoforumID()
+	}
+	if c.Monoforum {
+		// Written to without joining, so "left" says nothing about whether a
+		// message is accepted here. A group, whatever its forum flag: it is one
+		// conversation with the channel.
+		p.Kind, p.Direct, p.ReadOnly = PeerGroup, true, false
+		p.PaidStars, _ = c.GetSendPaidMessagesStars()
+	}
+	return p
 }
 
 // channelReadOnly reports whether Telegram would refuse a message. A broadcast
@@ -427,9 +493,18 @@ func messageFrom(m tg.MessageClass, names map[string]string) (Message, bool) {
 	if !ok {
 		return Message{}, false
 	}
-	out := Message{ID: msg.ID, Date: msg.Date, Text: msg.Message, Out: msg.Out}
+	out := Message{ID: msg.ID, Date: msg.Date, Text: msg.Message, Out: msg.Out, Protected: msg.Noforwards}
+	if fwd, ok := msg.GetFwdFrom(); ok {
+		out.Forwarded, out.Fwd = true, fwdName(fwd, names)
+	}
 	if media, has := msg.GetMedia(); has {
 		out.Media, out.MediaName, out.MediaSize = mediaOf(media)
+		if timed, expired := selfDestruct(media); timed {
+			out.Timed, out.Protected = true, true
+			if expired {
+				out.Media, out.MediaName, out.MediaSize = expiredKind(media), "", 0
+			}
+		}
 	}
 	if markup, has := msg.GetReplyMarkup(); has {
 		out.Buttons = buttonsOf(markup)
@@ -439,6 +514,9 @@ func messageFrom(m tg.MessageClass, names map[string]string) (Message, bool) {
 	}
 	if d, ok := msg.GetEditDate(); ok {
 		out.EditDate = d
+	}
+	if ttl, ok := msg.GetTTLPeriod(); ok && ttl > 0 {
+		out.Expires = msg.Date + ttl
 	}
 	out.Reactions = reactionsOf(msg)
 	out.Entities = entitiesOf(msg.Entities)
@@ -493,6 +571,21 @@ func reactionCounts(rs tg.MessageReactions) []Reaction {
 		return nil
 	}
 	return out
+}
+
+// fwdName is the "Forwarded from" name: the source if Telegram sent it along,
+// else the name a sender who hides their account chose to show.
+func fwdName(h tg.MessageFwdHeader, names map[string]string) string {
+	if from, ok := h.GetFromID(); ok {
+		if n := names[peerKey(from)]; n != "" {
+			return n
+		}
+	}
+	if n, ok := h.GetFromName(); ok && n != "" {
+		return n
+	}
+	n, _ := h.GetPostAuthor()
+	return n
 }
 
 func senderNames(users []tg.UserClass, chats []tg.ChatClass) map[string]string {

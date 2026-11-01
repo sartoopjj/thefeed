@@ -326,6 +326,7 @@ async function loadFontSize() {
     } else if (s.mirrorNoteOff === false) {
       try { localStorage.removeItem('tm_note_off'); } catch (e) { }
     }
+    if (s.telIntroSeen === true && typeof telIntroRead === 'function') telIntroRead();
     // Populate pinned channels from the server response (per-profile).
     pinnedChannels = new Set();
     if (Array.isArray(s.pinnedChannels)) {

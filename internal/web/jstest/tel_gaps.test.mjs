@@ -34,13 +34,16 @@ const MAX_PAGES = Number((src.match(/var TEL_NEW_MAX_PAGES = (\d+);/) || [0, 1])
 // limit / offsetId / minId exactly as messages.getHistory does.
 function fakeTelegram() {
   const all = [];
+  const gone = [];
   const asked = [];
   return {
     all, asked,
     add(m) { all.push(m); },
     edit(id, text, editDate) { const m = all.find((x) => x.id === id); m.text = text; m.editDate = editDate; },
+    // Deleted for everyone: gone from Telegram, remembered by the cache.
+    del(id) { all.splice(all.findIndex((x) => x.id === id), 1); gone.push(id); },
     // The backend's cache, which its own check for changes keeps current.
-    cache() { return { ok: true, cached: true, messages: all.map((m) => ({ ...m })).sort((a, b) => a.id - b.id) }; },
+    cache() { return { ok: true, cached: true, messages: all.map((m) => ({ ...m })).sort((a, b) => a.id - b.id), deleted: gone.slice() }; },
     history(q) {
       if (q.includes('cacheOnly=1')) return this.cache();
       const p = new URLSearchParams(q.split('?')[1]);
@@ -58,7 +61,7 @@ function load(tg) {
   const state = { peer, threads: {} };
   const code = [
     fn('telHistoryQuery'), fn('telNewestRealID'), optional('telFetchCursor'),
-    fn('telMergeMessages'), fn('telThreadFetchNew'),
+    fn('telMergeMessages'), fn('telDropDeleted'), fn('telThreadFetchNew'),
   ].join('\n');
   const api = new Function(
     'telState', 'telThread', 'telPeerKey', 'telCall', 'telCallQuiet', 'telBgOp', 'telOp', 'telRender',
@@ -145,6 +148,18 @@ const sendAck = (th, msgId, text) => {
   await api.telThreadFetchNew(true);
   eq('the edit shows up on the next poll', thread().msgs.find((m) => m.id === 21).text, 'how are you');
   eq('without dragging in messages that were never on screen', thread().msgs.map((m) => m.id), [20, 21]);
+}
+
+// --- a message deleted while the conversation is open leaves it -------------
+{
+  const tg = fakeTelegram();
+  const { api, thread } = load(tg);
+  tg.add({ id: 30, text: 'hi' });
+  tg.add({ id: 31, text: 'oops, wrong chat' });
+  await api.telThreadFetchNew(true);
+  tg.del(31);   // deleted for everyone; nothing new is sent
+  await api.telThreadFetchNew(true);
+  eq('a message deleted on Telegram is gone on the next poll', thread().msgs.map((m) => m.id), [30]);
 }
 
 // --- the "edited" mark -----------------------------------------------------

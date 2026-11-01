@@ -69,7 +69,7 @@ check('a message with an override is cleaned before display',
   /function telFormatText[\s\S]*?telSafeText\(text\)/.test(src),
   'telFormatText no longer cleans the text it renders');
 check('message text is rendered through it',
-  src.includes('telFormatText(m.text, m.entities)'),
+  src.includes('telFormatText(m.text, m.entities, telOpened(peer, m))'),
   'the render site no longer uses telFormatText');
 check('a media name with an override is cleaned',
   src.includes('telSafeText(m.mediaName)'), 'media names are not cleaned');

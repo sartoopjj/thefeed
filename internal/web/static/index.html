@@ -324,9 +324,18 @@
               <div class="tm-topbar-sub" id="tmTopbarSub" data-i18n="telemirror_subtitle">Custom channels</div>
             </div>
           </div>
+          <button class="tm-refresh" id="tmSearchBtn" onclick="tmToggleSearch()" title="Search"
+            data-i18n-title="telemirror_search" data-icon="magnifier"></button>
           <button class="tm-refresh" onclick="tmRefreshActive()" title="Refresh"
             data-i18n-title="telemirror_refresh" data-icon="refresh"></button>
         </header>
+        <div class="tm-search-row" id="tmSearchRow" hidden>
+          <span class="tm-search-ic" data-icon="magnifier"></span>
+          <input id="tmSearchInput" class="tm-search" type="search" dir="auto" placeholder="Search posts"
+            data-i18n-ph="telemirror_search" oninput="tmFilterPosts(this.value)"
+            onkeydown="if(event.key==='Escape'){event.preventDefault();tmToggleSearch()}">
+          <button class="tm-refresh" onclick="tmToggleSearch()" aria-label="Close" data-icon="close"></button>
+        </div>
         <main id="tmContent" class="tm-content">
           <div class="tm-empty" data-i18n="telemirror_pick_channel">Pick a channel</div>
         </main>

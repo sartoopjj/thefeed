@@ -148,24 +148,32 @@ func (s *Server) handleTelConnect(w http.ResponseWriter, r *http.Request) {
 	// through beginOp, so it clears it itself.
 	h.setErr(nil)
 
+	want := chatServerKey(cfg.Domain)
 	h.mu.Lock()
-	if h.bridge != nil {
+	if h.bridge != nil && h.serverKey == want {
 		h.mu.Unlock()
 		writeJSON(w, map[string]any{"ok": true, "already": true})
 		return
 	}
-	if h.connecting {
+	if h.connecting && h.connectingKey == want {
 		h.mu.Unlock()
 		writeJSON(w, map[string]any{"ok": true, "connecting": true})
 		return
 	}
-	h.connecting = true
+	// Another config is up or on its way: picking this one is a switch.
+	stop := func() {}
+	if h.bridge != nil || h.connecting {
+		stop = h.detachLocked()
+	}
+	h.connecting, h.connectingKey = true, want
+	gen := h.connGen
 	// The only place the running total restarts: it counts what THIS
 	// connection has cost, which is what the UI reports "in total".
 	h.cells.Store(0)
 	h.lastErr, h.lastErrKey = "", ""
 	base := h.ctx
 	h.mu.Unlock()
+	stop()
 
 	// Runs in the background and answers now: the handshake outlives any
 	// browser timeout. The UI follows /api/tel/info.
@@ -174,16 +182,16 @@ func (s *Server) handleTelConnect(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx, cancel := context.WithTimeout(base, telConnectTimeout)
 	h.mu.Lock()
-	h.connectCancel = cancel
+	if h.connGen == gen {
+		h.connectCancel = cancel
+	}
 	h.mu.Unlock()
 	go func() {
 		defer cancel()
-		err := h.connect(ctx, cfg, nickname)
-		h.mu.Lock()
-		h.connecting = false
-		h.connectCancel = nil
-		h.mu.Unlock()
-		h.setErr(err)
+		err := h.connect(ctx, cfg, nickname, gen)
+		if h.connectDone(gen) {
+			h.setErr(err)
+		}
 	}()
 	writeJSON(w, map[string]any{"ok": true, "connecting": true})
 }
@@ -696,8 +704,12 @@ func (s *Server) handleTelHistory(w http.ResponseWriter, r *http.Request) {
 	// messages it already has at once instead of a blank pane for the half
 	// minute a page of history costs over DNS. The live fetch follows.
 	if q.Get("cacheOnly") == "1" {
-		if cached := h.store().Thread(telCacheKey(peer)); len(cached) > 0 {
-			writeJSON(w, map[string]any{"ok": true, "cached": true, "messages": cached})
+		key := telCacheKey(peer)
+		// Deleted ids go with it even when nothing is left, so the page drops
+		// its own copies of what Telegram deleted.
+		cached, deleted := h.store().Thread(key), h.store().Deleted(key)
+		if len(cached) > 0 || len(deleted) > 0 {
+			writeJSON(w, map[string]any{"ok": true, "cached": true, "messages": cached, "deleted": deleted})
 			return
 		}
 		writeJSON(w, map[string]any{"ok": false, "reason": "tel_err_no_cache"})
@@ -831,6 +843,12 @@ func (s *Server) handleTelDelete(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "bad request", 400)
 		return
 	}
+	// Direct messages only leave the list: no call, so no link needed.
+	if req.Peer.Direct {
+		h.store().ForgetPeer([]string{telCacheKey(req.Peer)})
+		writeJSON(w, map[string]any{"ok": true})
+		return
+	}
 	if _, err := h.current(); err != nil {
 		writeJSON(w, map[string]any{"ok": false, "reason": "tel_err_not_connected"})
 		return
@@ -846,6 +864,8 @@ func (s *Server) handleTelDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.setErr(nil)
+	// Out of the cache too, or a reload brings the conversation back.
+	h.store().ForgetPeer([]string{telCacheKey(req.Peer)})
 	writeJSON(w, map[string]any{"ok": true})
 }
 
@@ -1062,6 +1082,20 @@ func telStatusKey(err error) string {
 		return "tel_err_ad_premium"
 	case tgerr.Is(err, "AD_EXPIRED"):
 		return "tel_err_ad_expired"
+	case tgerr.Is(err, "MESSAGE_EDIT_TIME_EXPIRED"):
+		return "tel_err_edit_expired"
+	case tgerr.Is(err, "MESSAGE_AUTHOR_REQUIRED"):
+		return "tel_err_edit_not_yours"
+	case tgerr.Is(err, "MESSAGE_DELETE_FORBIDDEN"):
+		return "tel_err_delete_forbidden"
+	case tgerr.Is(err, "ALLOW_PAYMENT_REQUIRED"):
+		return "tel_err_paid"
+	case tgerr.Is(err, "CHAT_FORWARDS_RESTRICTED"):
+		return "tel_err_forward_protected"
+	case tgerr.Is(err, "CHAT_WRITE_FORBIDDEN", "CHAT_SEND_PLAIN_FORBIDDEN", "USER_IS_BLOCKED", "YOU_BLOCKED_USER", "CHAT_ADMIN_REQUIRED"):
+		return "tel_err_cannot_write"
+	case errors.Is(err, tgbridge.ErrNoDirectMessages):
+		return "tel_err_no_direct"
 	// Last of the named causes: the call never got its answer back. Telegram
 	// may have carried it out anyway, so the user has to be told to look before
 	// asking again. Placed after every Telegram error name so a real refusal is

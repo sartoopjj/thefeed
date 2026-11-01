@@ -183,6 +183,10 @@ func dialogsFrom(res tg.MessagesDialogsClass, def NotifyDefaults) []Dialog {
 		switch msg := m.(type) {
 		case *tg.Message:
 			key, text, date = peerKey(msg.PeerID), msg.Message, msg.Date
+			// A self-destructing message is not left behind as a preview.
+			if ttl, ok := msg.GetTTLPeriod(); ok && ttl > 0 {
+				text = ""
+			}
 		case *tg.MessageService:
 			key, date = peerKey(msg.PeerID), msg.Date
 		default:
@@ -428,8 +432,14 @@ func (b *Bridge) DeleteChat(ctx context.Context, peer Peer, revoke bool) error {
 	if err != nil {
 		return err
 	}
-	switch peer.Kind {
-	case PeerChannel, PeerForum:
+	switch {
+	case peer.Direct:
+		// Direct messages to a channel: removed from the list only, by the
+		// caller. Single messages are deleted like a supergroup's.
+		return nil
+	case peer.ChannelBased():
+		// A channel or supergroup: deleting it means leaving. Its history is
+		// not the account's own box, so messages.deleteHistory refuses it.
 		_, err = api.ChannelsLeaveChannel(ctx, &tg.InputChannel{
 			ChannelID: peer.ID, AccessHash: peer.AccessHash,
 		})

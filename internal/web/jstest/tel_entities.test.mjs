@@ -48,7 +48,8 @@ globalThis.telFlag = new Function(pick(tel, /function telFlag\([\s\S]*?\n\}/) + 
 globalThis.telSafeText = new Function(pick(tel, /function telSafeText\(s\) \{[\s\S]*?\n\}/) + '; return telSafeText;')();
 globalThis.telSafeURL = new Function(pick(tel, /function telSafeURL\([\s\S]*?\n\}/) + '; return telSafeURL;')();
 const telFormatText = new Function(
-  pick(tel, /function telFormatText\(text, entities\) \{[\s\S]*?\n\}\n/) + '; return telFormatText;')();
+  pick(tel, /function telFormatText\(text, entities, opened\) \{[\s\S]*?\n\}\n/) +
+  pick(tel, /function telBlockOpen\(e, opened\) \{[\s\S]*?\n\}\n/) + '; return telFormatText;')();
 
 const E = (type, offset, length, extra) => Object.assign({ type, offset, length }, extra || {});
 
@@ -113,6 +114,68 @@ const overlap = telFormatText('abcdef', [E('bold', 0, 4), E('italic', 2, 4)]);
 for (const ch of 'abcdef') {
   ok(`overlapping entities keep ${ch}`, overlap.includes(ch), overlap);
 }
+
+// --- blocks are one block, whatever is formatted inside -------------------
+
+const count = (h, re) => (h.match(re) || []).length;
+const q = telFormatText('one two three', [E('blockquote', 0, 13), E('bold', 4, 3)]);
+eq('a quote with bold inside is one quote', count(q, /<blockquote/g), 1);
+ok('and the bold is inside it', /<blockquote[^>]*>one <b>two<\/b> three<\/blockquote>/.test(q), q);
+const p2 = telFormatText('a = b + c', [E('pre', 0, 9), E('bold', 4, 1)]);
+eq('a code block with bold inside is one block', count(p2, /<pre/g), 1);
+const nest = telFormatText('quote code', [E('blockquote', 0, 10), E('pre', 6, 4)]);
+ok('a code block inside a quote nests', /<blockquote[^>]*>quote <pre[^>]*>code<\/pre><\/blockquote>/.test(nest), nest);
+const twin = telFormatText('same', [E('blockquote', 0, 4), E('pre', 0, 4)]);
+ok('two blocks over the same text close in reverse', /^<blockquote[^>]*><pre[^>]*>same<\/pre><\/blockquote>$/.test(twin), twin);
+
+// --- a link keeps the formatting around it ---------------------------------
+
+const bl = telFormatText('see https://example.com', [E('bold', 4, 19), E('url', 4, 19)]);
+ok('a bold link stays bold', /<b>[^]*<a [^>]*href="https:\/\/example\.com/.test(bl), bl);
+
+// --- revealed spoilers and opened quotes survive a redraw ------------------
+
+ok('a spoiler starts hidden', !telFormatText('x', [E('spoiler', 0, 1)]).includes('shown'));
+ok('a revealed one is drawn revealed', telFormatText('x', [E('spoiler', 0, 1)], { spoiler: true }).includes('tel-spoiler shown'));
+const openQ = telFormatText('long quote', [E('blockquote', 0, 10, { collapsed: true })], { quote: true });
+ok('an opened quote is drawn open', openQ.includes('tel-quote-exp') && !openQ.includes('tel-quote-collapsed'), openQ);
+ok('and can still be closed', openQ.includes('telToggleQuote(event,this)'), openQ);
+const multi = telFormatText('ab', [E('spoiler', 0, 2), E('bold', 1, 1)], { spoiler: true });
+eq('every piece of a revealed spoiler is revealed', count(multi, /tel-spoiler shown/g), count(multi, /tel-spoiler/g));
+
+// The tap handlers remember what was opened, per message.
+{
+  const state = { peer: { kind: 'user', id: '8' } };
+  const mk = (cls) => ({ classList: new Set(cls), });
+  const sp = [mk(['tel-spoiler']), mk(['tel-spoiler'])];
+  const qs = [mk(['tel-quote-exp', 'tel-quote-collapsed'])];
+  sp.concat(qs).forEach((n) => { n.classList.toggle = function (c, on) { on ? this.add(c) : this.delete(c); }; n.classList.contains = n.classList.has; });
+  const msg = { getAttribute: () => '42', querySelectorAll: (sel) => sel === '.tel-spoiler' ? sp : qs };
+  sp.concat(qs).forEach((n) => { n.closest = () => msg; });
+  const api = new Function('telState', 'telPeerKey',
+    ['telOpenedKey', 'telOpened', 'telMarkOpened', 'telRevealSpoiler', 'telToggleQuote']
+      .map((n) => pick(tel, new RegExp('function ' + n + '\\([^)]*\\) \\{[\\s\\S]*?\\n\\}\\n'))).join('') +
+    '; return { reveal: telRevealSpoiler, toggle: telToggleQuote, opened: telOpened };',
+  )(state, (p) => p.kind + ':' + p.id);
+  api.reveal(sp[0]);
+  eq('one tap reveals every spoiler in the message', sp.map((n) => n.classList.has('shown')), [true, true]);
+  eq('and is remembered', api.opened(state.peer, { id: 42 }), { spoiler: true });
+  api.toggle({ target: { closest: () => null } }, qs[0]);
+  eq('a tap opens the quote', qs[0].classList.has('tel-quote-collapsed'), false);
+  eq('remembered too', api.opened(state.peer, { id: 42 }).quote, true);
+  api.toggle({ target: { closest: () => ({}) } }, qs[0]);
+  eq('a tap on a link inside leaves it', qs[0].classList.has('tel-quote-collapsed'), false);
+  api.toggle({ target: { closest: () => null } }, qs[0]);
+  eq('another tap closes it again', [qs[0].classList.has('tel-quote-collapsed'), api.opened(state.peer, { id: 42 }).quote], [true, false]);
+  eq('another message is untouched', api.opened(state.peer, { id: 43 }), null);
+}
+ok('the bubble passes what was opened', tel.includes("telFormatText(m.text, m.entities, telOpened(peer, m))"));
+ok('a tap on a quote does not open the message menu', /el\.closest\('[^']*\.tel-quote-exp[^']*'\)/.test(tel));
+
+// The expandable quote carries Telegram's arrow, turned up once open.
+const css = readFileSync(join(here, '..', 'static', 'css', 'tel.css'), 'utf8');
+ok('an expandable quote has an arrow', /\.tel-quote-exp::after \{[^}]*rotate\(45deg\)/.test(css));
+ok('which turns up when open', /\.tel-quote-exp:not\(\.tel-quote-collapsed\)::after \{[^}]*rotate\(-135deg\)/.test(css));
 
 console.log(`${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

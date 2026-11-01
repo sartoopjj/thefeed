@@ -73,6 +73,10 @@ type Changes struct {
 	// in the entity, so a row can be dropped without re-reading the list.
 	Gone []Peer `json:"gone,omitempty"`
 
+	// Deleted are messages removed on Telegram: deleted for everyone, or by a
+	// self-destruct timer. Telegram's terms forbid keeping them on screen.
+	Deleted []Deletion `json:"deleted,omitempty"`
+
 	// Resync means the cursor is too far behind for Telegram to answer with a
 	// difference, so the caller has to fall back to listing conversations.
 	Resync bool `json:"resync"`
@@ -137,6 +141,7 @@ func (b *Bridge) Changes(ctx context.Context, from UpdateState) (*Changes, error
 			InReads:  h.InReads,
 			Mutes:    h.Mutes,
 			Gone:     h.Gone,
+			Deleted:  h.Deleted,
 		}, nil
 
 	case *tg.UpdatesDifferenceSlice:
@@ -158,6 +163,7 @@ func (b *Bridge) Changes(ctx context.Context, from UpdateState) (*Changes, error
 			InReads:  h.InReads,
 			Mutes:    h.Mutes,
 			Gone:     h.Gone,
+			Deleted:  h.Deleted,
 		}, nil
 
 	case *tg.UpdatesDifferenceTooLong:
@@ -186,6 +192,14 @@ type PeerInRead struct {
 	Unread int `json:"unread"`
 }
 
+// Deletion is one delete update. ChannelID 0 is the account's own box --
+// private chats and basic groups -- where a message id is unique across all
+// of them; otherwise the ids belong to that channel or supergroup.
+type Deletion struct {
+	ChannelID int64 `json:"channelId,string,omitempty"`
+	IDs       []int `json:"ids"`
+}
+
 // PeerMute is one conversation's notification setting as Telegram now has it.
 type PeerMute struct {
 	Peer  Peer `json:"peer"`
@@ -202,6 +216,7 @@ type harvest struct {
 	InReads  []PeerInRead
 	Mutes    []PeerMute
 	Gone     []Peer
+	Deleted  []Deletion
 	// DefaultsChanged marks an account-wide notification change (the per-type
 	// defaults, not one conversation). The cached defaults are stale after it.
 	DefaultsChanged bool
@@ -232,6 +247,14 @@ func otherUpdates(ups []tg.UpdateClass, users []tg.UserClass, chats []tg.ChatCla
 			out.Msgs = append(out.Msgs, u.Message)
 		case *tg.UpdateEditMessage:
 			out.Msgs = append(out.Msgs, u.Message)
+		case *tg.UpdateDeleteMessages:
+			if len(u.Messages) > 0 {
+				out.Deleted = append(out.Deleted, Deletion{IDs: u.Messages})
+			}
+		case *tg.UpdateDeleteChannelMessages:
+			if len(u.Messages) > 0 {
+				out.Deleted = append(out.Deleted, Deletion{ChannelID: u.ChannelID, IDs: u.Messages})
+			}
 		case *tg.UpdateChannel:
 			if seen[u.ChannelID] {
 				continue

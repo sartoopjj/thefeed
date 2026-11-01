@@ -42,6 +42,7 @@ func (s *Server) handleSettings(w http.ResponseWriter, r *http.Request) {
 			"lang":               pl.Lang,
 			"scanPromptOff":      pl.ScanPromptOff,
 			"mirrorNoteOff":      pl.MirrorNoteOff,
+			"telIntroSeen":       pl.TelIntroSeen,
 			"profilePicsEnabled": pl.ProfilePicsEnabled,
 			"skipUpdateVersion":  pl.SkipUpdateVersion,
 			"downloadedVersion":  pl.DownloadedVersion,
@@ -71,6 +72,7 @@ func (s *Server) handleSettings(w http.ResponseWriter, r *http.Request) {
 			Lang               *string  `json:"lang"`
 			ScanPromptOff      *bool    `json:"scanPromptOff"`
 			MirrorNoteOff      *bool    `json:"mirrorNoteOff"`
+			TelIntroSeen       *bool    `json:"telIntroSeen"`
 			ProfilePicsEnabled *bool    `json:"profilePicsEnabled"`
 			SkipUpdateVersion  *string  `json:"skipUpdateVersion"`
 			DownloadedVersion  *string  `json:"downloadedVersion"`
@@ -116,6 +118,9 @@ func (s *Server) handleSettings(w http.ResponseWriter, r *http.Request) {
 		}
 		if req.MirrorNoteOff != nil {
 			pl.MirrorNoteOff = *req.MirrorNoteOff
+		}
+		if req.TelIntroSeen != nil {
+			pl.TelIntroSeen = *req.TelIntroSeen
 		}
 		if req.ScanPromptOff != nil {
 			pl.ScanPromptOff = *req.ScanPromptOff

@@ -24,13 +24,18 @@ import mobile.Server
 
 class ThefeedService : Service() {
     private var server: Server? = null
+    // Set from a start until it finishes; onStartCommand follows onCreate
+    // before the server exists, and one server is all there may be.
+    @Volatile
+    private var starting = false
 
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
         createMessageNotificationChannel()
         startForeground(NOTIFICATION_ID, buildNotification("Starting local service..."))
-        savePort(-1)
+        // A process killed without onDestroy leaves the last launch's pair.
+        clearEndpoint()
         startServerAsync()
     }
 
@@ -49,8 +54,7 @@ class ThefeedService : Service() {
         } catch (_: Throwable) {
         }
         server = null
-        clearSecret()
-        savePort(-1)
+        clearEndpoint()
         super.onDestroy()
         // Kill the whole app process so the activity doesn't linger.
         android.os.Process.killProcess(android.os.Process.myPid())
@@ -59,7 +63,8 @@ class ThefeedService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     private fun startServerAsync() {
-        if (server != null) return
+        if (server != null || starting) return
+        starting = true
         Thread {
             try {
                 val dataDir = File(filesDir, "thefeeddata")
@@ -92,13 +97,13 @@ class ThefeedService : Service() {
                 // Every request to the local server must carry this as HTTP
                 // Basic. It lives in app-private prefs, which no other app can
                 // read -- which is the point, since loopback is not private.
-                saveSecret(s.password())
-                savePort(actual)
+                saveEndpoint(actual, s.password())
                 updateForegroundNotification("Running on http://127.0.0.1:$actual")
             } catch (e: Throwable) {
-                clearSecret()
-                savePort(-1)
+                clearEndpoint()
                 updateForegroundNotification("Failed: ${e.message ?: e.javaClass.simpleName}")
+            } finally {
+                starting = false
             }
         }.start()
     }
@@ -135,19 +140,16 @@ class ThefeedService : Service() {
         return getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).getInt(PREF_PORT, -1)
     }
 
-    private fun savePort(port: Int) {
+    // Port and secret change together, in one edit, so a reader never pairs
+    // one server's port with another's secret.
+    private fun saveEndpoint(port: Int, secret: String) {
         getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            .edit().putInt(PREF_PORT, port).apply()
+            .edit().putInt(PREF_PORT, port).putString(PREF_LOCAL_SECRET, secret).apply()
     }
 
-    private fun saveSecret(secret: String) {
+    private fun clearEndpoint() {
         getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            .edit().putString(PREF_LOCAL_SECRET, secret).apply()
-    }
-
-    private fun clearSecret() {
-        getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            .edit().remove(PREF_LOCAL_SECRET).apply()
+            .edit().putInt(PREF_PORT, -1).remove(PREF_LOCAL_SECRET).apply()
     }
 
     private fun createNotificationChannel() {

@@ -755,6 +755,57 @@
       margin-inline-start: auto
     }
 
+    /* Search over the loaded posts, floating under the topbar. */
+    .tm-search-row {
+      position: absolute;
+      top: 72px;
+      inset-inline: 10px;
+      z-index: 6;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      padding: 4px 6px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-pill);
+      background: color-mix(in srgb, var(--bg2) 94%, transparent);
+      box-shadow: var(--shadow-sm)
+    }
+
+    .tm-search-row[hidden] {
+      display: none
+    }
+
+    .tm-search-ic .icon svg {
+      width: 17px;
+      height: 17px;
+      color: var(--text-dim)
+    }
+
+    input.tm-search {
+      flex: 1;
+      min-width: 0;
+      padding: 7px 10px;
+      border: 0;
+      border-radius: var(--radius-pill);
+      background: transparent;
+      color: var(--text);
+      font: inherit
+    }
+
+    input.tm-search:focus {
+      outline: none
+    }
+
+    /* The row's own close button is the one ×. */
+    input.tm-search::-webkit-search-cancel-button {
+      -webkit-appearance: none;
+      display: none
+    }
+
+    .tm-refresh.active {
+      color: var(--accent)
+    }
+
     /* Topbar refresh button */
     .tm-refresh {
       background: none;

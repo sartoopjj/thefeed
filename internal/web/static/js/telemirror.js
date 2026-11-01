@@ -322,6 +322,7 @@
     var app = document.getElementById('app');
     if (app) app.classList.remove('chat-open');
     tmClearTopbar();
+    tmCloseSearch();
   }
 
   window.openTelemirror = function (adopt) {
@@ -329,6 +330,7 @@
     document.documentElement.classList.add('tm-open');
     // Land on the list, not a half-open channel from a previous session.
     document.documentElement.classList.remove('tm-channel');
+    tmCloseSearch();
     var app = document.getElementById('app');
     if (app) app.classList.remove('chat-open');
     // adopt = switching from another section (Chat) that left its history entry
@@ -516,6 +518,8 @@
 
   async function tmSelect(username, opts) {
     opts = opts || {};
+    // A search belongs to the channel it was typed in.
+    if (tmActive !== username) tmCloseSearch();
     tmActive = username;
     tmRenderChannels();
     tmRenderTopbar(null, username);
@@ -630,6 +634,70 @@
     document.getElementById('tmTopbarName').textContent = name || '';
     document.getElementById('tmTopbarSub').textContent = sub || '';
   }
+
+  // ===== search =====
+  // Over the posts already loaded in the open channel: no request is made.
+  // Persian is matched leniently -- Arabic and Persian yeh/kaf, and the
+  // zero-width non-joiner, count as the same.
+  var tmSearchQ = '';
+
+  function tmNormSearch(s) {
+    return String(s || '').toLowerCase()
+      .replace(/\u064a/g, '\u06cc').replace(/\u0643/g, '\u06a9').replace(/\u200c/g, '');
+  }
+
+  function tmApplySearch() {
+    var box = document.getElementById('tmContent');
+    if (!box) return;
+    var q = tmNormSearch(tmSearchQ).trim();
+    var shown = 0, total = 0;
+    box.querySelectorAll('.tm-post').forEach(function (el) {
+      total++;
+      var text = tmPostText[el.getAttribute('data-pid')] || el.textContent || '';
+      var hit = !q || tmNormSearch(text).indexOf(q) >= 0;
+      el.style.display = hit ? '' : 'none';
+      if (hit) shown++;
+    });
+    var none = document.getElementById('tmSearchNone');
+    if (q && total && !shown) {
+      if (!none) {
+        none = document.createElement('div');
+        none.id = 'tmSearchNone';
+        none.className = 'tm-empty';
+        box.appendChild(none);
+      }
+      none.textContent = tmI18n('telemirror_search_none', 'No posts match');
+    } else if (none) {
+      none.remove();
+    }
+  }
+
+  window.tmFilterPosts = function (q) {
+    tmSearchQ = q || '';
+    tmApplySearch();
+  };
+
+  function tmCloseSearch() {
+    tmSearchQ = '';
+    var row = document.getElementById('tmSearchRow');
+    if (row) row.hidden = true;
+    var inp = document.getElementById('tmSearchInput');
+    if (inp) inp.value = '';
+    var btn = document.getElementById('tmSearchBtn');
+    if (btn) btn.classList.remove('active');
+    tmApplySearch();
+  }
+
+  window.tmToggleSearch = function () {
+    var row = document.getElementById('tmSearchRow');
+    if (!row) return;
+    if (!row.hidden) { tmCloseSearch(); return; }
+    row.hidden = false;
+    var btn = document.getElementById('tmSearchBtn');
+    if (btn) btn.classList.add('active');
+    var inp = document.getElementById('tmSearchInput');
+    if (inp) inp.focus();
+  };
 
   function tmRenderPosts(data) {
     var content = document.getElementById('tmContent');
@@ -771,6 +839,8 @@
     }
     content.innerHTML = html;
     tmNeuterLinks(content);
+    // A refresh or older page keeps the search that is open.
+    tmApplySearch();
     // Jump to the newest (bottom) post via scrollIntoView on the last post.
     // Re-assert a couple of times to absorb the height growth as the newest
     // posts' images finish loading, unless the user has already scrolled away.

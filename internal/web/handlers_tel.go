@@ -108,6 +108,11 @@ type telHub struct {
 	// connecting marks a connect running in the background; the request
 	// returns at once, since the handshake outlives any sensible timeout.
 	connecting bool
+	// connectingKey is the config that connect is for.
+	connectingKey string
+	// connGen numbers connection attempts; disconnect moves it on, so an
+	// attempt it superseded can no longer install itself or clear flags.
+	connGen uint64
 	// connectCancel aborts a connect in flight, so the user can give up
 	// instead of watching a counter they cannot stop.
 	connectCancel context.CancelFunc
@@ -264,7 +269,7 @@ func (h *telHub) reset(ctx context.Context) {
 
 // connect brings up the tunnel and the Telegram client. It runs without the
 // hub lock, which would otherwise block every status call for minutes.
-func (h *telHub) connect(ctx context.Context, cfg Config, nickname string) error {
+func (h *telHub) connect(ctx context.Context, cfg Config, nickname string, gen uint64) error {
 	// The bridge outlives its request, so the fetcher hangs off the hub's
 	// lifetime context, not the request's.
 	h.mu.Lock()
@@ -277,6 +282,11 @@ func (h *telHub) connect(ctx context.Context, cfg Config, nickname string) error
 	// Cancelling this stops the attempt: gotd's client runs on runCtx, which
 	// the request's own context does not reach.
 	h.mu.Lock()
+	if h.connGen != gen {
+		h.mu.Unlock()
+		cancel()
+		return context.Canceled
+	}
 	h.connectCancel = cancel
 	h.mu.Unlock()
 
@@ -433,6 +443,11 @@ func (h *telHub) connect(ctx context.Context, cfg Config, nickname string) error
 		return fail(runCtx.Err())
 	}
 	h.mu.Lock()
+	if h.connGen != gen {
+		h.mu.Unlock()
+		b.Stop()
+		return fail(context.Canceled)
+	}
 	h.bridge = b
 	h.sessCancel = cancel
 	h.connectCancel = nil
@@ -628,63 +643,93 @@ func (h *telHub) callBridge(ctx context.Context, retry bool, fn func(*tgbridge.B
 		return err
 	}
 	err = fn(b)
-	if err == nil || !isDeadConnection(err) || !retry {
-		return err
+	if err == nil {
+		return nil
+	}
+	if !isDeadConnection(err) || !retry {
+		return &bridgeErr{b, err}
 	}
 
-	// Claim the connect flag, exactly as /api/tel/connect does. Without it
-	// the hub has no bridge AND is not "connecting" for the whole rebuild --
-	// the two conditions /api/tel/connect checks -- so a reconnect tapped in
-	// that window builds a second bridge, and the one that loses the
-	// assignment polls DNS for ever on the user's query budget.
+	// Claim the connect flag, exactly as /api/tel/connect does, in the same
+	// lock as the teardown: a config picked in between must not be undone.
 	h.mu.Lock()
 	cfg, nick := h.lastCfg, h.lastNick
-	busy := h.connecting
-	if !busy && cfg.Domain != "" {
-		h.connecting = true
-	}
-	h.mu.Unlock()
-	if cfg.Domain == "" {
-		return err // nothing to rebuild from
-	}
-	if busy {
-		// Someone is already building one; ours would race it. The caller
-		// gets the original failure and the next call finds the new bridge.
-		return err
-	}
-	defer func() {
-		h.mu.Lock()
-		h.connecting = false
+	// Someone is already building one, or this bridge was replaced: either way
+	// ours would race it. The caller gets the original failure and the next
+	// call finds the new bridge.
+	if h.connecting || cfg.Domain == "" || h.bridge != b {
 		h.mu.Unlock()
-	}()
-	h.disconnect()
-	if rerr := h.connect(ctx, cfg, nick); rerr != nil {
+		return &bridgeErr{b, err}
+	}
+	stop := h.detachLocked()
+	h.connecting, h.connectingKey = true, chatServerKey(cfg.Domain)
+	gen := h.connGen
+	h.mu.Unlock()
+	stop()
+	defer h.connectDone(gen)
+	if rerr := h.connect(ctx, cfg, nick, gen); rerr != nil {
 		return rerr
 	}
-	b, err2 := h.current()
+	b2, err2 := h.current()
 	if err2 != nil {
 		return err2
 	}
-	return fn(b)
+	if err := fn(b2); err != nil {
+		return &bridgeErr{b2, err}
+	}
+	return nil
 }
+
+// bridgeErr ties a failure to the bridge that produced it, so tearing down a
+// dead bridge never takes a newer one with it.
+type bridgeErr struct {
+	b   *tgbridge.Bridge
+	err error
+}
+
+func (e *bridgeErr) Error() string { return e.err.Error() }
+func (e *bridgeErr) Unwrap() error { return e.err }
 
 func (h *telHub) disconnect() {
 	h.mu.Lock()
-	b, cancel := h.bridge, h.sessCancel
-	// Abort a connect that is still running, too.
-	if h.connectCancel != nil {
-		h.connectCancel()
-		h.connectCancel = nil
-	}
-	h.bridge, h.sessCancel = nil, nil
-	h.serverKey = ""
+	stop := h.detachLocked()
 	h.mu.Unlock()
-	if b != nil {
-		b.Stop()
+	stop()
+}
+
+// detachLocked takes the live bridge and any connect in flight off the hub and
+// returns what stops them, to be run once the lock is released.
+func (h *telHub) detachLocked() func() {
+	b, cancel, connCancel := h.bridge, h.sessCancel, h.connectCancel
+	h.bridge, h.sessCancel, h.connectCancel = nil, nil, nil
+	h.serverKey = ""
+	// The attempt under way is over too; its own cleanup now stands down.
+	h.connecting, h.connectingKey = false, ""
+	h.connGen++
+	return func() {
+		// Abort a connect that is still running, too.
+		if connCancel != nil {
+			connCancel()
+		}
+		if b != nil {
+			b.Stop()
+		}
+		if cancel != nil {
+			cancel()
+		}
 	}
-	if cancel != nil {
-		cancel()
+}
+
+// connectDone ends attempt gen, unless a newer one has taken over. Reports
+// whether gen was still the current attempt.
+func (h *telHub) connectDone(gen uint64) bool {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.connGen != gen {
+		return false
 	}
+	h.connecting, h.connectingKey, h.connectCancel = false, "", nil
+	return true
 }
 
 // beginOp starts a new user-visible operation.
@@ -716,7 +761,17 @@ func (h *telHub) dropDeadBridge(err error) {
 	if err == nil || !isDeadConnection(err) {
 		return
 	}
-	h.disconnect()
+	h.mu.Lock()
+	var be *bridgeErr
+	if errors.As(err, &be) && be.b != h.bridge {
+		// That bridge is already gone; the current one, or the connect under
+		// way, is not this failure's.
+		h.mu.Unlock()
+		return
+	}
+	stop := h.detachLocked()
+	h.mu.Unlock()
+	stop()
 }
 
 // isDeadConnection reports whether an error means the Telegram connection is
@@ -1144,6 +1199,7 @@ func (h *telHub) Sync(ctx context.Context) error {
 	// -- otherwise it rings once more on the very poll that learns it is muted.
 	h.store().ApplyMutes(ch.Mutes)
 	n := h.store().ApplyNew(ch.New)
+	h.store().ApplyDeletes(ch.Deleted)
 	h.store().ApplyReads(ch.Reads)
 	// Reads made on another device, which is the only way an unread badge here
 	// can come down without the user opening the chat here too.

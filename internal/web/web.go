@@ -160,6 +160,10 @@ type ProfileList struct {
 	// otherwise re-show the note on every launch.
 	MirrorNoteOff bool `json:"mirrorNoteOff,omitempty"`
 
+	// TelIntroSeen: the Telegram section's intro was read. Server-side for the
+	// same reason as ScanPromptOff.
+	TelIntroSeen bool `json:"telIntroSeen,omitempty"`
+
 	// ProfilePicsEnabled enables fetching avatars over DNS when the
 	// GitHub relay can't serve them. Off by default.
 	ProfilePicsEnabled bool `json:"profilePicsEnabled,omitempty"`
@@ -633,6 +637,12 @@ func (s *Server) serve(ln net.Listener) error {
 	mux.HandleFunc("/api/tel/join", s.handleTelJoin)
 	mux.HandleFunc("/api/tel/sponsored", s.handleTelSponsored)
 	mux.HandleFunc("/api/tel/sponsored/act", s.handleTelSponsoredAct)
+	mux.HandleFunc("/api/tel/status", s.handleTelStatus)
+	mux.HandleFunc("/api/tel/typing", s.handleTelTyping)
+	mux.HandleFunc("/api/tel/direct", s.handleTelDirect)
+	mux.HandleFunc("/api/tel/edit", s.handleTelEdit)
+	mux.HandleFunc("/api/tel/delete-messages", s.handleTelDeleteMessages)
+	mux.HandleFunc("/api/tel/forward", s.handleTelForward)
 	mux.HandleFunc("/api/chat/poll", s.handleChatPoll)
 	mux.HandleFunc("/api/chat/peer-status", s.handleChatPeerStatus)
 	mux.HandleFunc("/api/chat/settings", s.handleChatSettings)

@@ -269,14 +269,15 @@ class MainActivity : ComponentActivity() {
             ) {
                 val secret = getLocalSecret()
                 if (handler == null) return
-                // Only ever to our own loopback server, and only on the first
-                // attempt (useHttpAuthUsernamePassword() is true exactly then):
-                // a retry means the secret was refused, and looping would
-                // hammer the server.
-                if (secret.isEmpty() || host != "127.0.0.1" || !handler.useHttpAuthUsernamePassword()) {
+                // Only ever to our own loopback server. A retry with a secret
+                // already offered means it was refused: stop rather than loop.
+                // A newer secret than the last one offered still gets a try.
+                val refused = !handler.useHttpAuthUsernamePassword() && secret == lastAuthSecret
+                if (secret.isEmpty() || host != "127.0.0.1" || refused) {
                     handler.cancel()
                     return
                 }
+                lastAuthSecret = secret
                 handler.proceed("thefeed", secret)
             }
 
@@ -487,6 +488,9 @@ class MainActivity : ComponentActivity() {
     // The passcode, between a successful unlock and the server being up.
     // Cleared as soon as it has been handed over.
     private var pendingUnlockPassword: String? = null
+
+    // The secret last offered to the local server's auth challenge.
+    private var lastAuthSecret = ""
 
     private fun getLocalSecret(): String {
         val prefs = getSharedPreferences(ThefeedService.PREFS_NAME, Context.MODE_PRIVATE)

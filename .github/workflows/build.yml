@@ -348,7 +348,7 @@ jobs:
   ios-ipa:
     needs: test
     if: github.event_name != 'workflow_dispatch' || contains(fromJSON('["all","ios"]'), inputs.platforms)
-    runs-on: macos-14
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -420,7 +420,7 @@ jobs:
   macos-dmg:
     needs: test
     if: github.event_name != 'workflow_dispatch' || contains(fromJSON('["all","macos"]'), inputs.platforms)
-    runs-on: macos-14
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -436,7 +436,7 @@ jobs:
 
       # `make mac-dmg` does the heavy lifting (universal binary via
       # lipo, .app bundle, .icns from the iOS icon, hdiutil DMG).
-      # macos-14 runners ship Xcode tools, so lipo/sips/iconutil/
+      # macos-15 runners ship Xcode tools, so lipo/sips/iconutil/
       # hdiutil are all on PATH.
       - name: Build macOS DMG
         env:

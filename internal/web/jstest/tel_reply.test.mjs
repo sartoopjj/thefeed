@@ -31,7 +31,7 @@ function harness(peer, msgs) {
   const seen = { sheet: '', renders: 0, focused: false };
   const api = new Function('telState', 'telThread', 'telPeerKey', 'telSheet', 'telSheetItem', 'telT',
     'telCloseSheet', 'telRender', 'telMediaLabel', 'document', 'window', 'seen',
-    fn('telFindMsg') + fn('telReplyFor') + fn('telMsgTap') + fn('telMsgMenu') + fn('telStartReply') +
+    fn('telFindMsg') + fn('telReplyFor') + fn('telMsgTap') + fn('telProtected') + fn('telMsgMenu') + fn('telChannelBased') + fn('telCanDelete') + fn('telStartReply') +
     fn('telCancelReply') +
     '; return { tap: telMsgTap, menu: telMsgMenu, start: telStartReply, cancel: telCancelReply, replyFor: telReplyFor };',
   )(state, (k) => state.threads[k], (p) => p ? p.kind + ':' + p.id : '',
@@ -64,6 +64,11 @@ const target = (matches) => ({ closest: (sel) => (matches && sel.split(', ').som
   eq('a read-only channel offers no Reply', /telStartReply/.test(seen.sheet), false);
   eq('but still Copy', /telCopyMsg\(3\)/.test(seen.sheet), true);
   seen.sheet = '';
+  api.menu(4);
+  eq('a post with no text can still be forwarded', /telStartForward\(4\)/.test(seen.sheet), true);
+}
+{
+  const { seen, api } = harness({ ...channel, protected: true }, [{ id: 4, text: '' }]);
   api.menu(4);
   eq('nothing to offer, no sheet', seen.sheet, '');
 }
@@ -102,6 +107,7 @@ const target = (matches) => ({ closest: (sel) => (matches && sel.split(', ').som
     ['a reply started in another chat is not sent here', { key: 'user:8', id: 2 }, undefined],
   ]) {
     const peer = group;
+    const box = { value: 'see you at 7', style: { height: '96px' } };
     const state = { peer, reply, draft: '', threads: { 'group:7': { msgs: [] } } };
     const calls = [];
     let first = null;
@@ -109,7 +115,7 @@ const target = (matches) => ({ closest: (sel) => (matches && sel.split(', ').som
       'telRender', 'telWhenIdle', 'telSteps', 'telOp', 'telCall', 'telTouchPreview', 'telStepsMore', 'telStepAdvance',
       'telHistoryQuery', 'telFetchCursor', 'telMergeMessages', 'telDropPending', 'telT', 'telRefreshTicks', 'telStepsDone',
       'var telPendingSeq = 0;' + fn('telSend') + '; return telSend;',
-    )({ getElementById: () => ({ value: 'see you at 7' }) }, state, (p) => p.kind + ':' + p.id,
+    )({ getElementById: () => box }, state, (p) => p.kind + ':' + p.id,
       (k) => state.threads[k], mk(state), 1e12,
       () => { first = first || JSON.parse(JSON.stringify(state.threads['group:7'].msgs[0] || null)); },
       async () => {}, () => {}, async (l, f) => f(),
@@ -119,6 +125,7 @@ const target = (matches) => ({ closest: (sel) => (matches && sel.split(', ').som
     eq(name, calls[0].replyTo, want);
     eq(name + ': the placeholder shows it at once', first && first.replyTo, want);
     eq(name + ': the reply is used up', state.reply, null);
+    eq(name + ': the box shrinks back after sending', box.style.height, '');
   }
 }
 
@@ -139,6 +146,17 @@ const target = (matches) => ({ closest: (sel) => (matches && sel.split(', ').som
   eq('only a real message is tappable', /!m\.pending && !m\.service \? ' onclick="telMsgTap\(event,/.test(pane), true);
   eq('switching conversations drops an unsent reply', /telState\.reply = null;/.test(fn('telEnterThread')), true);
   eq('Escape cancels it', /Escape[\s\S]*telCancelReply\(\)/.test(fn('telInputKey')), true);
+  for (const [name, mobile, shift, wantSent] of [
+    ['desktop: Enter sends', false, false, 1],
+    ['desktop: Shift+Enter is a new line', false, true, 0],
+    ['phone: Enter is a new line', true, false, 0],
+  ]) {
+    let sent = 0, prevented = 0;
+    const key = new Function('telState', 'telSend', 'telCancelReply', 'chatIsMobile', fn('telInputKey') + '; return telInputKey;')(
+      { reply: null }, () => { sent++; }, () => {}, () => mobile);
+    key({ key: 'Enter', shiftKey: shift, preventDefault: () => { prevented++; } });
+    eq(name, [sent, prevented], [wantSent, wantSent]);
+  }
   eq('a retried reply is still a reply', /telState\.reply = msg\.replyTo/.test(fn('telRetrySend')), true);
 }
 for (const k of ['tel_reply', 'tel_reply_cancel', 'tel_you']) {

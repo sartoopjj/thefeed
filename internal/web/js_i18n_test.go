@@ -341,3 +341,107 @@ func TestJSTelReply(t *testing.T) {
 	}
 	t.Logf("%s", out)
 }
+
+// Deleted and self-destructed messages must leave the open conversation.
+func TestJSTelDeletes(t *testing.T) {
+	node, err := exec.LookPath("node")
+	if err != nil {
+		t.Skip("node not installed")
+	}
+	out, err := exec.Command(node, "jstest/tel_deletes.test.mjs").CombinedOutput()
+	if err != nil {
+		t.Fatalf("tel deletes failed:\n%s", out)
+	}
+	t.Logf("%s", out)
+}
+
+// Online status and typing must be reported, cheaply.
+func TestJSTelPresence(t *testing.T) {
+	node, err := exec.LookPath("node")
+	if err != nil {
+		t.Skip("node not installed")
+	}
+	out, err := exec.Command(node, "jstest/tel_presence.test.mjs").CombinedOutput()
+	if err != nil {
+		t.Fatalf("tel presence failed:\n%s", out)
+	}
+	t.Logf("%s", out)
+}
+
+// Direct messages to a channel's admins: button, one call, nothing paid.
+func TestJSTelDirect(t *testing.T) {
+	node, err := exec.LookPath("node")
+	if err != nil {
+		t.Skip("node not installed")
+	}
+	out, err := exec.Command(node, "jstest/tel_direct.test.mjs").CombinedOutput()
+	if err != nil {
+		t.Fatalf("tel direct failed:\n%s", out)
+	}
+	t.Logf("%s", out)
+}
+
+// The ⋮ on every message: edit our own, delete where Telegram can.
+func TestJSTelMessageActions(t *testing.T) {
+	node, err := exec.LookPath("node")
+	if err != nil {
+		t.Skip("node not installed")
+	}
+	out, err := exec.Command(node, "jstest/tel_msgactions.test.mjs").CombinedOutput()
+	if err != nil {
+		t.Fatalf("tel message actions failed:\n%s", out)
+	}
+	t.Logf("%s", out)
+}
+
+// Searching the posts of the open Mirror channel.
+func TestJSMirrorSearch(t *testing.T) {
+	node, err := exec.LookPath("node")
+	if err != nil {
+		t.Skip("node not installed")
+	}
+	out, err := exec.Command(node, "jstest/tm_search.test.mjs").CombinedOutput()
+	if err != nil {
+		t.Fatalf("mirror search failed:\n%s", out)
+	}
+	t.Logf("%s", out)
+}
+
+// Forwarding: the ⋮ item, the picker and its options, the call, the header.
+func TestJSTelForward(t *testing.T) {
+	node, err := exec.LookPath("node")
+	if err != nil {
+		t.Skip("node not installed")
+	}
+	out, err := exec.Command(node, "jstest/tel_forward.test.mjs").CombinedOutput()
+	if err != nil {
+		t.Fatalf("forward failed:\n%s", out)
+	}
+	t.Logf("%s", out)
+}
+
+// Switching the Telegram config while one is live.
+func TestJSTelSwitch(t *testing.T) {
+	node, err := exec.LookPath("node")
+	if err != nil {
+		t.Skip("node not installed")
+	}
+	out, err := exec.Command(node, "jstest/tel_switch.test.mjs").CombinedOutput()
+	if err != nil {
+		t.Fatalf("switch failed:\n%s", out)
+	}
+	t.Logf("%s", out)
+}
+
+// The Telegram intro is remembered on the backend, across ports.
+func TestJSTelIntro(t *testing.T) {
+	node, err := exec.LookPath("node")
+	if err != nil {
+		t.Skip("node not installed")
+	}
+	out, err := exec.Command(node, "jstest/tel_intro.test.mjs").CombinedOutput()
+	if err != nil {
+		t.Fatalf("intro failed:\n%s", out)
+	}
+	t.Logf("%s", out)
+}

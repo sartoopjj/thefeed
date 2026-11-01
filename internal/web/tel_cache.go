@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"sort"
 	"sync"
+	"time"
 
 	"github.com/sartoopjj/thefeed/internal/tgbridge"
 )
@@ -32,10 +33,15 @@ const (
 	// cover what a user actually scrolls back through, not whole histories.
 	telCacheMaxThreads   = 300
 	telCacheMaxPerThread = 60
+	// Deleted ids remembered, so the page can drop its own copies and a page
+	// fetched before the delete cannot bring them back.
+	telCacheMaxTombstones = 300
 )
 
 type telThreadEntry struct {
 	Msgs []tgbridge.Message `json:"msgs"`
+	// Deleted are ids this channel or supergroup deleted (see ApplyDeletes).
+	Deleted []int `json:"deleted,omitempty"`
 	// Touched orders eviction: the least recently read thread goes first.
 	Touched int64 `json:"touched"`
 }
@@ -62,6 +68,12 @@ type telCacheData struct {
 	// cursor without the messages it refers to would claim everything is
 	// current while the list is empty.
 	Cursor tgbridge.UpdateState `json:"cursor,omitzero"`
+	// BoxDeleted are ids deleted in the account's own box. Box ids are unique
+	// across every private chat and basic group, so one list serves them all.
+	BoxDeleted []int `json:"boxDeleted,omitempty"`
+	// Directs maps a channel to its direct-messages conversation, so finding
+	// it costs one call per channel, ever.
+	Directs map[string]tgbridge.Peer `json:"directs,omitempty"`
 }
 
 type telCache struct {
@@ -253,17 +265,41 @@ func (c *telCache) DialogsComplete() bool {
 }
 
 // Thread returns the cached messages for a conversation, oldest first.
+// Self-destructed ones are dropped from the cache as well as the answer.
 func (c *telCache) Thread(key string) []tgbridge.Message {
 	if c == nil {
 		return nil
 	}
 	c.mu.Lock()
-	defer c.mu.Unlock()
 	t, ok := c.data.Threads[key]
 	if !ok {
+		c.mu.Unlock()
 		return nil
 	}
-	return append([]tgbridge.Message(nil), t.Msgs...)
+	live, dropped := telLiveMessages(t.Msgs, time.Now())
+	if dropped {
+		t.Msgs = live
+		c.data.Threads[key] = t
+	}
+	out := append([]tgbridge.Message(nil), live...)
+	c.mu.Unlock()
+	if dropped {
+		c.save()
+	}
+	return out
+}
+
+// telLiveMessages leaves out messages past their self-destruct time.
+func telLiveMessages(msgs []tgbridge.Message, now time.Time) ([]tgbridge.Message, bool) {
+	sec := int(now.Unix())
+	out := make([]tgbridge.Message, 0, len(msgs))
+	for _, m := range msgs {
+		if m.Expires > 0 && sec >= m.Expires {
+			continue
+		}
+		out = append(out, m)
+	}
+	return out, len(out) != len(msgs)
 }
 
 // MergeThread folds new messages in by id, keeping the newest telCacheMaxPerThread.
@@ -273,24 +309,29 @@ func (c *telCache) MergeThread(key string, msgs []tgbridge.Message) {
 	}
 	c.mu.Lock()
 	t := c.data.Threads[key]
+	gone := intSet(c.deletedLocked(key))
 	byID := make(map[int]tgbridge.Message, len(t.Msgs)+len(msgs))
 	for _, m := range t.Msgs {
 		byID[m.ID] = m
 	}
 	// New wins: an edited message keeps its id and must replace the old text.
 	for _, m := range msgs {
+		if gone[m.ID] {
+			continue
+		}
 		byID[m.ID] = m
 	}
 	merged := make([]tgbridge.Message, 0, len(byID))
 	for _, m := range byID {
 		merged = append(merged, m)
 	}
+	merged, _ = telLiveMessages(merged, time.Now())
 	sort.Slice(merged, func(i, j int) bool { return merged[i].ID < merged[j].ID })
 	if len(merged) > telCacheMaxPerThread {
 		merged = merged[len(merged)-telCacheMaxPerThread:]
 	}
 	c.seq++
-	c.data.Threads[key] = telThreadEntry{Msgs: merged, Touched: c.seq}
+	c.data.Threads[key] = telThreadEntry{Msgs: merged, Touched: c.seq, Deleted: t.Deleted}
 	c.evictLocked()
 	c.mu.Unlock()
 	c.save()
@@ -658,7 +699,9 @@ func (c *telCache) bumpRow(p tgbridge.Peer, last tgbridge.Message, unread int) {
 	row.Peer = p
 	if last.ID > 0 {
 		row.TopMsg, row.When = last.ID, last.Date
-		if last.Text != "" {
+		if last.Expires > 0 {
+			row.Preview = ""
+		} else if last.Text != "" {
 			row.Preview = last.Text
 		}
 	}

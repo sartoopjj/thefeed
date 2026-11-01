@@ -1043,8 +1043,32 @@ html.tel-search-open #telPane .tel-msgs {
   color: var(--text-dim);
 }
 
-/* Expandable quotes are clamped; the author used one because the quote is
-   long, so showing all of it would bury the message. */
+/* Expandable quotes are clamped until tapped; the author used one because
+   the quote is long, so showing all of it would bury the message. */
+.tel-msg-text .tel-quote-exp {
+  position: relative;
+  padding-inline-end: 20px;
+  cursor: pointer;
+}
+
+/* The arrow Telegram puts on them: down while clamped, up once open. */
+.tel-msg-text .tel-quote-exp::after {
+  content: '';
+  position: absolute;
+  inset-inline-end: 6px;
+  bottom: 7px;
+  width: 6px;
+  height: 6px;
+  border-right: 2px solid var(--accent);
+  border-bottom: 2px solid var(--accent);
+  transform: rotate(45deg);
+}
+
+.tel-msg-text .tel-quote-exp:not(.tel-quote-collapsed)::after {
+  bottom: 4px;
+  transform: rotate(-135deg);
+}
+
 .tel-msg-text .tel-quote-collapsed {
   display: -webkit-box;
   -webkit-line-clamp: 3;
@@ -1148,6 +1172,37 @@ html.tel-search-open #telPane .tel-msgs {
      bubbles are drawn. */
   border: 1px solid var(--border);
   border-bottom-left-radius: 4px;
+}
+
+/* The ⋮ beside each message, as in the messenger: outside the bubble, on the
+   side away from the edge. */
+.tel-msg {
+  position: relative;
+}
+
+.tel-msg-more {
+  position: absolute;
+  bottom: 0;
+  padding: 2px;
+  border: 0;
+  background: none;
+  color: var(--text-dim);
+  line-height: 0;
+  cursor: pointer;
+  opacity: .9;
+}
+
+.tel-msg-more svg {
+  width: 18px;
+  height: 18px;
+}
+
+.tel-msg.in .tel-msg-more {
+  right: -26px;
+}
+
+.tel-msg.out .tel-msg-more {
+  left: -26px;
 }
 
 .tel-msg.out {
@@ -1374,6 +1429,56 @@ a.tel-kbd-url:hover {
   padding-bottom: calc(130px + var(--safe-bottom));
 }
 
+/* A conversation we cannot write in: Telegram's bottom bar instead of a
+   composer -- mute or unmute, and message the channel when it takes that. */
+.tel-ro-bar {
+  position: absolute;
+  inset-inline: 0;
+  bottom: 0;
+  z-index: 6;
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  padding: 8px 10px calc(10px + var(--safe-bottom));
+  pointer-events: none;
+}
+
+.tel-ro-btn {
+  pointer-events: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 16px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--msg-in);
+  color: var(--accent);
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  cursor: pointer;
+}
+
+.tel-ro-btn .icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+.tel-ro-busy .icon svg {
+  animation: tel-ro-spin 1s linear infinite;
+}
+
+.tel-ro-cancel {
+  margin-inline-start: 4px;
+  padding-inline-start: 8px;
+  border-inline-start: 1px solid var(--border);
+  color: var(--text-dim);
+}
+
+@keyframes tel-ro-spin {
+  to { transform: rotate(360deg); }
+}
+
 /* Channels the user may only read: a line instead of a composer. */
 .tel-compose-input {
   flex: 1;
@@ -1574,4 +1679,69 @@ a.tel-kbd-url:hover {
 
 .tel-msg-flash {
   animation: tel-msg-flash 2.2s ease-out;
+}
+
+/* "Forwarded from": a full-width line above the message, like the sender's
+   name, in the accent colour Telegram uses for it. */
+.tel-fwd {
+  flex: 1 0 100%;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  margin-bottom: 2px;
+  font-size: var(--text-xs);
+  color: var(--accent);
+}
+
+.tel-fwd span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tel-fwd .icon svg {
+  width: 13px;
+  height: 13px;
+}
+
+/* The forward picker: options, a search, then the chats. */
+.tel-fwd-opt {
+  cursor: pointer;
+}
+
+.tel-fwd-opt input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+input.tel-fwd-search {
+  margin: 6px 6px 4px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+}
+
+input.tel-fwd-search:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.tel-fwd-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.tel-fwd-row .tel-avatar {
+  flex: 0 0 auto;
+}
+
+.tel-fwd-none {
+  padding: 10px 12px;
 }
