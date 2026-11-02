@@ -58,6 +58,12 @@ const mkLoad = (state, calls, answer) => new Function(
   calls.length = 0;
   await api.load('group:6', { kind: 'group', id: 6 });
   eq('groups are never asked', calls.length, 0);
+  const bot = { kind: 'bot', id: 8 };
+  state.peer = bot;
+  await api.load('bot:8', bot);
+  eq('a bot is asked, as Telegram asks of every client', calls.map((c) => c.body), [{ peer: bot }]);
+  calls.length = 0;
+  state.peer = chan;
 
   state.busy = true;
   await api.load('channel:5', chan);
@@ -110,7 +116,7 @@ const mkLoad = (state, calls, answer) => new Function(
   const ad = { randomId: 'AQID' };
   const check = new Function('document', 'telAdAt', 'telAdAct', 'telAdViewed',
     fn('telAdCheckView') + '; return telAdCheckView;')(
-    { getElementById: () => box }, () => ad, (a, x) => sent.push([a, x.randomId]), {});
+    { getElementById: () => box, querySelector: () => null }, () => ad, (a, x) => sent.push([a, x.randomId]), {});
   textRect = { top: 450, bottom: 520, height: 70 };
   check();
   eq('half on screen is not a view', sent.length, 0);
@@ -146,11 +152,58 @@ const mkLoad = (state, calls, answer) => new Function(
   eq('and the user is told', toast, '[tel_ad_reported]');
 }
 
+
+// --- a bot's ad: a bar above the chat --------------------------------------------
+{
+  const bar = new Function('telEsc', 'telT', 'telAttrQ', 'telSafeText', 'telSafeURL', 'icon',
+    fn('telAdBarHTML') + '; return telAdBarHTML;')(esc, (k) => '[' + k + ']', esc, (x) => x,
+    new Function(fn('telSafeURL') + '; return telSafeURL;')(), () => '');
+  const html = bar({ randomId: 'x', title: '<b>Bot</b>', text: 'Try <img src=x onerror=alert(1)>',
+    url: 'https://t.me/somebot?start=1', button: 'VIEW BOT' });
+  eq('the bar is badged as an ad', /class="tel-ad-badge"[^>]*>\[tel_ad_label\]/.test(html), true);
+  eq('title and text are escaped', /<b>|<img/.test(html), false);
+  eq('the whole bar opens it, through telAdOpen', /class="tel-ad-bar-main"[^>]*onclick="telAdOpen\(0\)"/.test(html), true);
+  eq('and so does its button', /class="tel-ad-bar-btn"[^>]*onclick="telAdOpen\(0\)">VIEW BOT</.test(html), true);
+  eq('its menu is the ad menu', html.includes('onclick="telAdMenu(0)"'), true);
+  eq('the bar itself says Telegram placed it, not the bot', /class="tel-ad-bar-note"[^>]*>\[tel_ad_note_bot\]</.test(html), true);
+  eq('no raw link anywhere', /href=/.test(html), false);
+  eq('an unsafe link gets no button', bar({ randomId: 'x', url: 'javascript:alert(1)' }).includes('tel-ad-bar-btn'), false);
+  eq('a recommendation is labelled as one', bar({ randomId: 'x', recommended: true }).includes('[tel_ad_recommended]'), true);
+
+  const pane = fn('telRenderPane');
+  eq('a bot draws the bar, above the list', /peer\.kind === 'bot'[\s\S]{0,80}th\.ads[\s\S]{0,80}telAdBarHTML\(th\.ads\[0\]\)/.test(pane), true);
+  eq('and makes room for it', /\(adBar \? ' with-adbar' : ''\)/.test(pane), true);
+  const css = readFileSync(join(here, '..', 'static', 'css', 'tel.css'), 'utf8');
+  eq('the bar comes just before the progress strip', /telAdBarHTML\(th\.ads\[0\]\);\n  html \+= telRenderProgress\(\);/.test(pane), true);
+  eq('which therefore floats below it, not over it', /#telPane \.tel-ad-bar \+ \.tel-prog-wrap \{\s*top: 164px;/.test(css), true);
+  eq('never as a post in the list', /peer\.kind !== 'bot' && th\.ads && th\.ads\.length\) html \+= telAdHTML/.test(pane), true);
+
+  const note = (kind) => new Function('telState', 'telT', fn('telAdNote') + '; return telAdNote;')(
+    { peer: { kind } }, (k) => k)();
+  eq('the bot says Telegram placed it, not the bot', note('bot'), 'tel_ad_note_bot');
+  eq('a channel says not the channel', note('channel'), 'tel_ad_note');
+  eq('the menu says which', /telEsc\(telAdNote\(\)\)/.test(fn('telAdMenu')), true);
+
+  // The bar is in view whenever it is drawn: one view.
+  const sent = [];
+  let h = 0;
+  const check = new Function('document', 'telAdAt', 'telAdAct', 'telAdViewed',
+    fn('telAdCheckView') + '; return telAdCheckView;')(
+    { querySelector: (q) => q === '#telPane .tel-ad-bar' ? { getBoundingClientRect: () => ({ height: h }) } : null,
+      getElementById: () => null },
+    () => ({ randomId: 'Qk9U' }), (a, x) => sent.push([a, x.randomId]), {});
+  check();
+  eq('a bar not laid out is not seen', sent.length, 0);
+  h = 64;
+  check(); check();
+  eq('a drawn bar counts one view', sent, [['view', 'Qk9U']]);
+}
+
 eq('connecting declares the UI language to Telegram',
   /\/api\/tel\/connect', \{ server: serverKey, lang:/.test(src), true);
 
 // --- every string exists in both languages ------------------------------------------
-for (const k of ['tel_ad_label', 'tel_ad_recommended', 'tel_ad_note', 'tel_ad_open', 'tel_ad_menu',
+for (const k of ['tel_ad_label', 'tel_ad_recommended', 'tel_ad_note', 'tel_ad_note_bot', 'tel_ad_open', 'tel_ad_menu',
   'tel_ad_about', 'tel_ad_report', 'tel_ad_reported', 'tel_ad_hidden', 'tel_err_ad_premium', 'tel_err_ad_expired']) {
   eq(k + ' in fa and en', (i18n.match(new RegExp('\\b' + k + ':', 'g')) || []).length, 2);
 }

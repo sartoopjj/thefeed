@@ -29,7 +29,7 @@ var adChannel = Peer{Kind: PeerChannel, ID: 1001, AccessHash: 77}
 
 func TestSponsoredOnlyAskedInBroadcastChannels(t *testing.T) {
 	for kind, want := range map[PeerKind]bool{
-		PeerChannel: true, PeerGroup: false, PeerForum: false, PeerUser: false, PeerBot: false,
+		PeerChannel: true, PeerGroup: false, PeerForum: false, PeerUser: false, PeerBot: true,
 	} {
 		if got := WantsSponsored(Peer{Kind: kind}); got != want {
 			t.Errorf("%s: WantsSponsored = %v", kind, got)

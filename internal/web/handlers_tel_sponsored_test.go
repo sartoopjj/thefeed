@@ -29,11 +29,11 @@ func telAdPeerJSON(t *testing.T, kind tgbridge.PeerKind) string {
 	return `{"peer":` + string(b) + `}`
 }
 
-// Only broadcast channels carry ads, so nothing else costs a round trip --
+// Only channels and bots carry ads, so nothing else costs a round trip --
 // not even a check that the link is up.
-func TestTelAdsSkipEverythingButChannels(t *testing.T) {
+func TestTelAdsSkipEverythingButChannelsAndBots(t *testing.T) {
 	s := newTelTestServer(t)
-	for _, kind := range []tgbridge.PeerKind{tgbridge.PeerGroup, tgbridge.PeerUser, tgbridge.PeerForum, tgbridge.PeerBot} {
+	for _, kind := range []tgbridge.PeerKind{tgbridge.PeerGroup, tgbridge.PeerUser, tgbridge.PeerForum} {
 		code, out := telAdsCall(t, s, telAdPeerJSON(t, kind))
 		if code != 200 || out["ok"] != true {
 			t.Errorf("%s: %d %v", kind, code, out)
@@ -44,6 +44,20 @@ func TestTelAdsSkipEverythingButChannels(t *testing.T) {
 	}
 	if code, _ := telAdsCall(t, s, `{"peer":{}}`); code != http.StatusBadRequest {
 		t.Errorf("no peer: %d", code)
+	}
+}
+
+// A bot is asked like a channel: with no link up, that is the answer.
+func TestTelAdsAskForBots(t *testing.T) {
+	s := newTelTestServer(t)
+	_, out := telAdsCall(t, s, telAdPeerJSON(t, tgbridge.PeerBot))
+	if out["ok"] != false || out["reason"] != "tel_err_not_connected" {
+		t.Fatalf("bot: %v", out)
+	}
+	key := telCacheKey(tgbridge.Peer{Kind: tgbridge.PeerBot, ID: 1234567890123})
+	s.tel.setAds(key, []tgbridge.Sponsored{{RandomID: []byte{9}, Title: "Bot ad"}}, time.Now())
+	if _, out := telAdsCall(t, s, telAdPeerJSON(t, tgbridge.PeerBot)); out["ok"] != true {
+		t.Fatalf("cached bot ad: %v", out)
 	}
 }
 

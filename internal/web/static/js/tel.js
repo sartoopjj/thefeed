@@ -3462,13 +3462,17 @@ function telRenderPane() {
     '<button class="tel-icon-btn" title="' + telAttrQ(telT('tel_menu')) +
     '" aria-label="' + telAttrQ(telT('tel_menu')) + '" onclick="telThreadMenu()">' +
     icon('more') + '</button></div>';
+  // In a bot, Telegram's ad is a bar above the chat rather than a post. Drawn
+  // just before the progress strip, which the CSS then moves below it.
+  var adBar = peer.kind === 'bot' && !telSearchFor('thread') && th.ads && th.ads.length;
+  if (adBar) html += telAdBarHTML(th.ads[0]);
   html += telRenderProgress();
   html += telSearchBarHTML('thread', 'tel_search_messages');
 
   // One listener on the container, not one per link: the list is rebuilt on
   // every render and per-link handlers would be re-bound each time.
   var rp = telReplyFor(peer);
-  html += '<div class="tel-msgs' + (rp ? ' replying' : '') + '" id="telMsgs" onclick="telLinkClick(event)"' +
+  html += '<div class="tel-msgs' + (rp ? ' replying' : '') + (adBar ? ' with-adbar' : '') + '" id="telMsgs" onclick="telLinkClick(event)"' +
     ' onscroll="telStatsOnScroll();telUpdateScrollDown();telAdCheckView()">';
   if (peer.kind === 'forum') {
     html += '<div class="tel-banner" dir="auto">' + telEsc(telT('tel_forum_note')) + '</div>';
@@ -3543,7 +3547,7 @@ function telRenderPane() {
         (m.id | 0) + ')" aria-label="' + telAttrQ(telT('tel_msg_menu')) + '" title="' + telAttrQ(telT('tel_msg_menu')) + '">' +
         icon('more') + '</button>' : '') + '</div>';
   });
-  if (!telSearchFor('thread') && th.ads && th.ads.length) html += telAdHTML(th.ads[0]);
+  if (!telSearchFor('thread') && peer.kind !== 'bot' && th.ads && th.ads.length) html += telAdHTML(th.ads[0]);
   html += '</div>';
   // The messenger's button, reused: the same look in both sections.
   html += '<button id="telScrollDown" class="chat-scroll-down hidden" onclick="telScrollToBottom()" aria-label="' +
@@ -3909,8 +3913,8 @@ function telReplyBarHTML(rp) {
 }
 
 // ------------------------------------------------------------ sponsored -----
-// Telegram's ads in channels. The API terms require showing them, so they are
-// fetched -- but last: after the messages and their counters, never through
+// Telegram's ads in channels and bots. The API terms require showing them, so
+// they are fetched -- but last: after the messages and their counters, never through
 // telOp (the link stays free), and any operation that starts cancels it.
 
 var telAdCtl = null;
@@ -3925,7 +3929,7 @@ function telAdAbort() {
 }
 
 async function telLoadAds(key, peer) {
-  if (!peer || peer.kind !== 'channel' || telState.busy || telState.bg) return;
+  if (!peer || (peer.kind !== 'channel' && peer.kind !== 'bot') || telState.busy || telState.bg) return;
   telAdAbort();
   var ctl = new AbortController();
   telAdCtl = ctl;
@@ -3954,8 +3958,18 @@ function telAdAt(i) {
   return ads[i] || null;
 }
 
-// telAdCheckView counts a view once the ad's whole text is on screen.
+// telAdCheckView counts a view once the ad's whole text is on screen. A bot's
+// bar is always in view while it is drawn.
 function telAdCheckView() {
+  var bar = document.querySelector('#telPane .tel-ad-bar');
+  if (bar) {
+    var barAd = telAdAt(0);
+    if (barAd && !telAdViewed[barAd.randomId] && bar.getBoundingClientRect().height > 0) {
+      telAdViewed[barAd.randomId] = true;
+      telAdAct('view', barAd);
+    }
+    return;
+  }
   var box = document.getElementById('telMsgs');
   var el = box && box.querySelector('.tel-ad');
   var ad = telAdAt(0);
@@ -3984,6 +3998,32 @@ function telAdHTML(ad) {
   return html + '</div>';
 }
 
+// telAdBarHTML draws a bot's ad: a bar above the chat, badged and coloured as
+// an ad, the whole of it opening the link as Telegram's apps do.
+function telAdBarHTML(ad) {
+  var html = '<div class="tel-ad-bar" dir="auto">' +
+    '<div class="tel-ad-bar-main" role="button" tabindex="0" onclick="telAdOpen(0)">' +
+    '<span class="tel-ad-bar-head"><span class="tel-ad-badge" dir="auto">' +
+    telEsc(telT(ad.recommended ? 'tel_ad_recommended' : 'tel_ad_label')) + '</span>' +
+    (ad.title ? '<span class="tel-ad-bar-title" dir="auto">' + telEsc(telSafeText(ad.title)) + '</span>' : '') +
+    '</span>' +
+    (ad.text ? '<span class="tel-ad-text tel-ad-bar-text" dir="auto">' + telEsc(telSafeText(ad.text)) + '</span>' : '') +
+    '<span class="tel-ad-bar-note" dir="auto">' + telEsc(telT('tel_ad_note_bot')) + '</span>' +
+    '</div>';
+  if (telSafeURL(ad.url)) {
+    html += '<button class="tel-ad-bar-btn" dir="auto" onclick="telAdOpen(0)">' +
+      telEsc(telSafeText(ad.button || telT('tel_ad_open'))) + '</button>';
+  }
+  html += '<button class="tel-ad-more" onclick="telAdMenu(0)" aria-label="' + telAttrQ(telT('tel_ad_menu')) +
+    '" title="' + telAttrQ(telT('tel_ad_menu')) + '">' + icon('more') + '</button>';
+  return html + '</div>';
+}
+
+// telAdNote says who placed the ad: Telegram, not the channel or the bot.
+function telAdNote() {
+  return telT(telState.peer && telState.peer.kind === 'bot' ? 'tel_ad_note_bot' : 'tel_ad_note');
+}
+
 // telAdOpen counts the click and shows the address before anything opens it.
 function telAdOpen(i) {
   var ad = telAdAt(i);
@@ -4002,7 +4042,7 @@ window.telAdOpen = telAdOpen;
 function telAdMenu(i) {
   var ad = telAdAt(i);
   if (!ad) return;
-  var items = '<div class="tel-sheet-head" dir="auto">' + telEsc(telT('tel_ad_note')) + '</div>';
+  var items = '<div class="tel-sheet-head" dir="auto">' + telEsc(telAdNote()) + '</div>';
   if (ad.sponsorInfo || ad.additionalInfo) {
     items += telSheetItem('info', telT('tel_ad_about'), 'telCloseSheet();telAdAbout(' + i + ')');
   }

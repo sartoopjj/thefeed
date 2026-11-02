@@ -6,10 +6,11 @@ import (
 	"github.com/gotd/td/tg"
 )
 
-// Sponsored messages are Telegram's ads in channels. The API terms require
-// every client that shows channel content to show them and to report views and
-// clicks, so they are fetched, shown and reported -- as text, like everything
-// else here. They never arrive with history: they are a separate call.
+// Sponsored messages are Telegram's ads in channels and in chats with bots.
+// The API terms require every client that shows channel content to show them
+// and to report views and clicks, and Telegram's ad rules ask the same in bots,
+// so they are fetched, shown and reported -- as text, like everything else
+// here. They never arrive with history: they are a separate call.
 //
 // RandomID and report options are opaque bytes Telegram hands out and wants
 // back unchanged; JSON carries them as base64.
@@ -39,10 +40,10 @@ type SponsoredReportOption struct {
 	Option []byte `json:"option"`
 }
 
-// WantsSponsored says whether a conversation can carry ads at all. Only
-// broadcast channels do; asking anywhere else spends a round trip on an
-// answer that is always empty.
-func WantsSponsored(p Peer) bool { return p.Kind == PeerChannel }
+// WantsSponsored says whether a conversation can carry ads at all: broadcast
+// channels and bots. Asking anywhere else spends a round trip on an answer
+// that is always empty.
+func WantsSponsored(p Peer) bool { return p.Kind == PeerChannel || p.Kind == PeerBot }
 
 // SponsoredMessages fetches the ads Telegram wants shown in a channel. An empty
 // answer is the common case and not an error.

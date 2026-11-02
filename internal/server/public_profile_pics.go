@@ -118,6 +118,7 @@ func (pr *PublicReader) fetchAllPublicProfilePhotos(ctx context.Context) {
 	}
 	wg.Wait()
 	if len(pics) == 0 {
+		pr.feed.KeepProfilePics()
 		return
 	}
 	total := pr.feed.MergeProfilePics(pics)

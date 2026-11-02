@@ -270,7 +270,7 @@ thefeed-server ... --mtproto-domains m.example.com   # or THEFEED_MTPROTO_DOMAIN
 - **The relay cannot police content** — the stream is encrypted end to end with Telegram, so the server sees opaque bytes and cannot tell a message from a file. What it *can* limit is volume: `--mtproto-down-kb-per-min` (512 KB/min per tunnel by default) throttles any client that tries to pull files through it, and `--mtproto-max-tunnels` bounds how many run at once.
 - **Notifications**: while the app is open it rings and notifies. For a backgrounded app, turn on background checking in the ⋮ menu — it costs queries around the clock, so it is off by default.
 - **It needs good resolvers.** The Feed and the Messenger hold up far better on very slow resolvers; this is the most bandwidth-hungry part of the app.
-- **Telegram's ads** — Telegram's API terms require every client that shows channels to show Telegram's sponsored messages, so a channel may show one under its last post, clearly marked as an ad and as placed by Telegram, not the channel. It is fetched last, at the lowest priority, and anything you do cancels it, so it never delays anything else.
+- **Telegram's ads** — Telegram's API terms require every client that shows channels to show Telegram's sponsored messages, so a channel may show one under its last post, clearly marked as an ad and as placed by Telegram, not the channel. A chat with a bot may show one too, as a bar above the chat with the same label. It is fetched last, at the lowest priority, and anything you do cancels it, so it never delays anything else.
 - **App credentials** — official release builds carry a shared default pair, so you can sign in without one; the tab says when it is in use. It is better to register your own `api_id` / `api_hash` at [my.telegram.org](https://my.telegram.org) and enter it there: if Telegram restricts the shared pair, everyone signed in with it may be signed out (accounts are not blocked; signing in again with your own key works). Builds you make yourself have no default unless you pass one in (`TEL_LDFLAG`, see `cmd/telseal`).
 - **Limits**: `--mtproto-enabled`, `--mtproto-max-tunnels`, `--mtproto-idle-minutes`, `--mtproto-buffer-kb`, `--mtproto-dial-seconds`.
 
@@ -281,14 +281,28 @@ In the client, open **Telegram** from the bottom nav. The ⋮ menu is on every s
 ## How it works
 
 ```
-                                  Encrypted DNS TXT
-   ┌──────────────┐  feed meta + small media   ┌──────────────────┐    MTProto      ┌──────────┐
-   │              │ ─────────────────────────▸ │      Server      │ ─────────────▸  │ Telegram │
-   │    Client    │ ◂───────────────────────── │  (DNS auth +     │ ◂─────────────  │   API    │
-   │  (Web UI)    │                            │   media relays)  │    RSS / HTTP   ┌──────────┐
-   │              │  large media (fast relay)  │                  │ ─────────────▸  │  Nitter  │
-   │              │ ◂───── api.github.com ◂──  │                  │ ◂─────────────  │ (X feed) │
-   └──────────────┘     (uploaded by server)   └──────────────────┘                 └──────────┘
+                          Encrypted DNS TXT
+   ┌──────────────┐ FEED: posts + small media    ┌──────────────────┐ FEED: reads channels    ┌──────────┐
+   │              │ ───────────────────────────▸ │                  │ ──────────────────────▸ │          │
+   │    Client    │ ◂─────────────────────────── │      Server      │ ◂────────────────────── │ Telegram │
+   │   (Web UI)   │                              │                  │                         │   API    │
+   │              │ MESSENGER: end-to-end        │    (DNS auth,    │ TELEGRAM: your          │          │
+   │ · Feed       │ encrypted chat               │   feed cache,    │ account, MTProto        │          │
+   │ · Messenger  │ ◂──────────────────────────▸ │ messenger store, │ relayed, end-to-end     │          │
+   │ · Telegram   │                              │  MTProto relay,  │ encrypted               │          │
+   │              │ TELEGRAM: your account,      │  media relays)   │ ◂─────────────────────▸ │          │
+   │              │ MTProto inside DNS cells     │                  │                         └──────────┘
+   │              │ ◂──────────────────────────▸ │                  │ RSS / HTTP              ┌──────────┐
+   │              │                              │                  │ ──────────────────────▸ │  Nitter  │
+   │              │ large media (fast relay)     │                  │ ◂────────────────────── │ (X feed) │
+   │              │ ◂──── api.github.com ◂──     │                  │                         └──────────┘
+   └──────────────┘     (uploaded by server)     └──────────────────┘
+                                                          ▲ │
+                                                          │ ▼
+                                                 ┌──────────────────┐
+                                                 │   other users'   │ MESSENGER: each message
+                                                 │     clients      │ waits on the server
+                                                 └──────────────────┘ until it is fetched
 ```
 
 **Server** (outside the censored network): connects to Telegram and reads configured channels; fetches public X posts via RSS-compatible mirrors (no login); serves feed metadata and small media as **encrypted DNS TXT** responses with random padding (anti-DPI). Login once, run forever; `--no-telegram` reads public channels with no credentials. Optional **multi-domain** and **[messenger](#messenger)** modes. All state in one data directory.

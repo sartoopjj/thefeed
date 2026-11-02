@@ -276,7 +276,7 @@ thefeed-server ... --mtproto-domains m.example.com   # 或 THEFEED_MTPROTO_DOMAI
 - **中继无法管控内容** —— 数据流在你与 Telegram 之间端到端加密，服务器只看到不透明的字节，分不清消息和文件。它能限制的是流量：`--mtproto-down-kb-per-min`（默认每条隧道 512 KB/分钟）会拖慢任何试图拉取文件的客户端，`--mtproto-max-tunnels` 则限制并发数量。
 - **通知**：应用打开时会响铃并提醒。应用退到后台时，可在 ⋮ 菜单中开启后台检查——它会持续消耗查询，因此默认关闭。
 - **需要好的解析器。** 订阅和私信在极慢的解析器上表现好得多；这是整个应用中最吃带宽的部分。
-- **Telegram 的广告** —— Telegram 的 API 条款要求所有展示频道内容的客户端都显示 Telegram 的赞助消息，因此频道最后一条帖子下方可能出现一条赞助消息，明确标注为广告，并注明由 Telegram 投放、而非频道发布。它最后才获取、优先级最低，你的任何操作都会取消它，因此绝不会拖慢其他内容。
+- **Telegram 的广告** —— Telegram 的 API 条款要求所有展示频道内容的客户端都显示 Telegram 的赞助消息，因此频道最后一条帖子下方可能出现一条赞助消息，明确标注为广告，并注明由 Telegram 投放、而非频道发布。在与机器人的对话中，对话上方也可能以横条形式出现一条赞助消息，同样明确标注为广告。它最后才获取、优先级最低，你的任何操作都会取消它，因此绝不会拖慢其他内容。
 - **应用凭据** — 官方发布版内置一对共享的默认凭据，没有自己的也能登录；Telegram 标签页会提示正在使用它。更好的做法是在 [my.telegram.org](https://my.telegram.org) 申请你自己的 `api_id` / `api_hash` 并在那里填入：如果 Telegram 限制了共享凭据，所有用它登录的人可能会被登出（账号本身不会被封，用自己的凭据即可重新登录）。自己构建的版本没有默认凭据，除非你传入一份（`TEL_LDFLAG`，见 `cmd/telseal`）。
 - **限制项**：`--mtproto-enabled`、`--mtproto-max-tunnels`、`--mtproto-idle-minutes`、`--mtproto-buffer-kb`、`--mtproto-dial-seconds`。
 
@@ -289,14 +289,28 @@ thefeed-server ... --mtproto-domains m.example.com   # 或 THEFEED_MTPROTO_DOMAI
 ## 工作原理
 
 ```
-                                  Encrypted DNS TXT
-   ┌──────────────┐  feed meta + small media   ┌──────────────────┐    MTProto      ┌──────────┐
-   │              │ ─────────────────────────▸ │      Server      │ ─────────────▸  │ Telegram │
-   │    Client    │ ◂───────────────────────── │  (DNS auth +     │ ◂─────────────  │   API    │
-   │  (Web UI)    │                            │   media relays)  │    RSS / HTTP   ┌──────────┐
-   │              │  large media (fast relay)  │                  │ ─────────────▸  │  Nitter  │
-   │              │ ◂───── api.github.com ◂──  │                  │ ◂─────────────  │ (X feed) │
-   └──────────────┘     (uploaded by server)   └──────────────────┘                 └──────────┘
+                          Encrypted DNS TXT
+   ┌──────────────┐ FEED: posts + small media    ┌──────────────────┐ FEED: reads channels    ┌──────────┐
+   │              │ ───────────────────────────▸ │                  │ ──────────────────────▸ │          │
+   │    Client    │ ◂─────────────────────────── │      Server      │ ◂────────────────────── │ Telegram │
+   │   (Web UI)   │                              │                  │                         │   API    │
+   │              │ MESSENGER: end-to-end        │    (DNS auth,    │ TELEGRAM: your          │          │
+   │ · Feed       │ encrypted chat               │   feed cache,    │ account, MTProto        │          │
+   │ · Messenger  │ ◂──────────────────────────▸ │ messenger store, │ relayed, end-to-end     │          │
+   │ · Telegram   │                              │  MTProto relay,  │ encrypted               │          │
+   │              │ TELEGRAM: your account,      │  media relays)   │ ◂─────────────────────▸ │          │
+   │              │ MTProto inside DNS cells     │                  │                         └──────────┘
+   │              │ ◂──────────────────────────▸ │                  │ RSS / HTTP              ┌──────────┐
+   │              │                              │                  │ ──────────────────────▸ │  Nitter  │
+   │              │ large media (fast relay)     │                  │ ◂────────────────────── │ (X feed) │
+   │              │ ◂──── api.github.com ◂──     │                  │                         └──────────┘
+   └──────────────┘     (uploaded by server)     └──────────────────┘
+                                                          ▲ │
+                                                          │ ▼
+                                                 ┌──────────────────┐
+                                                 │   other users'   │ MESSENGER: each message
+                                                 │     clients      │ waits on the server
+                                                 └──────────────────┘ until it is fetched
 ```
 
 **服务器**（墙外）：连接 Telegram 读取配置的频道；通过兼容 RSS 的镜像抓取公开 X 帖子（无需登录）；把 feed 元数据和小文件作为**加密 DNS TXT** 响应提供，并加随机填充（抗 DPI）。登录一次、长期运行；`--no-telegram` 无凭据读取公开频道。可选的**多域名**与 **[私信](#messenger)** 模式。所有状态都在一个数据目录里。

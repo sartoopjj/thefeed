@@ -123,6 +123,7 @@ func (tr *TelegramReader) fetchAllProfilePhotos(ctx context.Context, api *tg.Cli
 	}
 
 	if len(pics) == 0 {
+		tr.feed.KeepProfilePics()
 		return
 	}
 	// Merge so other readers' contributions (e.g. X "x:" entries) survive.

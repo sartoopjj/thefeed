@@ -546,6 +546,20 @@ func (f *Feed) SetProfilePics(pics map[string][]byte) int {
 	return f.replaceProfilePicsBundle(pics)
 }
 
+// KeepProfilePics re-stores the avatars already in the bundle. Storing is what
+// keeps each one's DNS channel alive in the media cache, so a cycle that
+// fetched nothing new still calls this; the directory is rebuilt with live
+// channels if any were evicted meanwhile.
+func (f *Feed) KeepProfilePics() int {
+	f.mu.RLock()
+	empty := len(f.profilePicsBundle.Entries) == 0
+	f.mu.RUnlock()
+	if empty {
+		return 0
+	}
+	return f.MergeProfilePics(nil)
+}
+
 // MergeProfilePics is SetProfilePics that retains the existing bundle's
 // entries (re-extracted and re-verified) and overlays pics on top.
 // Used by readers that only know a subset of channels (Telegram-only,
