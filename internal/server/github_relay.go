@@ -1178,10 +1178,13 @@ func (g *GitHubRelay) getCommitTree(ctx context.Context, commitSHA string) (stri
 }
 
 func (g *GitHubRelay) createBlob(ctx context.Context, content []byte) (string, error) {
-	body, _ := json.Marshal(map[string]any{
-		"encoding": "base64",
-		"content":  base64.StdEncoding.EncodeToString(content),
-	})
+	// Built in one buffer: base64 needs no JSON escaping, and a 15 MB file
+	// would otherwise be copied twice more.
+	const head, tail = `{"encoding":"base64","content":"`, `"}`
+	body := make([]byte, len(head)+base64.StdEncoding.EncodedLen(len(content))+len(tail))
+	copy(body, head)
+	base64.StdEncoding.Encode(body[len(head):], content)
+	copy(body[len(body)-len(tail):], tail)
 	req, err := g.newReq(ctx, http.MethodPost, "/repos/"+g.cfg.Repo+"/git/blobs", bytes.NewReader(body))
 	if err != nil {
 		return "", err
@@ -1285,9 +1288,15 @@ func (g *GitHubRelay) pauseBlobs(d time.Duration) {
 
 // Wants reports whether an upload of this file would be taken now: the relay
 // lacks it (not committed, not queued, not being uploaded), it fits the size
-// cap, and no backoff is refusing uploads.
+// cap, and neither a backoff nor GitHub's pause is holding uploads.
 func (g *GitHubRelay) Wants(size int64, crc uint32) bool {
 	if g == nil || (g.cfg.MaxBytes > 0 && size > g.cfg.MaxBytes) {
+		return false
+	}
+	g.paceMu.Lock()
+	paused := time.Now().Before(g.pauseUntil)
+	g.paceMu.Unlock()
+	if paused {
 		return false
 	}
 	key := protocol.RelayObjectName(size, crc, g.passphrase)

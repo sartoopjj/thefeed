@@ -48,7 +48,7 @@ var allowedMediaSchemes = map[string]bool{
 // is deliberately not restricted: an operator who points the server at an
 // upstream on their own network is building from source anyway, and choosing
 // the upstream is their decision.
-func downloadHTTPMedia(ctx context.Context, cache *MediaCache, tag, rawURL string) (protocol.MediaMeta, bool) {
+func downloadHTTPMedia(ctx context.Context, cache *MediaCache, tag, rawURL string) (meta protocol.MediaMeta, ok bool) {
 	if cache == nil || rawURL == "" {
 		return protocol.MediaMeta{}, false
 	}
@@ -61,8 +61,17 @@ func downloadHTTPMedia(ctx context.Context, cache *MediaCache, tag, rawURL strin
 	// side will create a fresh entry, but identical URLs across fetches will
 	// just refresh TTL.
 	cacheKey := tag + ":url:" + parsed.String()
-	if meta, ok := cache.Lookup(cacheKey); ok {
-		return meta, true
+	cached, hit := cache.Lookup(cacheKey)
+	if hit && !cache.Refetch(cacheKey) {
+		return cached, true
+	}
+	if hit {
+		// Fetched again only for the relay: failing that, the cached copy stands.
+		defer func() {
+			if !ok {
+				meta, ok = cached, true
+			}
+		}()
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, parsed.String(), nil)
@@ -122,7 +131,7 @@ func downloadHTTPMedia(ctx context.Context, cache *MediaCache, tag, rawURL strin
 		}, true
 	}
 
-	meta, err := cache.Store(cacheKey, tag, bytes, resp.Header.Get("Content-Type"), urlBaseName(parsed))
+	meta, err = cache.Store(cacheKey, tag, bytes, resp.Header.Get("Content-Type"), urlBaseName(parsed))
 	if err != nil {
 		if errors.Is(err, ErrTooLarge) {
 			return meta, true

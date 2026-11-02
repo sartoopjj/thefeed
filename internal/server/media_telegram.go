@@ -65,12 +65,21 @@ func (tr *TelegramReader) downloadTelegramMedia(ctx context.Context, api *tg.Cli
 	return protocol.MediaMeta{}, false
 }
 
-func (tr *TelegramReader) downloadTelegramPhoto(ctx context.Context, api *tg.Client, cache *MediaCache, photo *tg.Photo) (protocol.MediaMeta, bool) {
+func (tr *TelegramReader) downloadTelegramPhoto(ctx context.Context, api *tg.Client, cache *MediaCache, photo *tg.Photo) (meta protocol.MediaMeta, ok bool) {
 	cacheKey := "tg-photo:" + strconv.FormatInt(photo.ID, 10)
 
 	// Hit the cache before doing any I/O — exact dedup, no bytes transferred.
-	if meta, ok := cache.Lookup(cacheKey); ok {
-		return meta, true
+	cached, hit := cache.Lookup(cacheKey)
+	if hit && !cache.Refetch(cacheKey) {
+		return cached, true
+	}
+	if hit {
+		// Fetched again only for the relay: failing that, the cached copy stands.
+		defer func() {
+			if !ok {
+				meta, ok = cached, true
+			}
+		}()
 	}
 
 	bestType, bestBytes := pickSmallestPhotoSize(photo.Sizes)
@@ -105,7 +114,7 @@ func (tr *TelegramReader) downloadTelegramPhoto(ctx context.Context, api *tg.Cli
 		return protocol.MediaMeta{}, false
 	}
 
-	meta, err := cache.Store(cacheKey, protocol.MediaImage, bytes, "image/jpeg", "")
+	meta, err = cache.Store(cacheKey, protocol.MediaImage, bytes, "image/jpeg", "")
 	if err != nil {
 		// ErrTooLarge is reported as non-downloadable; any other store error
 		// is just dropped to legacy.
@@ -118,10 +127,19 @@ func (tr *TelegramReader) downloadTelegramPhoto(ctx context.Context, api *tg.Cli
 	return meta, true
 }
 
-func (tr *TelegramReader) downloadTelegramDocument(ctx context.Context, api *tg.Client, cache *MediaCache, doc *tg.Document) (protocol.MediaMeta, bool) {
+func (tr *TelegramReader) downloadTelegramDocument(ctx context.Context, api *tg.Client, cache *MediaCache, doc *tg.Document) (meta protocol.MediaMeta, ok bool) {
 	cacheKey := "tg-doc:" + strconv.FormatInt(doc.ID, 10)
-	if meta, ok := cache.Lookup(cacheKey); ok {
-		return meta, true
+	cached, hit := cache.Lookup(cacheKey)
+	if hit && !cache.Refetch(cacheKey) {
+		return cached, true
+	}
+	if hit {
+		// Fetched again only for the relay: failing that, the cached copy stands.
+		defer func() {
+			if !ok {
+				meta, ok = cached, true
+			}
+		}()
 	}
 
 	tag, filename := classifyDocumentTagAndName(doc)
@@ -152,7 +170,7 @@ func (tr *TelegramReader) downloadTelegramDocument(ctx context.Context, api *tg.
 		return protocol.MediaMeta{}, false
 	}
 
-	meta, err := cache.Store(cacheKey, tag, bytes, doc.MimeType, filename)
+	meta, err = cache.Store(cacheKey, tag, bytes, doc.MimeType, filename)
 	if err != nil {
 		if errors.Is(err, ErrTooLarge) {
 			return meta, true

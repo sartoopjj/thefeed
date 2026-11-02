@@ -3,6 +3,7 @@ package server
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"hash/crc32"
@@ -23,6 +24,7 @@ type fakeGitHub struct {
 	files   map[string][]byte // repoPath → ciphertext (committed)
 	commits int               // number of commits created (rate-limit metric)
 	blobs   int               // blob create count
+	blob    []byte            // the last blob, decoded
 	deletes int               // contents-api deletions
 
 	// blobDelay makes blob creation slow, as a real upload is.
@@ -83,8 +85,18 @@ func (f *fakeGitHub) handler() http.Handler {
 			return
 
 		case r.Method == http.MethodPost && path == "git/blobs":
-			var body struct{ Content string }
-			_ = json.NewDecoder(r.Body).Decode(&body)
+			var body struct{ Encoding, Content string }
+			dec := json.NewDecoder(r.Body)
+			dec.DisallowUnknownFields()
+			raw, err := []byte(nil), dec.Decode(&body)
+			if err == nil {
+				raw, err = base64.StdEncoding.DecodeString(body.Content)
+			}
+			if err != nil || body.Encoding != "base64" {
+				w.WriteHeader(http.StatusUnprocessableEntity)
+				return
+			}
+			f.blob = raw
 			f.blobs++
 			s := f.sha("blob")
 			_ = json.NewEncoder(w).Encode(map[string]any{"sha": s})

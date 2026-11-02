@@ -1,6 +1,7 @@
 package server
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"hash/crc32"
@@ -9,6 +10,8 @@ import (
 	"strconv"
 	"testing"
 	"time"
+
+	"github.com/sartoopjj/thefeed/internal/protocol"
 )
 
 func newGHTestRelay(t *testing.T) (*fakeGitHub, *GitHubRelay) {
@@ -211,5 +214,21 @@ func TestConcurrentUploadsOfOneFile(t *testing.T) {
 	fk.mu.Unlock()
 	if n != 1 {
 		t.Fatalf("%d blobs for one file", n)
+	}
+}
+
+// What reaches GitHub is the file, encrypted, in the body GitHub expects.
+func TestUploadSendsTheEncryptedFile(t *testing.T) {
+	fk, r := newGHTestRelay(t)
+	body := fakeJPEG(5000)
+	if err := r.Upload(context.Background(), body); err != nil {
+		t.Fatal(err)
+	}
+	fk.mu.Lock()
+	blob := fk.blob
+	fk.mu.Unlock()
+	got, err := protocol.DecryptRelayBlob(r.relayKey, blob)
+	if err != nil || !bytes.Equal(got, body) {
+		t.Fatalf("GitHub got something else (%v)", err)
 	}
 }
