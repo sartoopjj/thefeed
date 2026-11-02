@@ -50,6 +50,10 @@ type MediaCache struct {
 	currentEntries  int64 // live entry count
 	currentBytes    int64 // sum of file sizes currently cached (incl. relay-only, which hold no RAM)
 	currentRAMBytes int64 // sum of block bytes actually held in memory
+
+	// uploading counts relay uploads still being prepared (encrypted, sent as
+	// a blob); WaitUploads lets a flush include them.
+	uploading atomic.Int64
 }
 
 type mediaEntry struct {
@@ -164,9 +168,7 @@ func (c *MediaCache) StoreWithOptions(cacheKey, tag string, content []byte, mime
 		existing.expiresAt = c.expiry(now)
 		atomic.AddUint64(&c.storeHits, 1)
 		c.logf("media: refresh tag=%s key=%s ch=%d size=%d", tag, cacheKey, existing.channel, existing.size)
-		if c.gh != nil {
-			c.gh.Touch(existing.size, existing.crc32)
-		}
+		c.relayAgainLocked(content, hash, opts)
 		return c.metaForLocked(existing), nil
 	}
 
@@ -187,9 +189,7 @@ func (c *MediaCache) StoreWithOptions(cacheKey, tag string, content []byte, mime
 		c.byKey[cacheKey] = existing
 		atomic.AddUint64(&c.storeHits, 1)
 		c.logf("media: dedup tag=%s key=%s ch=%d size=%d (hash match)", tag, cacheKey, existing.channel, existing.size)
-		if c.gh != nil {
-			c.gh.Touch(existing.size, existing.crc32)
-		}
+		c.relayAgainLocked(content, hash, opts)
 		return c.metaForLocked(existing), nil
 	}
 
@@ -267,18 +267,8 @@ func (c *MediaCache) StoreWithOptions(cacheKey, tag string, content []byte, mime
 	atomic.AddInt64(&c.currentRAMBytes, ramBytes)
 	c.logf("media: store tag=%s key=%s ch=%d size=%d blocks=%d", tag, cacheKey, channel, size, len(blocks))
 
-	// Best-effort relay upload. Copy because the caller may reuse the
-	// slice. Failures don't block the DNS path.
 	if c.gh != nil && !opts.SkipGitHub {
-		gh := c.gh
-		body := append([]byte(nil), content...)
-		go func() {
-			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
-			defer cancel()
-			if err := gh.Upload(ctx, body); err != nil {
-				c.logf("media: gh-relay upload failed: %v", err)
-			}
-		}()
+		c.uploadLocked(content)
 	}
 
 	meta := c.metaForLocked(entry)
@@ -315,9 +305,45 @@ func (c *MediaCache) Lookup(cacheKey string) (protocol.MediaMeta, bool) {
 	return c.metaForLocked(entry), true
 }
 
-// GetBlock returns one block of cached media for serving over DNS. Returns an
-// error if the channel isn't a media channel, the entry has expired, or the
-// block index is out of range. Increments the served-query counter.
+// uploadLocked sends a file to the relay in the background: best effort, and
+// a failure never blocks the DNS path. Copied because the caller may reuse
+// the slice.
+func (c *MediaCache) uploadLocked(content []byte) {
+	gh := c.gh
+	body := append([]byte(nil), content...)
+	c.uploading.Add(1)
+	go func() {
+		defer c.uploading.Add(-1)
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+		defer cancel()
+		if err := gh.Upload(ctx, body); err != nil {
+			c.logf("media: gh-relay upload failed: %v", err)
+		}
+	}()
+}
+
+// relayAgainLocked handles a file stored again: it keeps the relay's copy
+// alive, and uploads it if an earlier upload never made it.
+func (c *MediaCache) relayAgainLocked(content []byte, crc uint32, opts MediaCacheStoreOptions) {
+	if c.gh == nil {
+		return
+	}
+	size := int64(len(content))
+	c.gh.Touch(size, crc)
+	if !opts.SkipGitHub && c.gh.Wants(size, crc) {
+		c.uploadLocked(content)
+	}
+}
+
+// WaitUploads waits, at most d, for relay uploads still being prepared, so a
+// flush right after a store commits them instead of leaving them for the next.
+func (c *MediaCache) WaitUploads(d time.Duration) {
+	deadline := time.Now().Add(d)
+	for c.uploading.Load() > 0 && time.Now().Before(deadline) {
+		time.Sleep(50 * time.Millisecond)
+	}
+}
+
 // Keep extends the life of the files stored under keys, as storing the same
 // bytes again would, without the copy. Reports whether every key was there.
 func (c *MediaCache) Keep(keys []string) bool {
@@ -339,6 +365,9 @@ func (c *MediaCache) Keep(keys []string) bool {
 	return all
 }
 
+// GetBlock returns one block of cached media for serving over DNS. Returns an
+// error if the channel isn't a media channel, the entry has expired, or the
+// block index is out of range. Increments the served-query counter.
 func (c *MediaCache) GetBlock(channel, block uint16) ([]byte, error) {
 	if !protocol.IsMediaChannel(channel) {
 		return nil, fmt.Errorf("channel %d is outside media range", channel)

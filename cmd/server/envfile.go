@@ -85,3 +85,15 @@ func loadEnvFile(path string) (int, error) {
 	}
 	return n, sc.Err()
 }
+
+// envBool reads a boolean setting: 1/true/yes/on or 0/false/no/off, in any
+// case. ok is false when it is unset or not one of those, so the flag stands.
+func envBool(name string) (v, ok bool) {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv(name))) {
+	case "1", "true", "yes", "on":
+		return true, true
+	case "0", "false", "no", "off":
+		return false, true
+	}
+	return false, false
+}

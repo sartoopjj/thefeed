@@ -271,6 +271,10 @@ func (f *Feed) AfterFetchCycle(ctx context.Context) {
 	}
 	if mc := f.MediaCache(); mc != nil {
 		mc.TouchRelayEntries()
+		// This cycle's stores are uploaded in the background; without the
+		// wait, the flush beats them and they sit until the next cycle. A
+		// file still not ready after it goes in the next flush.
+		mc.WaitUploads(30 * time.Second)
 	}
 	if err := gh.Flush(ctx); err != nil {
 		log.Printf("[gh-relay] flush after fetch: %v", err)

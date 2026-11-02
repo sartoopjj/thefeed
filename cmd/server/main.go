@@ -226,17 +226,12 @@ func main() {
 	if *key == "" {
 		*key = os.Getenv("THEFEED_KEY")
 	}
-	if !*allowManage && os.Getenv("THEFEED_ALLOW_MANAGE") == "1" {
-		*allowManage = true
-	}
 	// THEFEED_ALLOW_MANAGE=0 explicitly disables, even if flag was set
-	if os.Getenv("THEFEED_ALLOW_MANAGE") == "0" {
-		*allowManage = false
+	if v, ok := envBool("THEFEED_ALLOW_MANAGE"); ok {
+		*allowManage = v
 	}
-	if env := os.Getenv("THEFEED_DEBUG"); env == "1" {
-		*debug = true
-	} else if env == "0" {
-		*debug = false
+	if v, ok := envBool("THEFEED_DEBUG"); ok {
+		*debug = v
 	}
 	if *fetchIntervalMin == 10 {
 		if v := os.Getenv("THEFEED_FETCH_INTERVAL"); v != "" {
@@ -316,19 +311,15 @@ func main() {
 	chatIntEnv(mtprotoDownKBMin, 512, "THEFEED_MTPROTO_DOWN_KB_PER_MIN")
 	chatIntEnv(mtprotoDialSeconds, 15, "THEFEED_MTPROTO_DIAL_SECONDS")
 	// THEFEED_MTPROTO_ENABLED=0 turns the tunnel off even with domains set.
-	if v := os.Getenv("THEFEED_MTPROTO_ENABLED"); v == "0" {
-		*mtprotoEnabled = false
-	} else if v == "1" {
-		*mtprotoEnabled = true
+	if v, ok := envBool("THEFEED_MTPROTO_ENABLED"); ok {
+		*mtprotoEnabled = v
 	}
-	if v := os.Getenv("THEFEED_MTPROTO_TEST_DCS"); v == "1" {
+	if v, ok := envBool("THEFEED_MTPROTO_TEST_DCS"); ok && v {
 		*mtprotoTestDCs = true
 	}
 	// THEFEED_CHAT_ENABLED=0 turns chat off even with domains configured.
-	if v := os.Getenv("THEFEED_CHAT_ENABLED"); v == "0" {
-		*chatEnabled = false
-	} else if v == "1" {
-		*chatEnabled = true
+	if v, ok := envBool("THEFEED_CHAT_ENABLED"); ok {
+		*chatEnabled = v
 	}
 	// Clamp chat limits that ride uint16 on the wire.
 	clamp16 := func(v *int) {
@@ -400,10 +391,8 @@ func main() {
 		}
 	}
 
-	if env := os.Getenv("THEFEED_DNS_MEDIA_ENABLED"); env == "0" {
-		*dnsMediaEnabled = false
-	} else if env == "1" {
-		*dnsMediaEnabled = true
+	if v, ok := envBool("THEFEED_DNS_MEDIA_ENABLED"); ok {
+		*dnsMediaEnabled = v
 	}
 	if env := os.Getenv("THEFEED_DNS_MEDIA_MAX_SIZE_KB"); env != "" {
 		if n, err := strconv.Atoi(env); err == nil {
@@ -418,7 +407,7 @@ func main() {
 	if env := os.Getenv("THEFEED_DNS_MEDIA_COMPRESSION"); env != "" {
 		*dnsMediaCompression = env
 	}
-	if !*ghEnabled && os.Getenv("THEFEED_GITHUB_RELAY_ENABLED") == "1" {
+	if v, ok := envBool("THEFEED_GITHUB_RELAY_ENABLED"); ok && v {
 		*ghEnabled = true
 	}
 	if *ghToken == "" {

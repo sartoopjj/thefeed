@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -29,6 +30,15 @@ const flushBatchLimit = 100
 // to fire mutating requests at high concurrency (secondary rate limits), so
 // keep this small — it is a few-at-a-time pipeline, not a fan-out.
 const uploadConcurrency = 4
+
+// GitHub caps writes at about 80 a minute and 500 an hour, and keeps
+// refusing a client that goes over. Blobs are most of the writes, so they are
+// paced under both: a burst, then one per blobInterval (about 450 an hour),
+// which leaves room for the commits (three writes each).
+const (
+	blobBurst    = 40
+	blobInterval = 8 * time.Second
+)
 
 // maxReadyObjects bounds the commit queue. Entries are SHA-only (~60 bytes),
 // so this is a sanity backstop, not a memory concern.
@@ -82,6 +92,16 @@ type GitHubRelay struct {
 
 	// uploadSem bounds concurrent blob uploads; see uploadConcurrency.
 	uploadSem chan struct{}
+	// uploading holds the objects being uploaded now, so a second store of
+	// the same file does not upload it twice.
+	uploading map[string]bool
+
+	// The blob pacer (see blobBurst): tokens left as of paceAt, and no blob
+	// before pauseUntil, which GitHub sets when it asks us to back off.
+	paceMu     sync.Mutex
+	paceTokens float64
+	paceAt     time.Time
+	pauseUntil time.Time
 
 	failStreak       int
 	retryAfter       time.Time
@@ -160,6 +180,7 @@ func NewGitHubRelay(cfg GitHubRelayConfig, domain, passphrase string) *GitHubRel
 		known:       make(map[string]*ghEntry),
 		ready:       make(map[string]*readyObject),
 		uploadSem:   make(chan struct{}, uploadConcurrency),
+		uploading:   make(map[string]bool),
 		statePath:   cfg.StatePath,
 		repoQuotaKB: cfg.QuotaKB,
 	}
@@ -293,7 +314,7 @@ func (g *GitHubRelay) Upload(ctx context.Context, body []byte) error {
 		g.mu.Unlock()
 		return nil
 	}
-	if _, ok := g.ready[key]; ok {
+	if _, ok := g.ready[key]; ok || g.uploading[key] {
 		g.mu.Unlock()
 		return nil
 	}
@@ -307,7 +328,13 @@ func (g *GitHubRelay) Upload(ctx context.Context, body []byte) error {
 		g.mu.Unlock()
 		return nil
 	}
+	g.uploading[key] = true
 	g.mu.Unlock()
+	defer func() {
+		g.mu.Lock()
+		delete(g.uploading, key)
+		g.mu.Unlock()
+	}()
 
 	// Bounded concurrency. The caller is already a background goroutine, so
 	// waiting here never delays the DNS path. Encrypt *after* the semaphore:
@@ -317,6 +344,10 @@ func (g *GitHubRelay) Upload(ctx context.Context, body []byte) error {
 	case g.uploadSem <- struct{}{}:
 	case <-ctx.Done():
 		return ctx.Err()
+	}
+	if err := g.pace(ctx); err != nil {
+		<-g.uploadSem
+		return err
 	}
 	blob, err := protocol.EncryptRelayBlob(g.relayKey, body)
 	if err != nil {
@@ -335,7 +366,9 @@ func (g *GitHubRelay) Upload(ctx context.Context, body []byte) error {
 		_, bootErr := g.getRef(ctx, g.branch)
 		g.commitMu.Unlock()
 		if bootErr == nil {
-			sha, err = g.createBlob(ctx, blob)
+			if err = g.pace(ctx); err == nil {
+				sha, err = g.createBlob(ctx, blob)
+			}
 		}
 	}
 	<-g.uploadSem
@@ -345,6 +378,10 @@ func (g *GitHubRelay) Upload(ctx context.Context, body []byte) error {
 		// 502, a timeout on one large file) would make Upload silently drop
 		// every file for the next 1–30 minutes — and relay-only files, which
 		// are too big for DNS, have no fallback.
+		var rl *rateLimitedError
+		if errors.As(err, &rl) {
+			g.pauseBlobs(rl.wait)
+		}
 		g.mu.Lock()
 		if isQuotaExhausted(err) || isTokenAccessDenied(err) {
 			g.noteFlushFailureLocked(err)
@@ -1156,7 +1193,11 @@ func (g *GitHubRelay) createBlob(ctx context.Context, content []byte) (string, e
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode/100 != 2 {
-		return "", fmt.Errorf("%s — %s", resp.Status, ghErrorBody(resp))
+		err := fmt.Errorf("%s — %s", resp.Status, ghErrorBody(resp))
+		if wait, ok := rateLimitWait(resp, err.Error()); ok {
+			return "", &rateLimitedError{wait: wait, err: err}
+		}
+		return "", err
 	}
 	var out struct {
 		SHA string `json:"sha"`
@@ -1165,6 +1206,99 @@ func (g *GitHubRelay) createBlob(ctx context.Context, content []byte) (string, e
 		return "", err
 	}
 	return out.SHA, nil
+}
+
+// rateLimitedError is GitHub telling us to slow down, and for how long.
+type rateLimitedError struct {
+	wait time.Duration
+	err  error
+}
+
+func (e *rateLimitedError) Error() string { return e.err.Error() }
+func (e *rateLimitedError) Unwrap() error { return e.err }
+
+// rateLimitWait reads how long GitHub wants us to wait: Retry-After, else the
+// primary limit's reset time, else a minute for a secondary-limit refusal.
+func rateLimitWait(resp *http.Response, msg string) (time.Duration, bool) {
+	if resp.StatusCode != http.StatusForbidden && resp.StatusCode != http.StatusTooManyRequests {
+		return 0, false
+	}
+	if s, err := strconv.Atoi(resp.Header.Get("Retry-After")); err == nil && s > 0 {
+		return time.Duration(s) * time.Second, true
+	}
+	if resp.Header.Get("X-RateLimit-Remaining") == "0" {
+		if reset, err := strconv.ParseInt(resp.Header.Get("X-RateLimit-Reset"), 10, 64); err == nil {
+			if d := time.Until(time.Unix(reset, 0)); d > 0 {
+				return d, true
+			}
+		}
+	}
+	if strings.Contains(strings.ToLower(msg), "rate limit") {
+		return time.Minute, true
+	}
+	return 0, false
+}
+
+// pace waits for a blob slot: a burst, then one per blobInterval, and none
+// while GitHub has asked us to back off.
+func (g *GitHubRelay) pace(ctx context.Context) error {
+	for {
+		g.paceMu.Lock()
+		now := time.Now()
+		if g.paceAt.IsZero() {
+			g.paceTokens = blobBurst
+		} else {
+			g.paceTokens = min(blobBurst, g.paceTokens+float64(now.Sub(g.paceAt))/float64(blobInterval))
+		}
+		g.paceAt = now
+		var wait time.Duration
+		switch {
+		case now.Before(g.pauseUntil):
+			wait = g.pauseUntil.Sub(now)
+		case g.paceTokens >= 1:
+			g.paceTokens--
+			g.paceMu.Unlock()
+			return nil
+		default:
+			wait = time.Duration((1 - g.paceTokens) * float64(blobInterval))
+		}
+		g.paceMu.Unlock()
+		t := time.NewTimer(wait)
+		select {
+		case <-t.C:
+		case <-ctx.Done():
+			t.Stop()
+			return ctx.Err()
+		}
+	}
+}
+
+// pauseBlobs stops all blob uploads for d.
+func (g *GitHubRelay) pauseBlobs(d time.Duration) {
+	g.paceMu.Lock()
+	if until := time.Now().Add(d); until.After(g.pauseUntil) {
+		g.pauseUntil = until
+	}
+	g.paceMu.Unlock()
+	log.Printf("[gh-relay] GitHub asked to slow down: uploads paused for %s", d.Round(time.Second))
+}
+
+// Wants reports whether an upload of this file would be taken now: the relay
+// lacks it (not committed, not queued, not being uploaded), it fits the size
+// cap, and no backoff is refusing uploads.
+func (g *GitHubRelay) Wants(size int64, crc uint32) bool {
+	if g == nil || (g.cfg.MaxBytes > 0 && size > g.cfg.MaxBytes) {
+		return false
+	}
+	key := protocol.RelayObjectName(size, crc, g.passphrase)
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if time.Now().Before(g.retryAfter) {
+		return false
+	}
+	_, known := g.known[key]
+	_, ready := g.ready[key]
+	return !known && !ready && !g.uploading[key]
 }
 
 func (g *GitHubRelay) createTree(ctx context.Context, baseTree string, entries any) (string, error) {
