@@ -318,6 +318,27 @@ func (c *MediaCache) Lookup(cacheKey string) (protocol.MediaMeta, bool) {
 // GetBlock returns one block of cached media for serving over DNS. Returns an
 // error if the channel isn't a media channel, the entry has expired, or the
 // block index is out of range. Increments the served-query counter.
+// Keep extends the life of the files stored under keys, as storing the same
+// bytes again would, without the copy. Reports whether every key was there.
+func (c *MediaCache) Keep(keys []string) bool {
+	now := time.Now()
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	all := true
+	for _, k := range keys {
+		e, ok := c.byKey[k]
+		if !ok {
+			all = false
+			continue
+		}
+		e.expiresAt = c.expiry(now)
+		if c.gh != nil {
+			c.gh.Touch(e.size, e.crc32)
+		}
+	}
+	return all
+}
+
 func (c *MediaCache) GetBlock(channel, block uint16) ([]byte, error) {
 	if !protocol.IsMediaChannel(channel) {
 		return nil, fmt.Errorf("channel %d is outside media range", channel)

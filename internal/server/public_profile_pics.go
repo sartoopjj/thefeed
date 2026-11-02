@@ -87,6 +87,7 @@ func (pr *PublicReader) fetchAllPublicProfilePhotos(ctx context.Context) {
 	pr.mu.RUnlock()
 
 	pics := make(map[string][]byte, len(channels))
+	current := make(map[string]bool, len(channels))
 	var picsMu sync.Mutex
 	var wg sync.WaitGroup
 	sem := make(chan struct{}, 4) // cap concurrency vs t.me
@@ -98,6 +99,7 @@ func (pr *PublicReader) fetchAllPublicProfilePhotos(ctx context.Context) {
 		if u == "" {
 			continue
 		}
+		current[u] = true
 		wg.Add(1)
 		go func(u string) {
 			defer wg.Done()
@@ -117,12 +119,12 @@ func (pr *PublicReader) fetchAllPublicProfilePhotos(ctx context.Context) {
 		}(u)
 	}
 	wg.Wait()
-	if len(pics) == 0 {
-		pr.feed.KeepProfilePics()
-		return
+	// No photo found is not "no photo": a page layout change looks the same,
+	// so only channels gone from the list lose theirs here.
+	total, dropped := pr.feed.RefreshProfilePics(pics, current, false)
+	if len(pics) > 0 || len(dropped) > 0 {
+		log.Printf("[public profile-pic] cycle done: %d fetched, %d dropped, %d total in bundle", len(pics), len(dropped), total)
 	}
-	total := pr.feed.MergeProfilePics(pics)
-	log.Printf("[public profile-pic] cycle done: %d new, %d total in bundle", len(pics), total)
 }
 
 func httpGetWithLimit(ctx context.Context, c *http.Client, u string, limit int64) ([]byte, error) {

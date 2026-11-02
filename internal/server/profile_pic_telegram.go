@@ -50,6 +50,9 @@ func (tr *TelegramReader) fetchAllProfilePhotos(ctx context.Context, api *tg.Cli
 		totalSlots += len(tr.privates.ordered)
 	}
 	pics := make(map[string][]byte, totalSlots)
+	// Every channel in the lists, fetched or not this time: what is missing
+	// from it has been removed, and its avatar goes with it.
+	current := make(map[string]bool, totalSlots)
 
 	// Public channels.
 	for _, username := range tr.channels {
@@ -60,12 +63,15 @@ func (tr *TelegramReader) fetchAllProfilePhotos(ctx context.Context, api *tg.Cli
 		if username == "" {
 			continue
 		}
+		current[username] = true
 		rp, err := tr.resolvePeer(ctx, api, username)
 		if err != nil {
 			log.Printf("[profile-pics] resolve %s: %v", username, err)
 			continue
 		}
 		if rp.photoID == 0 {
+			// The photo was taken down: so is ours.
+			pics[username] = nil
 			continue
 		}
 		// Skip the download if we already pushed this photoID.
@@ -96,11 +102,16 @@ func (tr *TelegramReader) fetchAllProfilePhotos(ctx context.Context, api *tg.Cli
 			if ctx.Err() != nil {
 				return
 			}
+			key := privateChannelID(hash)
+			current[key] = true
 			rp, ok := tr.privates.get(hash)
-			if !ok || rp.photoID == 0 {
+			if !ok {
 				continue
 			}
-			key := privateChannelID(hash)
+			if rp.photoID == 0 {
+				pics[key] = nil
+				continue
+			}
 			tr.mu.Lock()
 			if tr.lastPhotoID == nil {
 				tr.lastPhotoID = map[string]int64{}
@@ -122,11 +133,17 @@ func (tr *TelegramReader) fetchAllProfilePhotos(ctx context.Context, api *tg.Cli
 		}
 	}
 
-	if len(pics) == 0 {
-		tr.feed.KeepProfilePics()
-		return
+	// Merged, so other readers' entries (X's "x:") survive.
+	total, dropped := tr.feed.RefreshProfilePics(pics, current, false)
+	if len(dropped) > 0 {
+		// Gone from the bundle: fetch again if the channel comes back.
+		tr.mu.Lock()
+		for _, k := range dropped {
+			delete(tr.lastPhotoID, k)
+		}
+		tr.mu.Unlock()
 	}
-	// Merge so other readers' contributions (e.g. X "x:" entries) survive.
-	total := tr.feed.MergeProfilePics(pics)
-	log.Printf("[profile-pics] cycle done: %d new, %d total in bundle", len(pics), total)
+	if len(pics) > 0 || len(dropped) > 0 {
+		log.Printf("[profile-pics] cycle done: %d changed, %d dropped, %d total in bundle", len(pics), len(dropped), total)
+	}
 }

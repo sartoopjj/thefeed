@@ -8,6 +8,7 @@ import (
 	"hash/crc32"
 	"log"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -546,19 +547,76 @@ func (f *Feed) SetProfilePics(pics map[string][]byte) int {
 	return f.replaceProfilePicsBundle(pics)
 }
 
-// KeepProfilePics re-stores the avatars already in the bundle. Storing is what
-// keeps each one's DNS channel alive in the media cache, so a cycle that
-// fetched nothing new still calls this; the directory is rebuilt with live
-// channels if any were evicted meanwhile.
+// RefreshProfilePics applies one reader's cycle: pics it fetched (nil: no
+// photo now), current its channel list, x whether it is the X reader (entries
+// "x:<account>"). Its entries no longer listed or without a photo are dropped;
+// unchanged avatars are not stored again. Returns the bundle size and the
+// names dropped.
+func (f *Feed) RefreshProfilePics(pics map[string][]byte, current map[string]bool, x bool) (int, []string) {
+	f.mu.RLock()
+	have := make(map[string]uint32, len(f.profilePicsBundle.Entries))
+	for _, e := range f.profilePicsBundle.Entries {
+		have[e.Username] = e.CRC
+	}
+	f.mu.RUnlock()
+
+	changes := map[string][]byte{}
+	var dropped []string
+	for name := range have {
+		if strings.HasPrefix(name, "x:") == x && !current[name] {
+			changes[name] = nil
+			dropped = append(dropped, name)
+		}
+	}
+	for name, b := range pics {
+		crc, ok := have[name]
+		switch {
+		case len(b) == 0:
+			if ok {
+				changes[name] = nil
+				dropped = append(dropped, name)
+			}
+		case !ok || crc != crc32.ChecksumIEEE(b):
+			changes[name] = b
+		}
+	}
+	if len(changes) == 0 {
+		return f.KeepProfilePics(), nil
+	}
+	return f.MergeProfilePics(changes), dropped
+}
+
+// KeepProfilePics keeps the avatars already in the bundle alive in the media
+// cache, which is what keeps their DNS channels answering; a cycle that
+// fetched nothing new still calls it. Only if one was evicted meanwhile is the
+// bundle stored again, so the directory points at live channels.
 func (f *Feed) KeepProfilePics() int {
 	f.mu.RLock()
-	empty := len(f.profilePicsBundle.Entries) == 0
+	entries := f.profilePicsBundle.Entries
+	bundled := f.profilePicsBundle.Header.BundleSize > 0
+	media := f.media
 	f.mu.RUnlock()
-	if empty {
+	if len(entries) == 0 || media == nil {
 		return 0
+	}
+	keys := make([]string, 0, len(entries)+1)
+	for _, e := range entries {
+		if e.DNSChannel != 0 {
+			keys = append(keys, profilePicKey(e.Username))
+		}
+	}
+	if bundled {
+		keys = append(keys, profilePicsBundleKey)
+	}
+	if media.Keep(keys) {
+		return len(entries)
 	}
 	return f.MergeProfilePics(nil)
 }
+
+const profilePicsBundleKey = "profile-pics-bundle"
+
+func profilePicKey(username string) string { return "profile-pic:" + username }
 
 // MergeProfilePics is SetProfilePics that retains the existing bundle's
 // entries (re-extracted and re-verified) and overlays pics on top.
@@ -655,7 +713,7 @@ func (f *Feed) replaceProfilePicsBundle(pics map[string][]byte) int {
 			MIME:     mimeTag,
 		}
 		// Per-pic DNS channel, no GitHub upload (the bundle covers GitHub).
-		key := "profile-pic:" + e.name
+		key := profilePicKey(e.name)
 		fname := e.name
 		switch mimeTag {
 		case protocol.ProfilePicMimePNG:
@@ -677,18 +735,20 @@ func (f *Feed) replaceProfilePicsBundle(pics map[string][]byte) int {
 		entries = append(entries, entry)
 	}
 
-	// One bundle store → one GitHub upload covering every avatar.
-	bundleMeta, err := media.Store("profile-pics-bundle", "[PROFILE-BUNDLE]",
+	// One bundle store → one GitHub upload covering every avatar. It serves
+	// only that relay: refused (too large for every relay), the directory still
+	// goes out, and each avatar is fetched on its own DNS channel.
+	var header protocol.ProfilePicsBundleHeader
+	bundleMeta, err := media.Store(profilePicsBundleKey, "[PROFILE-BUNDLE]",
 		bundle, "application/octet-stream", "profile-pics.bin")
 	if err != nil {
-		log.Printf("[profile-pics] store bundle: %v", err)
-		return 0
-	}
-
-	header := protocol.ProfilePicsBundleHeader{
-		BundleSize: uint32(bundleMeta.Size),
-		BundleCRC:  bundleMeta.CRC32,
-		Relays:     append([]bool(nil), bundleMeta.Relays...),
+		log.Printf("[profile-pics] store bundle: %v (avatars go by DNS only)", err)
+	} else {
+		header = protocol.ProfilePicsBundleHeader{
+			BundleSize: uint32(bundleMeta.Size),
+			BundleCRC:  bundleMeta.CRC32,
+			Relays:     append([]bool(nil), bundleMeta.Relays...),
+		}
 	}
 
 	f.mu.Lock()

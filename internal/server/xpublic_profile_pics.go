@@ -71,6 +71,7 @@ func (xr *XPublicReader) fetchAllXProfilePhotos(ctx context.Context) {
 	xr.mu.RUnlock()
 
 	pics := make(map[string][]byte, len(accounts))
+	current := make(map[string]bool, len(accounts))
 	var picsMu sync.Mutex
 	var wg sync.WaitGroup
 	sem := make(chan struct{}, 4)
@@ -82,6 +83,7 @@ func (xr *XPublicReader) fetchAllXProfilePhotos(ctx context.Context) {
 		if a == "" {
 			continue
 		}
+		current["x:"+a] = true
 		wg.Add(1)
 		go func(account string) {
 			defer wg.Done()
@@ -102,12 +104,10 @@ func (xr *XPublicReader) fetchAllXProfilePhotos(ctx context.Context) {
 		}(a)
 	}
 	wg.Wait()
-	if len(pics) == 0 {
-		xr.feed.KeepProfilePics()
-		return
+	total, dropped := xr.feed.RefreshProfilePics(pics, current, true)
+	if len(pics) > 0 || len(dropped) > 0 {
+		log.Printf("[x profile-pic] cycle done: %d fetched, %d dropped, %d total in bundle", len(pics), len(dropped), total)
 	}
-	total := xr.feed.MergeProfilePics(pics)
-	log.Printf("[x profile-pic] cycle done: %d new, %d total in bundle", len(pics), total)
 }
 
 // xRSSGet mirrors the per-instance RSS request (same UA + Accept).
