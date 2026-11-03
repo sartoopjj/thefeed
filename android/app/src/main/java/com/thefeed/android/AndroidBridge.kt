@@ -24,7 +24,7 @@ import androidx.core.content.FileProvider
 import androidx.core.view.WindowInsetsControllerCompat
 import java.io.File
 import java.io.FileOutputStream
-import java.security.MessageDigest
+import mobile.Mobile
 
 class AndroidBridge(private val activity: Activity) {
 
@@ -107,7 +107,9 @@ class AndroidBridge(private val activity: Activity) {
     @JavascriptInterface
     fun setPassword(password: String): Boolean {
         if (password.isEmpty()) return false
-        prefs.edit().putString(PREF_PASSWORD_HASH, sha256(password)).apply()
+        val stored = Mobile.hashPasscode(password)
+        if (stored.isEmpty()) return false
+        prefs.edit().putString(PREF_PASSWORD_HASH, stored).apply()
         // The hash is only the lock screen. This is what makes the passcode
         // worth something at rest: the Telegram session and message cache are
         // sealed under a data key, and in device mode that key is a file
@@ -120,8 +122,7 @@ class AndroidBridge(private val activity: Activity) {
 
     @JavascriptInterface
     fun removePassword(currentPassword: String): Boolean {
-        val stored = prefs.getString(PREF_PASSWORD_HASH, null) ?: return false
-        if (sha256(currentPassword) != stored) return false
+        if (!passcodeMatches(currentPassword)) return false
         prefs.edit().remove(PREF_PASSWORD_HASH).apply()
         // Back to a device-held key, or the data would stay sealed under a
         // passcode the user has just removed and can no longer be asked for.
@@ -131,8 +132,18 @@ class AndroidBridge(private val activity: Activity) {
 
     @JavascriptInterface
     fun checkPassword(password: String): Boolean {
-        val stored = prefs.getString(PREF_PASSWORD_HASH, null) ?: return true
-        return sha256(password) == stored
+        if (prefs.getString(PREF_PASSWORD_HASH, null) == null) return true
+        return passcodeMatches(password)
+    }
+
+    // passcodeMatches checks the passcode against the stored hash, replacing
+    // a hash in an older form with the current one.
+    private fun passcodeMatches(password: String): Boolean {
+        val stored = prefs.getString(PREF_PASSWORD_HASH, null) ?: return false
+        val next = Mobile.checkPasscode(password, stored)
+        if (next.isEmpty()) return false
+        if (next != stored) prefs.edit().putString(PREF_PASSWORD_HASH, next).apply()
+        return true
     }
 
     // ===== Binding the passcode to the Telegram data key =====
@@ -561,12 +572,6 @@ class AndroidBridge(private val activity: Activity) {
             // binary leaves the filename verbatim.
             else -> "application/octet-stream"
         }
-    }
-
-    private fun sha256(input: String): String {
-        val digest = MessageDigest.getInstance("SHA-256")
-        val hash = digest.digest(input.toByteArray(Charsets.UTF_8))
-        return hash.joinToString("") { "%02x".format(it) }
     }
 
     companion object {
