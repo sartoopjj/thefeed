@@ -18,6 +18,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/gotd/td/telegram"
 	"github.com/sartoopjj/thefeed/internal/client"
 	"github.com/sartoopjj/thefeed/internal/protocol"
 	"github.com/sartoopjj/thefeed/internal/telcreds"
@@ -84,6 +85,11 @@ func telDefaultAvailable() bool {
 type telHub struct {
 	s   *Server
 	dir string
+
+	// signOuts counts sign-outs; a connection's session handle writes only
+	// while it is unchanged (guarded by sessMu).
+	sessMu   sync.Mutex
+	signOuts uint64
 
 	mu sync.Mutex
 	// ctx is the hub's lifetime context, set by reset (mirrors chatHub): a
@@ -193,10 +199,44 @@ func (h *telHub) sessionFile() tgbridge.SessionFile {
 	tc, err := loadTelCrypto(h.dir)
 	if err != nil {
 		log.Printf("tel: at-rest key unavailable (%v) — session left as it is on disk", err)
+		refuse := func([]byte) ([]byte, error) { return nil, err }
+		f.Seal, f.Open = refuse, refuse
 		return f
 	}
 	f.Seal, f.Open = tc.seal, tc.open
 	return f
+}
+
+// bridgeSession is the session handle for a new connection. After the user
+// signs out it stops writing: the connection still holds the key in memory and
+// saves it again on every reconnect. It reports success, because a failed save
+// drops the connection, and that is what delivers the sign-out to Telegram.
+func (h *telHub) bridgeSession() telegram.SessionStorage {
+	h.sessMu.Lock()
+	defer h.sessMu.Unlock()
+	return &telSessionHandle{SessionFile: h.sessionFile(), h: h, gen: h.signOuts}
+}
+
+type telSessionHandle struct {
+	tgbridge.SessionFile
+	h   *telHub
+	gen uint64
+}
+
+func (t *telSessionHandle) StoreSession(ctx context.Context, data []byte) error {
+	t.h.sessMu.Lock()
+	defer t.h.sessMu.Unlock()
+	if t.h.signOuts != t.gen {
+		return nil
+	}
+	return t.SessionFile.StoreSession(ctx, data)
+}
+
+// endSessions stops every session handle handed out so far.
+func (h *telHub) endSessions() {
+	h.sessMu.Lock()
+	h.signOuts++
+	h.sessMu.Unlock()
 }
 
 // refreshDialogs brings the cached conversations up to date behind an answer
@@ -414,7 +454,7 @@ func (h *telHub) connect(ctx context.Context, cfg Config, nickname string, gen u
 		APIID:     apiID,
 		APIHash:   apiHash,
 		Dial:      dial,
-		Session:   h.sessionFile(),
+		Session:   h.bridgeSession(),
 		NoUpdates: true, // the tunnel is scarce: fetch explicitly
 		// Must match the relay: a production client against a test DC dies
 		// deep in the handshake with "wrong DC".

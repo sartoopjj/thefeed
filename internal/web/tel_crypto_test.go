@@ -2,10 +2,15 @@ package web
 
 import (
 	"context"
+	"errors"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
+	"github.com/gotd/td/session"
 	"github.com/sartoopjj/thefeed/internal/tgbridge"
 )
 
@@ -291,5 +296,98 @@ func TestUnregisteredKeyDetection(t *testing.T) {
 		if isUnregisteredKey(errString(e)) {
 			t.Errorf("a recoverable failure was treated as a dead key: %q", e)
 		}
+	}
+}
+
+// A keyring cut short (a crash mid-write) holds no key any more: as with a
+// missing one, start fresh and keep sealing.
+func TestTruncatedKeyringStillSeals(t *testing.T) {
+	h := newTelTestServer(t).tel
+	secret := []byte(`{"auth":"secret-key-material"}`)
+	if err := h.sessionFile().StoreSession(context.Background(), secret); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(telCryptoDir(h.dir), "keyring.json"), nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	// What nothing can open any more is gone, so the app offers a sign-in.
+	if _, err := h.sessionFile().LoadSession(context.Background()); !errors.Is(err, session.ErrNotFound) {
+		t.Fatalf("after the damage: %v, want not-found", err)
+	}
+	if err := h.sessionFile().StoreSession(context.Background(), secret); err != nil {
+		t.Fatalf("no way back after a broken keyring: %v", err)
+	}
+	raw, _ := os.ReadFile(filepath.Join(h.dir, "session.json"))
+	if strings.Contains(string(raw), "secret-key-material") {
+		t.Fatal("session written in the clear")
+	}
+	got, err := h.sessionFile().LoadSession(context.Background())
+	if err != nil || string(got) != string(secret) {
+		t.Fatalf("round trip gave %q, %v", got, err)
+	}
+}
+
+// With no usable key at all, nothing is written.
+func TestNoKeyNoSessionWritten(t *testing.T) {
+	h := newTelTestServer(t).tel
+	if err := os.MkdirAll(h.dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(telCryptoDir(h.dir), nil, 0o600); err != nil { // the keys dir cannot be made
+		t.Fatal(err)
+	}
+	if err := h.sessionFile().StoreSession(context.Background(), []byte(`{"auth":"x"}`)); err == nil {
+		t.Fatal("stored without a key")
+	}
+	if _, err := os.Stat(filepath.Join(h.dir, "session.json")); !os.IsNotExist(err) {
+		t.Fatal("a session file was written without a key")
+	}
+}
+
+// A connection still holds the key after the user signs out and saves it again
+// on every reconnect: none of that may reach the disk. A new sign-in may.
+func TestSignOutStopsTheConnectionsSessionHandle(t *testing.T) {
+	s := newTelTestServer(t)
+	h := s.tel
+	held := h.bridgeSession()
+	if err := held.StoreSession(context.Background(), []byte(`{"auth":"account-key"}`)); err != nil {
+		t.Fatal(err)
+	}
+	rec := httptest.NewRecorder()
+	s.handleTelAuth(rec, httptest.NewRequest(http.MethodPost, "/api/tel/auth", strings.NewReader(`{"action":"logout"}`)))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("logout: %d", rec.Code)
+	}
+	if err := held.StoreSession(context.Background(), []byte(`{"auth":"account-key"}`)); err != nil {
+		t.Fatalf("a refused save must still report success, or the connection drops: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(h.dir, "session.json")); !os.IsNotExist(err) {
+		t.Fatal("the key came back after sign-out")
+	}
+	next := h.bridgeSession()
+	if err := next.StoreSession(context.Background(), []byte(`{"auth":"new-login"}`)); err != nil {
+		t.Fatal(err)
+	}
+	got, err := h.sessionFile().LoadSession(context.Background())
+	if err != nil || string(got) != `{"auth":"new-login"}` {
+		t.Fatalf("a sign-in after sign-out was not kept: %q %v", got, err)
+	}
+}
+
+// Dropping a key Telegram does not know keeps the connection: the user signs
+// in on it, and that sign-in must be saved.
+func TestUnregisteredKeyWipeKeepsTheLiveHandle(t *testing.T) {
+	h := newTelTestServer(t).tel
+	held := h.bridgeSession()
+	held.StoreSession(context.Background(), []byte(`{"auth":"unregistered"}`))
+	if err := h.wipeSession(); err != nil {
+		t.Fatal(err)
+	}
+	if err := held.StoreSession(context.Background(), []byte(`{"auth":"signed-in"}`)); err != nil {
+		t.Fatal(err)
+	}
+	got, err := h.sessionFile().LoadSession(context.Background())
+	if err != nil || string(got) != `{"auth":"signed-in"}` {
+		t.Fatalf("the sign-in on the same connection was lost: %q %v", got, err)
 	}
 }

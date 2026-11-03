@@ -515,6 +515,7 @@ func (s *Server) telLogout(w http.ResponseWriter, r *http.Request, h *telHub) {
 	// The account comes off this device first, before anything that can hang
 	// or fail. Deleting the key and the conversations is the part that matters
 	// and the part that cannot go wrong: it is a file on this machine.
+	h.endSessions()
 	wipeErr := h.wipeSession()
 
 	// Revoking the key at Telegram is worth doing and not worth waiting for:
@@ -537,6 +538,8 @@ func (s *Server) telLogout(w http.ResponseWriter, r *http.Request, h *telHub) {
 		lcancel()
 	}
 	h.disconnect()
+	// A call that was still running may have filled the cache meanwhile.
+	h.store().Forget()
 
 	// ok reports what the user asked for: is the account off this device?
 	// Whether Telegram heard about it is separate, and reported separately.

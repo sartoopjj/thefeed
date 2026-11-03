@@ -83,7 +83,8 @@ func resetSealed(dir string) {
 }
 
 // loadTelCrypto loads or initialises the Telegram keyring. A first run makes a
-// DEK and device key; anything unreadable locks instead of regenerating.
+// DEK and device key; a passing read error locks, a keyring that is gone or
+// cut short starts fresh.
 func loadTelCrypto(dir string) (*telCrypto, error) {
 	tc := &telCrypto{dir: telCryptoDir(dir), mode: "device"}
 	if err := os.MkdirAll(tc.dir, 0o700); err != nil {
@@ -108,7 +109,11 @@ func loadTelCrypto(dir string) (*telCrypto, error) {
 
 	var kr savedKeyring
 	if err := json.Unmarshal(raw, &kr); err != nil {
-		return nil, err
+		// The bytes are there and will not change: the wrapped key is lost
+		// exactly as if the file were missing.
+		log.Printf("tel: keyring damaged — starting fresh")
+		resetSealed(dir)
+		return tc, tc.initDevice()
 	}
 	tc.mode = kr.Mode
 	if kr.Mode == "passphrase" {
@@ -150,7 +155,7 @@ func (tc *telCrypto) initDevice() error {
 	if _, err := rand.Read(kek[:]); err != nil {
 		return err
 	}
-	if err := writeFileAtomic(tc.deviceKeyPath(), kek[:], 0o600); err != nil {
+	if err := writeKeyFile(tc.deviceKeyPath(), kek[:]); err != nil {
 		return err
 	}
 	tc.mode = "device"
@@ -163,7 +168,7 @@ func (tc *telCrypto) writeKeyring(kr savedKeyring) error {
 	if err != nil {
 		return err
 	}
-	return writeFileAtomic(tc.keyringPath(), data, 0o600)
+	return writeKeyFile(tc.keyringPath(), data)
 }
 
 // setPassphrase rewraps the SAME DEK under a passcode-derived key and removes
@@ -225,7 +230,7 @@ func (tc *telCrypto) removePassphrase() error {
 	if _, err := rand.Read(kek[:]); err != nil {
 		return err
 	}
-	if err := writeFileAtomic(tc.deviceKeyPath(), kek[:], 0o600); err != nil {
+	if err := writeKeyFile(tc.deviceKeyPath(), kek[:]); err != nil {
 		return err
 	}
 	if err := tc.writeKeyring(savedKeyring{Mode: "device", WrappedDEK: sealBytes(kek, tc.dek[:])}); err != nil {

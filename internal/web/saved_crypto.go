@@ -171,7 +171,7 @@ func (sc *savedCrypto) initDevice() error {
 	if _, err := rand.Read(kek[:]); err != nil {
 		return err
 	}
-	if err := writeFileAtomic(sc.deviceKeyPath(), kek[:], 0o600); err != nil {
+	if err := writeKeyFile(sc.deviceKeyPath(), kek[:]); err != nil {
 		return err
 	}
 	sc.mode = "device"
@@ -184,12 +184,34 @@ func (sc *savedCrypto) writeKeyring(kr savedKeyring) error {
 	if err != nil {
 		return err
 	}
-	return writeFileAtomic(sc.keyringPath(), data, 0o600)
+	return writeKeyFile(sc.keyringPath(), data)
 }
 
 func writeFileAtomic(path string, data []byte, perm os.FileMode) error {
 	tmp := path + ".tmp"
 	if err := os.WriteFile(tmp, data, perm); err != nil {
+		return err
+	}
+	return os.Rename(tmp, path)
+}
+
+// writeKeyFile is writeFileAtomic for key material, flushed to disk before the
+// rename so a crash cannot leave the key file empty. A filesystem that cannot
+// flush still gets the write.
+func writeKeyFile(path string, data []byte) error {
+	tmp := path + ".tmp"
+	f, err := os.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
+	if err != nil {
+		return err
+	}
+	_, err = f.Write(data)
+	if err == nil {
+		_ = f.Sync()
+	}
+	if cerr := f.Close(); err == nil {
+		err = cerr
+	}
+	if err != nil {
 		return err
 	}
 	return os.Rename(tmp, path)
@@ -266,7 +288,7 @@ func (sc *savedCrypto) removePassphrase() error {
 	if _, err := rand.Read(kek[:]); err != nil {
 		return err
 	}
-	if err := writeFileAtomic(sc.deviceKeyPath(), kek[:], 0o600); err != nil {
+	if err := writeKeyFile(sc.deviceKeyPath(), kek[:]); err != nil {
 		return err
 	}
 	if err := sc.writeKeyring(savedKeyring{Mode: "device", WrappedDEK: sealBytes(kek, sc.dek[:])}); err != nil {
