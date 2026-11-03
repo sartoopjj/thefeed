@@ -89,9 +89,9 @@ function harness(answer) {
 
 // --- the bottom bar where we cannot write -------------------------------------
 {
-  const mk = (dialog, busy) => new Function('telPeerKey', 'telDialogFor', 'telAttrQ', 'telEsc', 'telT', 'icon', 'telDirectCtl',
+  const mk = (dialog, busy) => new Function('telPeerKey', 'telDialogFor', 'telAttrQ', 'telEsc', 'telT', 'icon', 'telDirectCtl', 'jsStr',
     fn('telReadOnlyBarHTML') + '; return telReadOnlyBarHTML;')((p) => p.kind + ':' + p.id, () => dialog,
-    (x) => x, (x) => x, (k) => '[' + k + ']', (n) => '<' + n + '>', busy ? {} : null);
+    (x) => x, (x) => x, (k) => '[' + k + ']', (n) => '<' + n + '>', busy ? {} : null, (x) => x);
   const bar = mk({ muted: false }, false)(channel);
   eq('mute is at the bottom, as in Telegram', /telToggleMute\('channel:100'\)[\s\S]*\[tel_mute\]/.test(bar), true);
   eq('and the direct-message button beside it', /onclick="telOpenDirect\(\)"[\s\S]*\[tel_direct\]/.test(bar), true);

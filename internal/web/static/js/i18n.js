@@ -162,15 +162,6 @@ var I18N = {
     tel_password_intro: 'این حساب تأیید دومرحله‌ای دارد. رمز آن را وارد کنید.',
     tel_logout: 'خروج از حساب',
     tel_logout_confirm: 'از حساب تلگرام خارج می‌شوید؟ کلید ذخیره‌شده پاک می‌شود.',
-    // countries (dial codes)
-    tel_country_ir: 'ایران', tel_country_tr: 'ترکیه', tel_country_ae: 'امارات',
-    tel_country_de: 'آلمان', tel_country_gb: 'بریتانیا', tel_country_us: 'آمریکا',
-    tel_country_ca: 'کانادا', tel_country_fr: 'فرانسه', tel_country_nl: 'هلند',
-    tel_country_se: 'سوئد', tel_country_it: 'ایتالیا', tel_country_es: 'اسپانیا',
-    tel_country_ru: 'روسیه', tel_country_iq: 'عراق', tel_country_af: 'افغانستان',
-    tel_country_az: 'آذربایجان', tel_country_am: 'ارمنستان', tel_country_ge: 'گرجستان',
-    tel_country_qa: 'قطر', tel_country_om: 'عمان', tel_country_au: 'استرالیا',
-    tel_country_my: 'مالزی', tel_country_in: 'هند',
     // conversation list
     tel_tab_all: 'همه',
     tel_tab_user: 'افراد',
@@ -974,15 +965,6 @@ var I18N = {
     tel_password_intro: 'This account has two-step verification. Enter its password.',
     tel_logout: 'Sign out',
     tel_logout_confirm: 'Sign out of Telegram? The stored login key is deleted.',
-    // countries (dial codes)
-    tel_country_ir: 'Iran', tel_country_tr: 'Turkey', tel_country_ae: 'UAE',
-    tel_country_de: 'Germany', tel_country_gb: 'United Kingdom', tel_country_us: 'United States',
-    tel_country_ca: 'Canada', tel_country_fr: 'France', tel_country_nl: 'Netherlands',
-    tel_country_se: 'Sweden', tel_country_it: 'Italy', tel_country_es: 'Spain',
-    tel_country_ru: 'Russia', tel_country_iq: 'Iraq', tel_country_af: 'Afghanistan',
-    tel_country_az: 'Azerbaijan', tel_country_am: 'Armenia', tel_country_ge: 'Georgia',
-    tel_country_qa: 'Qatar', tel_country_om: 'Oman', tel_country_au: 'Australia',
-    tel_country_my: 'Malaysia', tel_country_in: 'India',
     // conversation list
     tel_tab_all: 'All',
     tel_tab_user: 'People',

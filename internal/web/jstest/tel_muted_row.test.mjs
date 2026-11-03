@@ -24,10 +24,10 @@ const eq = (name, got, want) => {
 const block = src.match(/html \+= '<div class="tel-row'[\s\S]*?'<\/div>';/)[0];
 const row = (d) => new Function(
   'd', 'key', 'active', 'telAvatar', 'telFlag', 'telEsc', 'telAttrQ', 'telT',
-  'telFmtWhen', 'icon', 'telPeerKey', 'telState',
+  'telFmtWhen', 'icon', 'telPeerKey', 'telState', 'jsStr',
   'var html = ""; ' + block + '; return html;',
 )(d, 'h1', false, () => '<avatar>', s => s, s => s, s => s, k => k,
-  () => '10:00', n => `<i:${n}>`, () => 'h1', { peer: null });
+  () => '10:00', n => `<i:${n}>`, () => 'h1', { peer: null }, s => s);
 
 const muted = { peer: { kind: 'channel', id: 1, title: 'Quiet' }, muted: true, unread: 0, preview: 'p' };
 const audible = { peer: { kind: 'channel', id: 2, title: 'Loud' }, muted: false, unread: 0, preview: 'p' };

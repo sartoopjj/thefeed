@@ -118,9 +118,9 @@ function harness(peer, msgs, answer) {
 {
   const sheetFor = (peer) => {
     let sheet = '';
-    const del = new Function('telCloseSheet', 'telDialogFor', 'telAttrQ', 'telEsc', 'telT', 'telSheetItem', 'telSheet',
+    const del = new Function('telCloseSheet', 'telDialogFor', 'telAttrQ', 'telEsc', 'telT', 'telSheetItem', 'telSheet', 'jsStr',
       fn('telChannelBased') + fn('telDeleteChat') + '; return telDeleteChat;')(() => {}, () => ({ peer }), (x) => x, (x) => x,
-      (k) => '[' + k + ']{name}', (i, label, on) => '<' + on + '>' + label + '</>', (h) => { sheet = h; });
+      (k) => '[' + k + ']{name}', (i, label, on) => '<' + on + '>' + label + '</>', (h) => { sheet = h; }, (x) => x);
     del(peer.kind + ':' + peer.id);
     return sheet;
   };

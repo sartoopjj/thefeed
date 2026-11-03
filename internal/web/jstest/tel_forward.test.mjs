@@ -34,7 +34,7 @@ function harness(peer, msgs, answer, fetchedTarget) {
   const sheetEl = { querySelectorAll: () => seen.opts };
   const api = new Function('telState', 'telThread', 'telPeerKey', 'telSheet', 'telSheetItem', 'telT', 'telCloseSheet',
     'telRender', 'telWhenIdle', 'telOp', 'telCall', 'telTouchPreview', 'telMergeMessages', 'telDialogFor', 'telEsc',
-    'telAttrQ', 'telAvatar', 'telSafeText', 'icon', 'hydrateIcons', 'showToast', 'document', 'seen',
+    'telAttrQ', 'telAvatar', 'telSafeText', 'icon', 'hydrateIcons', 'showToast', 'document', 'seen', 'jsStr',
     fn('telFindMsg') + fn('telProtected') + fn('telChannelBased') + fn('telCanDelete') + fn('telMsgMenu') + fn('telHasMsgMenu') +
     fn('telForwardTargets') + fn('telForwardListHTML') + fn('telFwdOption') + fn('telStartForward') +
     fn('telForwardOption') + fn('telForwardFilter') + fn('telDoForward') + fn('telFwdHTML') +
@@ -45,7 +45,7 @@ function harness(peer, msgs, answer, fetchedTarget) {
     (k, th) => { seen.touched = k; }, (th, m) => { seen.merged = m; th.msgs.push(...m); },
     (k) => state.dialogs.find((d) => key(d.peer) === k) || null, (s) => String(s), (s) => String(s),
     (n) => '<av ' + n + '>', (s) => s, (n) => '<i ' + n + '>', () => {}, (m) => seen.toasts.push(m),
-    { getElementById: (id) => id === 'telFwdList' ? seen.list : (id === 'telSheet' ? sheetEl : null) }, seen);
+    { getElementById: (id) => id === 'telFwdList' ? seen.list : (id === 'telSheet' ? sheetEl : null) }, seen, (s) => String(s));
   return { state, seen, api, threads };
 }
 

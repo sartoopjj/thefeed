@@ -26,13 +26,14 @@ const eq = (name, got, want) => {
 
 // The shape: a value dropped between \'  and  \'  -- a single-quoted JS
 // string inside a double-quoted HTML attribute.
-const sink = /\\''\s*\+\s*(escAttr|tmEscAttr|esc)\s*\(/g;
+const sink = /\\''\s*\+\s*(escAttr|tmEscAttr|esc|telAttrQ|telEsc)\s*\(/g;
 const offenders = [];
 for (const f of readdirSync(jsDir).filter(n => n.endsWith('.js'))) {
   const src = readFileSync(join(jsDir, f), 'utf8');
-  src.split('\n').forEach((line, i) => {
-    for (const m of line.matchAll(sink)) offenders.push(`${f}:${i + 1} uses ${m[1]}`);
-  });
+  // Whole file, so a call split over two lines is seen too.
+  for (const m of src.matchAll(sink)) {
+    offenders.push(`${f}:${src.slice(0, m.index).split('\n').length} uses ${m[1]}`);
+  }
 }
 eq('every inline-handler value uses the JS-string escaper', offenders, []);
 
@@ -65,6 +66,14 @@ eq('a trailing backslash cannot eat the closing quote',
 eq('a double quote cannot close the attribute', jsStr('"').includes('&quot;'), true);
 eq('and angle brackets cannot open a tag',
   jsStr('<script>').includes('<'), false);
+
+// --- a #thefeed:// link fills the import form, it never imports -----------
+
+const main = readFileSync(join(jsDir, 'main.js'), 'utf8');
+const hashLine = main.split('\n').find((l) => l.includes("startsWith('#thefeed://')")) || '';
+eq('the link does not import by itself', /doImportUri\(/.test(hashLine), false);
+eq('the form is filled after it opens (opening clears it)',
+  hashLine.indexOf('openProfiles()') >= 0 && hashLine.indexOf('openProfiles()') < hashLine.indexOf("importUriInput').value ="), true);
 
 console.log(`${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

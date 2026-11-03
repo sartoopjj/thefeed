@@ -819,34 +819,56 @@ function telCancelCreds() { telState.editCreds = false; telRender(); }
 window.telEditCredentials = telEditCredentials;
 window.telCancelCreds = telCancelCreds;
 
-// TEL_DIAL_CODES: local list, likeliest first; 'code' prefixes the number.
-var TEL_DIAL_CODES = [
-  { id: 'ir', code: '+98' },
-  { id: 'tr', code: '+90' },
-  { id: 'ae', code: '+971' },
-  { id: 'de', code: '+49' },
-  { id: 'gb', code: '+44' },
-  { id: 'us', code: '+1' },
-  { id: 'ca', code: '+1' },
-  { id: 'fr', code: '+33' },
-  { id: 'nl', code: '+31' },
-  { id: 'se', code: '+46' },
-  { id: 'it', code: '+39' },
-  { id: 'es', code: '+34' },
-  { id: 'ru', code: '+7' },
-  { id: 'iq', code: '+964' },
-  { id: 'af', code: '+93' },
-  { id: 'az', code: '+994' },
-  { id: 'am', code: '+374' },
-  { id: 'ge', code: '+995' },
-  { id: 'qa', code: '+974' },
-  { id: 'om', code: '+968' },
-  { id: 'au', code: '+61' },
-  { id: 'my', code: '+60' },
-  { id: 'in', code: '+91' }
-];
+// TEL_DIAL_TOP opens the sign-in picker, likeliest first; every other region
+// follows in alphabetical order.
+var TEL_DIAL_TOP = ['ir', 'tr', 'ae', 'de', 'gb', 'us', 'ca', 'fr', 'nl', 'se', 'it', 'es',
+  'ru', 'iq', 'af', 'az', 'am', 'ge', 'qa', 'om', 'au', 'my', 'in'];
+var telCountryList = null;
 
-function telDialCode() { return telState.dial || TEL_DIAL_CODES[0].code; }
+// telCountries decodes TEL_COUNTRIES_B64 (telcountries.js) once: {id, code, en, fa}.
+function telCountries() {
+  if (telCountryList) return telCountryList;
+  var bin = atob(typeof TEL_COUNTRIES_B64 === 'string' ? TEL_COUNTRIES_B64 : '');
+  var bytes = new Uint8Array(bin.length);
+  for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  telCountryList = new TextDecoder().decode(bytes).split('\n').map(function (line) {
+    var f = line.split('\t');
+    return { id: f[0], code: '+' + f[1], en: f[2], fa: f[3] };
+  }).filter(function (c) { return c.id && c.fa; });
+  return telCountryList;
+}
+
+function telCountryName(c) { return (typeof lang !== 'undefined' && lang === 'fa') ? c.fa : c.en; }
+
+// telDialCountry is the picked region; telState.dial holds its id, since one
+// code can belong to several (+1, +7).
+function telDialCountry() {
+  var all = telCountries();
+  var find = function (id) {
+    for (var i = 0; i < all.length; i++) if (all[i].id === id) return all[i];
+    return null;
+  };
+  return find(telState.dial) || find(TEL_DIAL_TOP[0]) || { id: '', code: '+' };
+}
+
+// telDialSelectHTML is the picker: the likeliest regions, then the rest by name.
+function telDialSelectHTML() {
+  var picked = telDialCountry().id, byId = {}, rest = [];
+  telCountries().forEach(function (c) { byId[c.id] = c; if (TEL_DIAL_TOP.indexOf(c.id) < 0) rest.push(c); });
+  var col = typeof lang !== 'undefined' && lang === 'fa' ? 'fa' : 'en';
+  rest.sort(function (a, b) { return telCountryName(a).localeCompare(telCountryName(b), col); });
+  var opt = function (c) {
+    return '<option value="' + telAttrQ(c.id) + '"' + (c.id === picked ? ' selected' : '') +
+      '>' + telEsc(telCountryName(c)) + ' (' + telEsc(c.code) + ')</option>';
+  };
+  var html = '<select id="telDial" class="tel-input tel-dial" dir="ltr" onchange="telOnDialChange(this.value)">';
+  TEL_DIAL_TOP.forEach(function (id) { if (byId[id]) html += opt(byId[id]); });
+  html += '<option disabled>──────────</option>';
+  rest.forEach(function (c) { html += opt(c); });
+  return html + '</select>';
+}
+
+function telDialCode() { return telDialCountry().code; }
 
 function telOnDialChange(v) {
   telState.dial = v;
@@ -1935,7 +1957,7 @@ function telDeleteChat(key) {
   var d = telDialogFor(key);
   if (!d) return;
   var p = d.peer;
-  var q = '\'' + telAttrQ(key) + '\'';
+  var q = '\'' + jsStr(key) + '\'';
   var items = '';
   if (p.direct) {
     // Nothing joined, and Telegram lets no one delete these: only our list.
@@ -2730,7 +2752,7 @@ function telRenderPickServer(info) {
   servers.forEach(function (s) {
     // Only the config being connected to is worth showing mid-attempt.
     if (connecting && s.key !== telState.server) return;
-    html += '<button type="button" class="tel-srv" onclick="telConnect(\'' + telAttrQ(s.key) + '\')"' +
+    html += '<button type="button" class="tel-srv" onclick="telConnect(\'' + jsStr(s.key) + '\')"' +
       (connecting ? ' disabled' : '') + '>' +
       '<span class="tel-srv-shield">' + icon('shield') + '</span>' +
       '<span class="tel-srv-main"><span class="tel-srv-name" dir="auto">' +
@@ -2776,12 +2798,7 @@ function telRenderLogin() {
   if (!telState.codeHash) {
     var typed = telState.phone || '';
     if (typed.indexOf(telDialCode()) === 0) typed = typed.slice(telDialCode().length);
-    var sel = '<select id="telDial" class="tel-input tel-dial" dir="ltr" onchange="telOnDialChange(this.value)">';
-    TEL_DIAL_CODES.forEach(function (c) {
-      sel += '<option value="' + telAttrQ(c.code) + '"' + (c.code === telDialCode() ? ' selected' : '') +
-        '>' + telEsc(telT('tel_country_' + c.id)) + ' (' + telEsc(c.code) + ')</option>';
-    });
-    sel += '</select>';
+    var sel = telDialSelectHTML();
     html += '<div class="tel-step-head" dir="auto">' + telEsc(telT('tel_login_intro')) + '</div>' +
       '<label class="tel-label" for="telPhone" dir="auto">' + telEsc(telT('tel_phone')) + '</label>' +
       '<div class="tel-phone-row" dir="ltr">' + sel +
@@ -2830,7 +2847,7 @@ function telRenderDialogs() {
     var key = telPeerKey(d.peer);
     var active = telPeerKey(telState.peer) === key;
     html += '<div class="tel-row' + (active ? ' active' : '') +
-      '" onclick="telOpenPeer(\'' + telAttrQ(key) + '\')">' +
+      '" onclick="telOpenPeer(\'' + jsStr(key) + '\')">' +
       telAvatar(d.peer.title, 44, d.peer.thumb) +
       '<span class="tel-row-main">' +
       '<span class="tel-row-top">' +
@@ -2851,7 +2868,7 @@ function telRenderDialogs() {
         telEsc(d.unread > 99 ? '99+' : d.unread) + '</span>' : '') +
       '</span>' +
       '<button class="tel-icon-btn tel-row-menu" aria-label="' + telAttrQ(telT('tel_menu')) +
-      '" onclick="event.stopPropagation();telRowMenu(\'' + telAttrQ(key) + '\')">' + icon('more') + '</button>' +
+      '" onclick="event.stopPropagation();telRowMenu(\'' + jsStr(key) + '\')">' + icon('more') + '</button>' +
       '</div>';
   });
   html += '</div>';
@@ -3003,7 +3020,7 @@ function telReadOnlyBarHTML(peer) {
   var d = telDialogFor(key);
   var html = '<div class="tel-ro-bar">';
   if (d) {
-    html += '<button class="tel-ro-btn" onclick="telToggleMute(\'' + telAttrQ(key) + '\')">' +
+    html += '<button class="tel-ro-btn" onclick="telToggleMute(\'' + jsStr(key) + '\')">' +
       icon(d.muted ? 'bell' : 'bellOff') + '<span>' + telEsc(telT(d.muted ? 'tel_unmute' : 'tel_mute')) + '</span></button>';
   }
   if (peer.directId) {
@@ -3130,7 +3147,7 @@ function telReactionsHTML(m) {
       // because it is Telegram's string, not ours.
       html += '<button type="button" class="tel-react' + (r.chosen ? ' chosen' : '') +
         '" onclick="event.stopPropagation();telReact(' + (m.id | 0) + ',\'' +
-        telAttrQ(r.emoji) + '\')">' + telEsc(telSafeText(r.emoji)) +
+        jsStr(r.emoji) + '\')">' + telEsc(telSafeText(r.emoji)) +
         '<span class="tel-react-n">' + telEsc(telFmtCount(r.count)) + '</span></button>';
     });
     html += '</div>';
@@ -3739,7 +3756,7 @@ function telForwardListHTML(q) {
   if (!rows.length) return '<div class="tel-sheet-note tel-fwd-none">' + telEsc(telT('tel_forward_none')) + '</div>';
   return rows.map(function (d) {
     var key = telPeerKey(d.peer);
-    return '<button class="tel-sheet-item tel-fwd-row" onclick="telDoForward(\'' + telAttrQ(key) + '\')">' +
+    return '<button class="tel-sheet-item tel-fwd-row" onclick="telDoForward(\'' + jsStr(key) + '\')">' +
       telAvatar(d.peer.title, 32, d.peer.thumb) + ' <span dir="auto">' + telEsc(d.peer.title || '') + '</span></button>';
   }).join('');
 }
@@ -4200,17 +4217,17 @@ function telRowMenu(key) {
   var d = telDialogFor(key);
   if (!d) return;
   var isChannel = d.peer.kind === 'channel' || d.peer.kind === 'forum';
-  var items = telSheetItem('messenger', telT('tel_open'), 'telCloseSheet();telOpenPeer(\'' + telAttrQ(key) + '\')');
+  var items = telSheetItem('messenger', telT('tel_open'), 'telCloseSheet();telOpenPeer(\'' + jsStr(key) + '\')');
   items += telSheetItem(d.muted ? 'bell' : 'bellOff',
     telT(d.muted ? 'tel_unmute' : 'tel_mute'),
-    'telCloseSheet();telToggleMute(\'' + telAttrQ(key) + '\')');
+    'telCloseSheet();telToggleMute(\'' + jsStr(key) + '\')');
   if (d.peer.username) {
     // Pass the key, not the value: an attribute decodes its escapes before
     // the JS is parsed.
     items += telSheetItem('copy', '@' + d.peer.username,
-      'telCloseSheet();telCopyUsername(\'' + telAttrQ(key) + '\')');
+      'telCloseSheet();telCopyUsername(\'' + jsStr(key) + '\')');
   }
-  items += '<button class="tel-sheet-item tel-sheet-danger" onclick="telDeleteChat(\'' + telAttrQ(key) + '\')">' +
+  items += '<button class="tel-sheet-item tel-sheet-danger" onclick="telDeleteChat(\'' + jsStr(key) + '\')">' +
     icon('delete') + ' <span dir="auto">' +
     telEsc(telT(isChannel ? 'tel_leave' : 'tel_delete')) + '</span></button>';
   telSheet(items);
@@ -4230,21 +4247,21 @@ function telThreadMenu() {
   if (md) {
     items += telSheetItem(md.muted ? 'bell' : 'bellOff',
       telT(md.muted ? 'tel_unmute' : 'tel_mute'),
-      'telCloseSheet();telToggleMute(\'' + telAttrQ(key) + '\')');
+      'telCloseSheet();telToggleMute(\'' + jsStr(key) + '\')');
   }
   if (peer.username) {
     items += telSheetItem('copy', '@' + peer.username,
-      'telCloseSheet();telCopyUsername(\'' + telAttrQ(key) + '\')');
+      'telCloseSheet();telCopyUsername(\'' + jsStr(key) + '\')');
   }
   items += telSheetItem('arrowLeft', telT('tel_back'), 'telCloseSheet();telBackToList()');
   var vd = telDialogFor(key);
   if (vd && vd.visiting && (peer.kind === 'channel' || peer.kind === 'forum')) {
     items += telSheetItem('success', telT('tel_join'),
-      'telCloseSheet();telJoinChannel(\'' + telAttrQ(key) + '\')');
+      'telCloseSheet();telJoinChannel(\'' + jsStr(key) + '\')');
   }
   if (telDialogFor(key)) {
     var isChannel = peer.kind === 'channel' || peer.kind === 'forum';
-    items += '<button class="tel-sheet-item tel-sheet-danger" onclick="telDeleteChat(\'' + telAttrQ(key) + '\')">' +
+    items += '<button class="tel-sheet-item tel-sheet-danger" onclick="telDeleteChat(\'' + jsStr(key) + '\')">' +
       icon('delete') + ' <span dir="auto">' +
       telEsc(telT(isChannel ? 'tel_leave' : 'tel_delete')) + '</span></button>';
   }

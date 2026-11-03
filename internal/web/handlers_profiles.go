@@ -51,6 +51,10 @@ func (s *Server) handleProfiles(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "invalid JSON", 400)
 			return
 		}
+		if (req.Action == "create" || req.Action == "update") && !validDomains(req.Profile.Config) {
+			http.Error(w, "invalid domain", 400)
+			return
+		}
 		s.profilesMu.Lock()
 		pl, err := s.loadProfilesExisting()
 		if err != nil {
@@ -559,4 +563,20 @@ func normalisePinnedList(in []string) []string {
 		out = append(out, name)
 	}
 	return out
+}
+
+// validDomains reports whether a config's domains are DNS names: letters,
+// digits, '-', '_' and '.', at most 253 bytes.
+func validDomains(c Config) bool {
+	for _, d := range append([]string{c.Domain}, c.ExtraDomains...) {
+		if len(d) > 253 {
+			return false
+		}
+		for _, ch := range d {
+			if !(ch >= 'a' && ch <= 'z' || ch >= 'A' && ch <= 'Z' || ch >= '0' && ch <= '9' || ch == '-' || ch == '_' || ch == '.') {
+				return false
+			}
+		}
+	}
+	return true
 }
