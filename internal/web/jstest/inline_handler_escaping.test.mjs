@@ -70,10 +70,32 @@ eq('and angle brackets cannot open a tag',
 // --- a #thefeed:// link fills the import form, it never imports -----------
 
 const main = readFileSync(join(jsDir, 'main.js'), 'utf8');
-const hashLine = main.split('\n').find((l) => l.includes("startsWith('#thefeed://')")) || '';
-eq('the link does not import by itself', /doImportUri\(/.test(hashLine), false);
-eq('the form is filled after it opens (opening clears it)',
-  hashLine.indexOf('openProfiles()') >= 0 && hashLine.indexOf('openProfiles()') < hashLine.indexOf("importUriInput').value ="), true);
+const profilesSrc = readFileSync(join(jsDir, 'profiles.js'), 'utf8');
+const pfn = (name) => {
+  const m = profilesSrc.match(new RegExp('function ' + name + '\\([^)]*\\) \\{[\\s\\S]*?\\n\\}\\n'));
+  if (!m) throw new Error('missing ' + name);
+  return m[0];
+};
+const linkLine = main.split('\n').find((l) => l.includes('linkedConfig()')) || '';
+eq('the link does not import by itself', /doImportUri\(/.test(linkLine), false);
+// The page opens the form for the link, and start-up opens it again for a
+// user with no config yet: the link must survive both.
+function form(hash) {
+  const els = {};
+  const el = (id) => els[id] || (els[id] = { value: 'x', style: {}, classList: { add() {} } });
+  const run = new Function('location', 'document', 'renderProfilesModal', 'profiles', 'toggleDefaultConfigs',
+    pfn('linkedConfig') + pfn('openProfiles') + 'return { open: openProfiles, linked: linkedConfig };');
+  const f = run({ hash }, { getElementById: el }, () => {}, null, () => {});
+  return { f, input: el('importUriInput') };
+}
+const link = '#thefeed://t.example.org?k=a%20b&r=192.0.2.1';
+const one = form(link);
+one.f.open(); one.f.open();
+eq('the link is still in the form after start-up opens it again', one.input.value, 'thefeed://t.example.org?k=a b&r=192.0.2.1');
+const none = form('');
+none.f.open();
+eq('no link, empty form', none.input.value, '');
+eq('a malformed link leaves the form empty instead of stopping the page', form('#thefeed://%zz').f.linked(), '');
 
 console.log(`${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

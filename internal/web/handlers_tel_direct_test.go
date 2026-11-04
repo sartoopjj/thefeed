@@ -2,6 +2,7 @@ package web
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -9,6 +10,7 @@ import (
 
 	"github.com/gotd/td/tgerr"
 
+	"github.com/sartoopjj/thefeed/internal/client"
 	"github.com/sartoopjj/thefeed/internal/tgbridge"
 )
 
@@ -84,5 +86,13 @@ func TestTelRemoveDirectNeedsNoLink(t *testing.T) {
 	s.handleTelDelete(rec, httptest.NewRequest(http.MethodPost, "/api/tel/delete", strings.NewReader(string(b))))
 	if !strings.Contains(rec.Body.String(), "tel_err_not_connected") {
 		t.Errorf("a private chat without a link: %s", rec.Body.String())
+	}
+}
+
+// A full relay has its own message, however deep the dial wrapped it.
+func TestBusyRelayHasItsOwnMessage(t *testing.T) {
+	err := fmt.Errorf("connect: %w", fmt.Errorf("mtproto tunnel: %w", client.ErrMTProtoBusy))
+	if got := telStatusKey(err); got != "tel_err_server_full" {
+		t.Fatalf("got %q", got)
 	}
 }

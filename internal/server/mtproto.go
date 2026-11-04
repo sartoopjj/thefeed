@@ -1,6 +1,7 @@
 package server
 
 import (
+	"bytes"
 	"context"
 	"crypto/ecdh"
 	"crypto/rand"
@@ -9,6 +10,7 @@ import (
 	"log"
 	"net"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -62,6 +64,17 @@ type MTProtoConfig struct {
 	// demand, so typical use is far below the cap — but an attacker picks the
 	// worst case, which is what to size for when leaving MaxTunnels at 0.
 	MaxTunnels int
+	// MaxSessions bounds the session table. When it is full the longest-quiet
+	// of a few sampled sessions makes room, so a flood displaces itself instead
+	// of refusing the people using the relay. 0 means mtpDefaultMaxSessions.
+	MaxSessions int
+	// ReplySessionBytes bounds the replies one session keeps for retries. 0
+	// means mtpReplyBytes.
+	ReplySessionBytes int
+	// ReplyBudget bounds, in bytes, the replies all sessions keep for retries.
+	// Past it new replies are not kept: a retry goes unanswered and the client
+	// re-sends under a new counter. 0 means mtpDefaultReplyBudget.
+	ReplyBudget int
 	// IdleTTL expires a tunnel with no cells. The client re-opens on next use,
 	// which costs a reconnect, not a fresh login.
 	IdleTTL time.Duration
@@ -92,6 +105,8 @@ type MTProtoConfig struct {
 }
 
 type mtpTunnel struct {
+	// live is the relay's open-tunnel count, given back on close.
+	live *atomic.Int64
 	// from is the counter of the OPEN that made this tunnel; cells numbered
 	// below it belong to an earlier one.
 	from uint32
@@ -160,7 +175,24 @@ type MTProtoRelay struct {
 	// handshake tag, and expire quickly so a flood cannot pin memory.
 	sessions   map[[protocol.ChatSelectorSize]byte]*mtpSession
 	handshakes map[[protocol.ChatSelectorSize]byte]*mtpHandshake
+	// tunnelled are the sessions that opened a tunnel, kept only under
+	// MaxTunnels: where the cap looks for one to take the place of.
+	tunnelled map[[protocol.ChatSelectorSize]byte]*mtpSession
+
+	// tunnels counts open tunnels (for MaxTunnels); replyBytes what the
+	// sessions keep for retries (for ReplyBudget).
+	tunnels    atomic.Int64
+	replyBytes atomic.Int64
 }
+
+const (
+	mtpDefaultMaxSessions = 100_000
+	mtpDefaultReplyBudget = 256 << 20
+	// mtpEvictSample is how many sessions are looked at to pick one to drop:
+	// enough to find a quiet one, few enough that a full table costs a
+	// handshake nothing extra.
+	mtpEvictSample = 16
+)
 
 type mtpSession struct {
 	ks [protocol.KeySize]byte
@@ -185,7 +217,23 @@ type mtpSession struct {
 	// carried out twice -- the reply's nonce comes from the counter.
 	replies *mtpReplies
 	seen    *mtpSeen
+	// answering holds the counters being answered right now. A copy that
+	// arrives meanwhile -- resolvers forward the same query more than once --
+	// waits for that answer: an empty one would be taken as the reply.
+	answering map[uint32]*mtpAnswer
 }
+
+type mtpAnswer struct {
+	done    chan struct{}
+	waiting int
+}
+
+const (
+	// mtpCopyWait bounds how long a copy waits for its first copy's answer;
+	// mtpCopyWaiters how many copies of one cell may wait at once.
+	mtpCopyWait    = 5 * time.Second
+	mtpCopyWaiters = 8
+)
 
 // mtpReplies holds a session's recent sealed replies by request counter. A
 // client retries a cell three times, each after its own timeout (up to 60 s),
@@ -215,21 +263,34 @@ func (c *mtpReplies) get(counter uint32) ([]byte, bool) {
 	return r, ok
 }
 
-func (c *mtpReplies) put(counter uint32, reply []byte, now time.Time) {
-	if c.byCtr == nil {
-		c.byCtr = make(map[uint32][]byte)
-	}
+// put keeps reply, dropping what is past mtpReplyKeep or over share; used is
+// the relay-wide total, which may not pass budget.
+func (c *mtpReplies) put(counter uint32, reply []byte, now time.Time, share int, used *atomic.Int64, budget int64) {
 	cost := len(reply) + mtpReplyEntry
-	c.byCtr[counter] = reply
-	c.order = append(c.order, mtpKept{ctr: counter, at: now, cost: cost})
-	c.bytes += cost
 	i := 0
-	for i < len(c.order) && (c.bytes > mtpReplyBytes || now.Sub(c.order[i].at) > mtpReplyKeep) {
+	for i < len(c.order) && (c.bytes+cost > share || now.Sub(c.order[i].at) > mtpReplyKeep) {
 		delete(c.byCtr, c.order[i].ctr)
 		c.bytes -= c.order[i].cost
+		used.Add(-int64(c.order[i].cost))
 		i++
 	}
 	c.order = c.order[i:]
+	if used.Add(int64(cost)) > budget {
+		used.Add(-int64(cost))
+		return
+	}
+	if c.byCtr == nil {
+		c.byCtr = make(map[uint32][]byte)
+	}
+	c.byCtr[counter] = reply
+	c.order = append(c.order, mtpKept{ctr: counter, at: now, cost: cost})
+	c.bytes += cost
+}
+
+// free gives back everything the session keeps.
+func (c *mtpReplies) free(used *atomic.Int64) {
+	used.Add(-int64(c.bytes))
+	*c = mtpReplies{}
 }
 
 // mtpSeen records which counters have been answered. Exact within
@@ -306,6 +367,9 @@ type mtpHandshake struct {
 	// retry into a fresh, incomplete one and the client got a short
 	// "nothing yet" where it expected the ack ("sealed too short").
 	ack []byte
+	// key is the completed attempt's ephemeral key: another client can draw
+	// the same tag, and must not be handed this one's ack.
+	key []byte
 	// born is when this attempt started. Every refresh is measured against it
 	// so no entry can be kept alive for ever by being poked: a real handshake
 	// takes seconds, and one still unfinished after mtpHandshakeMaxLife is not
@@ -360,6 +424,15 @@ func NewMTProtoRelay(cfg MTProtoConfig) *MTProtoRelay {
 	}
 	if cfg.IdleTTL <= 0 {
 		cfg.IdleTTL = 5 * time.Minute
+	}
+	if cfg.MaxSessions <= 0 {
+		cfg.MaxSessions = mtpDefaultMaxSessions
+	}
+	if cfg.ReplyBudget <= 0 {
+		cfg.ReplyBudget = mtpDefaultReplyBudget
+	}
+	if cfg.ReplySessionBytes <= 0 {
+		cfg.ReplySessionBytes = mtpReplyBytes
 	}
 	if cfg.BufferBytes <= 0 {
 		cfg.BufferBytes = mtpDefaultBuffer
@@ -543,16 +616,43 @@ func (r *MTProtoRelay) HandleCell(selector [protocol.ChatSelectorSize]byte, coun
 		sess.tmu.Unlock()
 		return reply
 	}
+	if a := sess.answering[counter]; a != nil {
+		if a.waiting >= mtpCopyWaiters {
+			sess.tmu.Unlock()
+			return []byte{}
+		}
+		a.waiting++
+		sess.tmu.Unlock()
+		select {
+		case <-a.done:
+		case <-time.After(mtpCopyWait):
+		}
+		sess.tmu.Lock()
+		a.waiting--
+		reply, ok := sess.replies.get(counter)
+		sess.tmu.Unlock()
+		if !ok {
+			return []byte{}
+		}
+		return reply
+	}
 	if sess.seen.mark(counter) {
 		sess.tmu.Unlock()
 		return []byte{}
 	}
+	a := &mtpAnswer{done: make(chan struct{})}
+	if sess.answering == nil {
+		sess.answering = make(map[uint32]*mtpAnswer)
+	}
+	sess.answering[counter] = a
 	sess.tmu.Unlock()
 
 	status, body := r.dispatch(selector, sess, counter, plain, now)
 	reply := protocol.SealChatResponse(sess.ks, selector, counter, status, body)
 	sess.tmu.Lock()
-	sess.replies.put(counter, reply, now)
+	sess.replies.put(counter, reply, now, r.cfg.ReplySessionBytes, &r.replyBytes, int64(r.cfg.ReplyBudget))
+	delete(sess.answering, counter)
+	close(a.done)
 	sess.tmu.Unlock()
 	return reply
 }
@@ -564,7 +664,7 @@ func (r *MTProtoRelay) HandleCell(selector [protocol.ChatSelectorSize]byte, coun
 // from the payload size, so nothing in the query name identifies the protocol.
 // rememberAckLocked parks a completed handshake's reply so a retransmitted
 // fragment is answered identically. Caller holds r.mu.
-func (r *MTProtoRelay) rememberAckLocked(tag [protocol.ChatSelectorSize]byte, ack []byte, size int, now time.Time) {
+func (r *MTProtoRelay) rememberAckLocked(tag [protocol.ChatSelectorSize]byte, ack, key []byte, size int, now time.Time) {
 	hs := r.handshakes[tag]
 	if hs == nil {
 		hs = &mtpHandshake{born: now}
@@ -579,8 +679,19 @@ func (r *MTProtoRelay) rememberAckLocked(tag [protocol.ChatSelectorSize]byte, ac
 	// writes to a nil map -- which panics while holding r.mu and deadlocks the
 	// relay for every user, not just this one.
 	hs.frags = map[uint32][]byte{}
-	hs.ack = ack
+	hs.ack, hs.key = ack, key
 	hs.expires = hs.deadline(now)
+}
+
+// carries reports whether fragment counter of a completed attempt holds its
+// key; the tail past the key is random padding.
+func (hs *mtpHandshake) carries(counter uint32, payload []byte) bool {
+	start := int(counter) * hs.payloadSize
+	if start >= len(hs.key) {
+		return false
+	}
+	end := min(start+hs.payloadSize, len(hs.key))
+	return bytes.Equal(payload[:end-start], hs.key[start:end])
 }
 
 // evictOldestHandshakeLocked drops the attempt closest to expiry, to make room
@@ -616,7 +727,7 @@ func (r *MTProtoRelay) handshake(tag [protocol.ChatSelectorSize]byte, counter ui
 	// Already finished: this is the client re-sending a fragment whose reply it
 	// never saw. Hand back the same sealed ack rather than starting over -- a
 	// retransmit over DNS must be idempotent here exactly as it is for data.
-	if hs != nil && hs.ack != nil && hs.payloadSize == len(payload) && !now.After(hs.expires) {
+	if hs != nil && hs.ack != nil && hs.payloadSize == len(payload) && hs.carries(counter, payload) && !now.After(hs.expires) {
 		hs.expires = hs.deadline(now)
 		ack := hs.ack
 		r.mu.Unlock()
@@ -624,7 +735,7 @@ func (r *MTProtoRelay) handshake(tag [protocol.ChatSelectorSize]byte, counter ui
 	}
 	// A fragment of a different size belongs to a different attempt: start over
 	// rather than mixing two ephemeral keys into one buffer.
-	if hs == nil || hs.payloadSize != len(payload) || now.After(hs.expires) {
+	if hs == nil || hs.ack != nil || hs.payloadSize != len(payload) || now.After(hs.expires) {
 		// New attempt, so it counts against the cap; continuing one never
 		// does.
 		//
@@ -659,21 +770,26 @@ func (r *MTProtoRelay) handshake(tag [protocol.ChatSelectorSize]byte, counter ui
 		return protocol.ChatSessionLostResp
 	}
 
-	var ref [protocol.ChatSelectorSize]byte
-	if _, err := rand.Read(ref[:]); err != nil {
+	r.mu.Lock()
+	// Another copy of this fragment finished the same attempt while the key
+	// was being derived: its answer is the answer.
+	if hs := r.handshakes[tag]; hs != nil && hs.ack != nil && bytes.Equal(hs.key, eph) {
+		ack := hs.ack
+		r.mu.Unlock()
+		return ack
+	}
+	ref, ok := r.newRefLocked()
+	if !ok {
+		r.mu.Unlock()
 		return protocol.ChatSessionLostResp
 	}
-	// A reference must never look like a handshake tag, or the next cell would
-	// be routed back into this path instead of the session table.
-	protocol.ChatClearHandshakeSelector(&ref)
-
-	r.mu.Lock()
-	if r.cfg.MaxTunnels > 0 && len(r.sessions) >= r.cfg.MaxTunnels {
-		busy := protocol.SealChatResponse(ks, tag, protocol.ChatBootstrapCounter(),
-			protocol.MTPStatusOK, protocol.BuildMTPHelloAck(protocol.MTPStatusBusy, ref, 0))
-		r.rememberAckLocked(tag, busy, len(payload), now)
-		r.mu.Unlock()
-		return busy
+	var dropped *mtpSession
+	if len(r.sessions) >= r.cfg.MaxSessions {
+		if quiet, sess := r.quietestLocked(r.sessions, false); sess != nil {
+			delete(r.sessions, quiet)
+			delete(r.tunnelled, quiet)
+			dropped = sess
+		}
 	}
 	r.sessions[ref] = &mtpSession{ks: ks, lastSeen: now}
 
@@ -681,9 +797,67 @@ func (r *MTProtoRelay) handshake(tag [protocol.ChatSelectorSize]byte, counter ui
 	ack := protocol.BuildMTPHelloAck(protocol.MTPStatusOK, ref, byte(chunk))
 	sealed := protocol.SealChatResponse(ks, tag, protocol.ChatBootstrapCounter(), protocol.MTPStatusOK, ack)
 	// Kept so a retried last fragment gets this very answer back.
-	r.rememberAckLocked(tag, sealed, len(payload), now)
+	r.rememberAckLocked(tag, sealed, eph, len(payload), now)
 	r.mu.Unlock()
+	if dropped != nil {
+		r.release(dropped)
+	}
 	return sealed
+}
+
+// newRefLocked picks a reference no session holds. It must never look like a
+// handshake tag either, or the next cell would be routed back into the
+// handshake instead of the session table. Caller holds r.mu.
+func (r *MTProtoRelay) newRefLocked() ([protocol.ChatSelectorSize]byte, bool) {
+	var ref [protocol.ChatSelectorSize]byte
+	for i := 0; i < 8; i++ {
+		if _, err := rand.Read(ref[:]); err != nil {
+			return ref, false
+		}
+		protocol.ChatClearHandshakeSelector(&ref)
+		if _, taken := r.sessions[ref]; !taken {
+			return ref, true
+		}
+	}
+	return ref, false
+}
+
+// quietestLocked looks at a few sessions of set and returns the one quiet the
+// longest, or nil. With live set only an open tunnel counts, and sessions
+// without one leave set. Caller holds r.mu.
+func (r *MTProtoRelay) quietestLocked(set map[[protocol.ChatSelectorSize]byte]*mtpSession, live bool) ([protocol.ChatSelectorSize]byte, *mtpSession) {
+	var ref [protocol.ChatSelectorSize]byte
+	var pick *mtpSession
+	var oldest time.Time
+	n := 0
+	for k, sess := range set {
+		sess.tmu.Lock()
+		seen, t := sess.lastSeen, sess.tunnel
+		sess.tmu.Unlock()
+		if live && !t.isOpen() {
+			delete(set, k)
+			continue
+		}
+		if pick == nil || seen.Before(oldest) {
+			ref, pick, oldest = k, sess, seen
+		}
+		if n++; n >= mtpEvictSample {
+			break
+		}
+	}
+	return ref, pick
+}
+
+// release closes what a session no longer in the table holds.
+func (r *MTProtoRelay) release(sess *mtpSession) {
+	sess.tmu.Lock()
+	if sess.replies != nil {
+		sess.replies.free(&r.replyBytes)
+	}
+	sess.tmu.Unlock()
+	if t := sess.setTunnel(nil); t != nil {
+		t.close()
+	}
 }
 
 // dispatch runs one tunnel op inside an established session.
@@ -751,6 +925,7 @@ func (r *MTProtoRelay) open(ref [protocol.ChatSelectorSize]byte, sess *mtpSessio
 	// cell at a time, so a connection opened now is always dead before the
 	// client's first byte reaches it.
 	t := &mtpTunnel{
+		live: &r.tunnels,
 		from: counter,
 		host: host, dialDC: dc, dialTO: r.cfg.DialTimeout,
 		lastSeen: now, bufCap: r.cfg.BufferBytes,
@@ -758,10 +933,34 @@ func (r *MTProtoRelay) open(ref [protocol.ChatSelectorSize]byte, sess *mtpSessio
 	}
 	t.cond = sync.NewCond(&t.mu)
 
+	// At the cap a new tunnel takes the place of the quietest one, never the
+	// other way round: refusing would let whoever holds the tunnels keep them.
+	// Decided under r.mu so two opens cannot both take the last place.
+	var taken *mtpTunnel
+	r.mu.Lock()
+	if r.cfg.MaxTunnels > 0 {
+		if !sess.currentTunnel().isOpen() && r.tunnels.Load() >= int64(r.cfg.MaxTunnels) {
+			_, quiet := r.quietestLocked(r.tunnelled, true)
+			if quiet == nil {
+				r.mu.Unlock()
+				return protocol.BuildMTPOpenReply(protocol.MTPStatusBusy, 0)
+			}
+			taken = quiet.setTunnel(nil)
+		}
+		if r.tunnelled == nil {
+			r.tunnelled = make(map[[protocol.ChatSelectorSize]byte]*mtpSession)
+		}
+		r.tunnelled[ref] = sess
+	}
+	r.tunnels.Add(1)
 	// Re-opening on a live session replaces the old tunnel rather than leaking
 	// it: a client that lost its state just dials again.
-	if old := sess.setTunnel(t); old != nil {
-		old.close()
+	old := sess.setTunnel(t)
+	r.mu.Unlock()
+	for _, x := range []*mtpTunnel{taken, old} {
+		if x != nil {
+			x.close()
+		}
 	}
 
 	chunk := protocol.MTPChunkSize(protocol.ChatCellPlainMax)
@@ -784,6 +983,7 @@ func (r *MTProtoRelay) Sweep(now time.Time) int {
 		sess.tmu.Unlock()
 		if idle {
 			delete(r.sessions, ref)
+			delete(r.tunnelled, ref)
 			dead = append(dead, sess)
 		}
 	}
@@ -794,9 +994,7 @@ func (r *MTProtoRelay) Sweep(now time.Time) int {
 	}
 	r.mu.Unlock()
 	for _, sess := range dead {
-		if t := sess.setTunnel(nil); t != nil {
-			t.close()
-		}
+		r.release(sess)
 	}
 	return len(dead)
 }
@@ -831,11 +1029,10 @@ func (r *MTProtoRelay) closeAll() {
 		delete(r.sessions, ref)
 	}
 	r.handshakes = make(map[[protocol.ChatSelectorSize]byte]*mtpHandshake)
+	r.tunnelled = nil
 	r.mu.Unlock()
 	for _, sess := range all {
-		if t := sess.setTunnel(nil); t != nil {
-			t.close()
-		}
+		r.release(sess)
 	}
 }
 
@@ -1154,6 +1351,16 @@ func (t *mtpTunnel) chargeLocked(n int) {
 	t.winBytes += n
 }
 
+// isOpen reports whether t is a tunnel not yet closed.
+func (t *mtpTunnel) isOpen() bool {
+	if t == nil {
+		return false
+	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return !t.closed
+}
+
 func (t *mtpTunnel) close() {
 	t.mu.Lock()
 	if t.closed {
@@ -1164,6 +1371,9 @@ func (t *mtpTunnel) close() {
 	conn := t.conn
 	t.cond.Broadcast()
 	t.mu.Unlock()
+	if t.live != nil {
+		t.live.Add(-1)
+	}
 	if conn != nil {
 		conn.Close()
 	}

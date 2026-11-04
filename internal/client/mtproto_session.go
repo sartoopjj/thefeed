@@ -30,6 +30,9 @@ type MTProtoQuery func(ctx context.Context, qname string) ([]byte, error)
 // caller must hand-shake again.
 var ErrMTProtoSessionLost = errors.New("mtproto: session lost")
 
+// ErrMTProtoBusy is the relay saying it is full; worth trying again later.
+var ErrMTProtoBusy = errors.New("mtproto: server is at capacity, try again later")
+
 // ErrMTProtoBadReply means an answer came back that would not open under this
 // session's key. Retryable on purpose: it is what a truncated or cached DNS
 // answer looks like, and the cell that produced it can simply go again. A
@@ -350,7 +353,7 @@ func mtpStatusError(status byte) error {
 	case protocol.MTPStatusDisabled:
 		return errors.New("mtproto: this server has the bridge turned off")
 	case protocol.MTPStatusBusy:
-		return errors.New("mtproto: server is at capacity, try again later")
+		return ErrMTProtoBusy
 	case protocol.MTPStatusBadDC:
 		return errors.New("mtproto: server refused the data centre")
 	case protocol.MTPStatusNoTunnel:

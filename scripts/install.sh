@@ -559,6 +559,29 @@ setup_config() {
         [[ "$mtproto_max_tunnels" =~ ^[0-9]+$ ]] || mtproto_max_tunnels=0
     fi
 
+    # Memory the proxy may use: sessions kept, and replies kept for retries.
+    local cur_mtp_sessions="" cur_mtp_reply_kb="" cur_mtp_reply_mb=""
+    if $is_update; then
+        cur_mtp_sessions=$(env_get THEFEED_MTPROTO_MAX_SESSIONS)
+        cur_mtp_reply_kb=$(env_get THEFEED_MTPROTO_REPLY_SESSION_KB)
+        cur_mtp_reply_mb=$(env_get THEFEED_MTPROTO_REPLY_BUDGET_MB)
+    fi
+    local mtproto_max_sessions="${cur_mtp_sessions:-100000}"
+    local mtproto_reply_kb="${cur_mtp_reply_kb:-256}"
+    local mtproto_reply_mb="${cur_mtp_reply_mb:-256}"
+    local ans=""
+    if [[ -n "$mtproto_domains" ]]; then
+        read -rp "Telegram proxy sessions kept at once [${mtproto_max_sessions}]: " ans
+        mtproto_max_sessions="${ans:-$mtproto_max_sessions}"
+        [[ "$mtproto_max_sessions" =~ ^[1-9][0-9]*$ ]] || mtproto_max_sessions=100000
+        read -rp "Telegram proxy retry memory per session, KB [${mtproto_reply_kb}]: " ans
+        mtproto_reply_kb="${ans:-$mtproto_reply_kb}"
+        [[ "$mtproto_reply_kb" =~ ^[1-9][0-9]*$ ]] || mtproto_reply_kb=256
+        read -rp "Telegram proxy retry memory for all sessions, MB [${mtproto_reply_mb}]: " ans
+        mtproto_reply_mb="${ans:-$mtproto_reply_mb}"
+        [[ "$mtproto_reply_mb" =~ ^[1-9][0-9]*$ ]] || mtproto_reply_mb=256
+    fi
+
     local passkey=""
     while true; do
         if [[ -n "$cur_key" ]]; then
@@ -732,6 +755,9 @@ THEFEED_EXTRA_DOMAINS=${extra_domains}
 THEFEED_CHAT_DOMAINS=${chat_domains}
 THEFEED_MTPROTO_DOMAINS=${mtproto_domains}
 THEFEED_MTPROTO_MAX_TUNNELS=${mtproto_max_tunnels}
+THEFEED_MTPROTO_MAX_SESSIONS=${mtproto_max_sessions}
+THEFEED_MTPROTO_REPLY_SESSION_KB=${mtproto_reply_kb}
+THEFEED_MTPROTO_REPLY_BUDGET_MB=${mtproto_reply_mb}
 THEFEED_KEY=${passkey}
 THEFEED_ALLOW_MANAGE=${allow_manage}
 THEFEED_MSG_LIMIT=${msg_limit}
@@ -811,6 +837,9 @@ THEFEED_EXTRA_DOMAINS=${extra_domains}
 THEFEED_CHAT_DOMAINS=${chat_domains}
 THEFEED_MTPROTO_DOMAINS=${mtproto_domains}
 THEFEED_MTPROTO_MAX_TUNNELS=${mtproto_max_tunnels}
+THEFEED_MTPROTO_MAX_SESSIONS=${mtproto_max_sessions}
+THEFEED_MTPROTO_REPLY_SESSION_KB=${mtproto_reply_kb}
+THEFEED_MTPROTO_REPLY_BUDGET_MB=${mtproto_reply_mb}
 THEFEED_KEY=${passkey}
 THEFEED_ALLOW_MANAGE=${allow_manage}
 THEFEED_MSG_LIMIT=${msg_limit}

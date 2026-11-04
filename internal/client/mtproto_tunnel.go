@@ -171,7 +171,7 @@ func openStatusError(status byte) error {
 	case protocol.MTPStatusDisabled:
 		return errors.New("mtproto tunnel: this server has the bridge turned off")
 	case protocol.MTPStatusBusy:
-		return errors.New("mtproto tunnel: server is at capacity, try again later")
+		return fmt.Errorf("mtproto tunnel: %w", ErrMTProtoBusy)
 	case protocol.MTPStatusBadDC:
 		return errors.New("mtproto tunnel: server refused the data centre")
 	default:

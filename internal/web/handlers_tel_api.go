@@ -1111,6 +1111,8 @@ func telStatusKey(err error) string {
 		return "tel_err_not_offered"
 	case errors.Is(err, client.ErrMTProtoServerDisabled):
 		return "tel_err_server_disabled"
+	case errors.Is(err, client.ErrMTProtoBusy):
+		return "tel_err_server_full"
 	case errors.Is(err, client.ErrMTProtoNoServerKey):
 		return "tel_err_no_key"
 	case errors.Is(err, client.ErrMTProtoUnverified):

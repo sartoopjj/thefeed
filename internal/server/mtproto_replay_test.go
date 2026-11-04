@@ -2,6 +2,7 @@ package server
 
 import (
 	"bytes"
+	"crypto/rand"
 	"fmt"
 	"net"
 	"sync"
@@ -255,5 +256,68 @@ func TestOutOfOrderFirstCopiesAreServed(t *testing.T) {
 		if _, _, err := protocol.OpenChatResponse(c.ks, c.ref, ctrs[i], raw); err != nil {
 			t.Fatalf("counter %d: %v", ctrs[i], err)
 		}
+	}
+}
+
+// Copies of the last handshake fragment arriving together finish ONE attempt:
+// one session, one answer.
+func TestHandshakeCopiesTogether(t *testing.T) {
+	r := newTestRelay(t, newFakeDC(t), nil)
+	for i := 0; i < 200; i++ {
+		eph, _ := protocol.GenerateEphemeralKey()
+		var tag [protocol.ChatSelectorSize]byte
+		rand.Read(tag[:])
+		protocol.ChatMarkHandshakeSelector(&tag)
+		frags, _ := protocol.SplitMTPHello(eph.PublicKey().Bytes(), protocol.ChatCellPayloadSize, rand.Reader)
+		last := uint32(len(frags) - 1)
+		for j := uint32(0); j < last; j++ {
+			r.HandleCell(tag, j, frags[j], "m.test", time.Now())
+		}
+		var wg sync.WaitGroup
+		out := make([][]byte, 3)
+		for k := range out {
+			wg.Add(1)
+			go func(k int) {
+				defer wg.Done()
+				out[k] = r.HandleCell(tag, last, frags[last], "m.test", time.Now())
+			}(k)
+		}
+		wg.Wait()
+		if !bytes.Equal(out[0], out[1]) || !bytes.Equal(out[0], out[2]) {
+			t.Fatalf("attempt %d: copies got different answers", i)
+		}
+	}
+	if n, _ := r.Stats(); n != 200 {
+		t.Fatalf("%d sessions for 200 handshakes", n)
+	}
+}
+
+// A copy that arrives while its first copy is still being answered gets that
+// answer, not an empty one the resolver would pass on as the reply.
+func TestCopyWhileAnsweringGetsTheAnswer(t *testing.T) {
+	r := newTestRelay(t, newFakeDC(t), nil)
+	c := newTestClient(t, r)
+	c.mustOpen()
+	tun := r.sessions[c.ref].currentTunnel()
+	tun.wmu.Lock() // the first copy's answer is held up, as by a slow DC
+	ctr, p := c.sealed(protocol.BuildMTPDataEnd(0, 0, []byte("hello")))
+	first := make(chan []byte)
+	go func() { first <- c.deliver(ctr, p) }()
+	for {
+		r.sessions[c.ref].tmu.Lock()
+		busy := r.sessions[c.ref].answering[ctr] != nil
+		r.sessions[c.ref].tmu.Unlock()
+		if busy {
+			break
+		}
+		time.Sleep(time.Millisecond)
+	}
+	second := make(chan []byte)
+	go func() { second <- c.deliver(ctr, p) }()
+	time.Sleep(20 * time.Millisecond)
+	tun.wmu.Unlock()
+	a, b := <-first, <-second
+	if len(a) == 0 || !bytes.Equal(a, b) {
+		t.Fatalf("first %d bytes, copy %d bytes, equal %v", len(a), len(b), bytes.Equal(a, b))
 	}
 }

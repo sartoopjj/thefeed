@@ -470,16 +470,23 @@ func TestRelayUncappedByDefault(t *testing.T) {
 	}
 }
 
-func TestRelayCapacityLimit(t *testing.T) {
+// MaxTunnels counts tunnels, not sessions: at the cap a new tunnel takes the
+// quietest one's place instead of being refused.
+func TestRelayTunnelCapTakesTheQuietestsPlace(t *testing.T) {
 	dc := newFakeDC(t)
 	r := newTestRelay(t, dc, func(c *MTProtoConfig) { c.MaxTunnels = 1 })
-	newTestClient(t, r)
-
-	if _, status := tryHandshake(t, r); status != protocol.MTPStatusBusy {
-		t.Fatalf("second handshake status = %d, want Busy", status)
+	newTestClient(t, r) // the quietest of all, but it has no tunnel to give up
+	time.Sleep(10 * time.Millisecond)
+	first := newTestClient(t, r)
+	first.mustOpen()
+	second := newTestClient(t, r) // a session alone is not a tunnel
+	time.Sleep(10 * time.Millisecond)
+	second.mustOpen()
+	if r.sessions[first.ref].currentTunnel() != nil {
+		t.Fatal("the quieter tunnel was kept past the cap")
 	}
-	if active, max := r.Stats(); active != 1 || max != 1 {
-		t.Fatalf("stats = %d/%d", active, max)
+	if n := r.tunnels.Load(); n != 1 {
+		t.Fatalf("%d tunnels open, cap 1", n)
 	}
 }
 

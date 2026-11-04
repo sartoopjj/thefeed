@@ -141,7 +141,7 @@ mobileQuery.addEventListener('change', function () {
 
 // Handle thefeed:// URI hash import
 // Fills the import form; importing is still the user's tap.
-(function () { var h = location.hash; if (h && h.startsWith('#thefeed://')) { openProfiles(); document.getElementById('importUriInput').value = decodeURIComponent(h.substring(1)) } })();
+if (linkedConfig()) openProfiles();
 
 // ===== AUTO-SCROLL DURING TEXT SELECTION =====
 (function () {

@@ -68,6 +68,11 @@ type Config struct {
 	MTProtoMaxTunnels  int           // 0 = uncapped (fd limit is the real ceiling)
 	MTProtoIdleTTL     time.Duration // expire a tunnel with no cells
 	MTProtoBufferBytes int           // per-tunnel downstream cap
+	MTProtoMaxSessions int           // session table size; 0 = relay default
+	// MTProtoReplyBudget / MTProtoReplySessionBytes bound the replies kept for
+	// retries, all sessions together / one session; 0 = relay default.
+	MTProtoReplyBudget       int
+	MTProtoReplySessionBytes int
 	// MTProtoDownKBPerMin throttles one tunnel's downstream traffic; 0 is
 	// uncapped. The relay carries opaque bytes, so volume is the only limit it
 	// can apply to a client that pulls files through it.
@@ -255,17 +260,20 @@ func (s *Server) Run(ctx context.Context) error {
 				return fmt.Errorf("mtproto enc key: %w", err)
 			}
 			mtproto = NewMTProtoRelay(MTProtoConfig{
-				Enabled:         true,
-				Domains:         s.cfg.MTProtoDomains,
-				MaxTunnels:      s.cfg.MTProtoMaxTunnels,
-				IdleTTL:         s.cfg.MTProtoIdleTTL,
-				BufferBytes:     s.cfg.MTProtoBufferBytes,
-				DownBytesPerMin: s.cfg.MTProtoDownKBPerMin * 1024,
-				DialTimeout:     s.cfg.MTProtoDialTimeout,
-				TestDCs:         s.cfg.MTProtoTestDCs,
-				Debug:           s.cfg.Debug,
-				QueryKey:        queryKey,
-				Ek:              ek,
+				Enabled:           true,
+				Domains:           s.cfg.MTProtoDomains,
+				MaxTunnels:        s.cfg.MTProtoMaxTunnels,
+				IdleTTL:           s.cfg.MTProtoIdleTTL,
+				BufferBytes:       s.cfg.MTProtoBufferBytes,
+				MaxSessions:       s.cfg.MTProtoMaxSessions,
+				ReplyBudget:       s.cfg.MTProtoReplyBudget,
+				ReplySessionBytes: s.cfg.MTProtoReplySessionBytes,
+				DownBytesPerMin:   s.cfg.MTProtoDownKBPerMin * 1024,
+				DialTimeout:       s.cfg.MTProtoDialTimeout,
+				TestDCs:           s.cfg.MTProtoTestDCs,
+				Debug:             s.cfg.Debug,
+				QueryKey:          queryKey,
+				Ek:                ek,
 			})
 			if mtproto == nil {
 				return fmt.Errorf("mtproto relay: not created")
@@ -278,9 +286,9 @@ func (s *Server) Run(ctx context.Context) error {
 				dcs = "TEST"
 			}
 			_, maxTunnels := mtproto.Stats()
-			log.Printf("[server] mtproto tunnel enabled on %s (dcs=%s max-tunnels=%d idle-ttl=%s buffer=%dB)",
-				strings.Join(s.cfg.MTProtoDomains, ", "), dcs, maxTunnels,
-				s.cfg.MTProtoIdleTTL, s.cfg.MTProtoBufferBytes)
+			log.Printf("[server] mtproto tunnel enabled on %s (dcs=%s max-tunnels=%d max-sessions=%d idle-ttl=%s buffer=%dB replies=%dKB/session %dMB total)",
+				strings.Join(s.cfg.MTProtoDomains, ", "), dcs, maxTunnels, mtproto.cfg.MaxSessions,
+				s.cfg.MTProtoIdleTTL, s.cfg.MTProtoBufferBytes, mtproto.cfg.ReplySessionBytes>>10, mtproto.cfg.ReplyBudget>>20)
 		} else {
 			// Configured but off: publish a disabled payload so clients say
 			// "tunnel off on this server" instead of probing it.

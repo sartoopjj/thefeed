@@ -21,11 +21,19 @@ function renderProfileBtn() {
   if (typeof renderSettingsSidebar === 'function') { try { renderSettingsSidebar(); } catch (e) { } }
 }
 
+// linkedConfig is the config a #thefeed:// link carried, for the import form.
+function linkedConfig() {
+  var h = location.hash;
+  if (!h || !h.startsWith('#thefeed://')) return '';
+  try { return decodeURIComponent(h.substring(1)) } catch (e) { return '' }
+}
+
 function openProfiles() {
   document.getElementById('profilesModal').classList.add('active');
   document.getElementById('importError').style.display = 'none';
   document.getElementById('importSuccess').style.display = 'none';
-  document.getElementById('importUriInput').value = '';
+  // Start-up opens this again for a new user, so the link is read each time.
+  document.getElementById('importUriInput').value = linkedConfig();
   renderProfilesModal();
   // New users (no profiles yet): surface the ready-to-use default configs
   // immediately so the quickest onboarding path is the most visible one.
@@ -332,6 +340,7 @@ async function doImportUri() {
     if (!serverKey) { okEl.textContent += ' ' + t('no_server_key_warning'); }
     okEl.style.display = 'block';
     document.getElementById('importUriInput').value = '';
+    if (linkedConfig()) history.replaceState(null, '', location.pathname + location.search);
     await loadProfiles(); renderProfilesModal();
     refreshResolversBadge();
   } catch (e) { errEl.textContent = t('import_error') + ': ' + e.message; errEl.style.display = 'block' }
