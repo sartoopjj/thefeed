@@ -1004,8 +1004,12 @@ func (h *telHub) wipeSession() error {
 	return err
 }
 
+// telMaxBody bounds a request to the Telegram endpoints; the largest real one
+// is a message of 4096 characters.
+const telMaxBody = 1 << 20
+
 func (s *Server) telDecode(r *http.Request, dst any) error {
-	return json.NewDecoder(r.Body).Decode(dst)
+	return json.NewDecoder(io.LimitReader(r.Body, telMaxBody)).Decode(dst)
 }
 
 func telAtoi(s string, def int) int {

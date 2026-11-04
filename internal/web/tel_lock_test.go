@@ -253,3 +253,24 @@ func TestTelLockEndpointsFollowTheDeviceLifecycle(t *testing.T) {
 		t.Errorf("an empty passcode got %d, want 400", rec.Code)
 	}
 }
+
+// A Telegram request is read only up to its cap, however large the body; the
+// largest real one still fits.
+func TestTelBodiesAreBounded(t *testing.T) {
+	s := &Server{}
+	read := func(body string) (string, error) {
+		var v struct {
+			Text string `json:"text"`
+		}
+		err := s.telDecode(httptest.NewRequest(http.MethodPost, "/api/tel/send", strings.NewReader(body)), &v)
+		return v.Text, err
+	}
+	if _, err := read(`{"text":"` + strings.Repeat("A", telMaxBody) + `"}`); err == nil {
+		t.Fatal("a body past the cap was read whole")
+	}
+	// 4096 characters, each the longest JSON can make one.
+	text, err := read(`{"text":"` + strings.Repeat(`😀`, 4096) + `"}`)
+	if err != nil || len([]rune(text)) != 4096 {
+		t.Fatalf("the largest real message: %d characters, %v", len([]rune(text)), err)
+	}
+}

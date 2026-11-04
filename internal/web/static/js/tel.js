@@ -2946,7 +2946,8 @@ function telVisibleMessages(th) {
   });
 }
 
-// telLinkClick intercepts a tap on a link inside a message.
+// telLinkClick intercepts a tap on a link inside a message, its buttons
+// included.
 //
 // Going straight out to the browser is wrong twice over: it leaves the app on
 // a link the user may only have wanted to read, and a Telegram link is
@@ -2954,7 +2955,7 @@ function telVisibleMessages(th) {
 // outside, or open the channel here -- which is what the feed and the Mirror
 // already do, through the same shared sheet.
 function telLinkClick(e) {
-  var a = e.target && e.target.closest ? e.target.closest('.tel-msg-text a, .tel-reply a') : null;
+  var a = e.target && e.target.closest ? e.target.closest('.tel-msg-text a, .tel-reply a, .tel-btns a') : null;
   if (!a) return;
   var url = a.getAttribute('href') || '';
   if (!url) return;
@@ -3431,8 +3432,9 @@ function telButtonsHTML(m) {
   m.buttons.forEach(function (b) {
     var href = telSafeURL(b.url);
     if (href) {
-      // The real target is the title: a label reading "google.com" on a
-      // button that goes elsewhere is the oldest trick there is.
+      // The label is the bot's, the target is not: a label reading
+      // "google.com" on a button that goes elsewhere is the oldest trick there
+      // is. A tap goes through telLinkClick, whose sheet shows the real one.
       html += '<a class="tel-kbd tel-kbd-url" href="' + telAttrQ(href) +
         '" target="_blank" rel="noopener noreferrer" dir="auto" title="' +
         telAttrQ(href) + '">' + telEsc(telSafeText(b.text)) + '</a>';

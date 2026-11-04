@@ -1,7 +1,6 @@
 package web
 
 import (
-	"encoding/json"
 	"net/http"
 	"path/filepath"
 )
@@ -51,7 +50,7 @@ func (s *Server) handleTelLock(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Passphrase string `json:"passphrase"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Passphrase == "" {
+	if err := s.telDecode(r, &req); err != nil || req.Passphrase == "" {
 		http.Error(w, "bad request", http.StatusBadRequest)
 		return
 	}
@@ -87,7 +86,7 @@ func (s *Server) handleTelUnlock(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Passphrase string `json:"passphrase"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Passphrase == "" {
+	if err := s.telDecode(r, &req); err != nil || req.Passphrase == "" {
 		http.Error(w, "bad request", http.StatusBadRequest)
 		return
 	}
