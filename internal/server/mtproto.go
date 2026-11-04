@@ -92,6 +92,9 @@ type MTProtoConfig struct {
 }
 
 type mtpTunnel struct {
+	// from is the counter of the OPEN that made this tunnel; cells numbered
+	// below it belong to an earlier one.
+	from uint32
 	// pend holds upstream bytes until the client marks the message complete
 	// (MTPOpDataEnd), so the far end never sees a trickle (guarded by mu).
 	pend []byte
@@ -176,6 +179,88 @@ type mtpSession struct {
 	ctlCtr   uint32
 	ctlSeen  bool
 	ctlReply []byte
+
+	// replies and seen keep one sealed answer per counter: a repeat gets the
+	// identical bytes, or nothing once they are no longer kept, and is never
+	// carried out twice -- the reply's nonce comes from the counter.
+	replies *mtpReplies
+	seen    *mtpSeen
+}
+
+// mtpReplies holds a session's recent sealed replies by request counter. A
+// client retries a cell three times, each after its own timeout (up to 60 s),
+// so replies are kept for mtpReplyKeep, within mtpReplyBytes per session.
+type mtpReplies struct {
+	byCtr map[uint32][]byte
+	order []mtpKept // oldest first
+	bytes int
+}
+
+type mtpKept struct {
+	ctr  uint32
+	at   time.Time
+	cost int
+}
+
+const (
+	mtpReplyKeep  = 150 * time.Second
+	mtpReplyBytes = 256 << 10
+	// mtpReplyEntry is the memory a kept reply costs beyond its bytes (map,
+	// list and allocation rounding; measured 130-220 B), counted with them.
+	mtpReplyEntry = 192
+)
+
+func (c *mtpReplies) get(counter uint32) ([]byte, bool) {
+	r, ok := c.byCtr[counter]
+	return r, ok
+}
+
+func (c *mtpReplies) put(counter uint32, reply []byte, now time.Time) {
+	if c.byCtr == nil {
+		c.byCtr = make(map[uint32][]byte)
+	}
+	cost := len(reply) + mtpReplyEntry
+	c.byCtr[counter] = reply
+	c.order = append(c.order, mtpKept{ctr: counter, at: now, cost: cost})
+	c.bytes += cost
+	i := 0
+	for i < len(c.order) && (c.bytes > mtpReplyBytes || now.Sub(c.order[i].at) > mtpReplyKeep) {
+		delete(c.byCtr, c.order[i].ctr)
+		c.bytes -= c.order[i].cost
+		i++
+	}
+	c.order = c.order[i:]
+}
+
+// mtpSeen records which counters have been answered. Exact within
+// mtpSeenWindow of the highest: a client keeps as many cells in flight as its
+// rate allows and a resolver can hold one back for seconds, so first copies
+// arrive far out of order. Older counts as seen.
+type mtpSeen struct {
+	max  uint32
+	bits [mtpSeenWindow / 64]uint64
+}
+
+const mtpSeenWindow = 4096
+
+// mark records counter and reports whether it had been seen.
+func (w *mtpSeen) mark(counter uint32) bool {
+	if counter > w.max {
+		if counter-w.max >= mtpSeenWindow {
+			w.bits = [mtpSeenWindow / 64]uint64{}
+		} else {
+			for c := w.max + 1; c != counter; c++ {
+				w.bits[c%mtpSeenWindow/64] &^= 1 << (c % 64)
+			}
+		}
+		w.max = counter
+	} else if w.max-counter >= mtpSeenWindow {
+		return true
+	} else if w.bits[counter%mtpSeenWindow/64]&(1<<(counter%64)) != 0 {
+		return true
+	}
+	w.bits[counter%mtpSeenWindow/64] |= 1 << (counter % 64)
+	return false
 }
 
 // repeatCtl reports the remembered answer when counter is not newer than the
@@ -449,10 +534,27 @@ func (r *MTProtoRelay) HandleCell(selector [protocol.ChatSelectorSize]byte, coun
 	// buffers open indefinitely with cells that never opened.
 	sess.tmu.Lock()
 	sess.lastSeen = now
+	if sess.seen == nil {
+		// Only once the session is used: one that never sends a cell costs
+		// nothing here.
+		sess.replies, sess.seen = &mtpReplies{}, &mtpSeen{}
+	}
+	if reply, ok := sess.replies.get(counter); ok {
+		sess.tmu.Unlock()
+		return reply
+	}
+	if sess.seen.mark(counter) {
+		sess.tmu.Unlock()
+		return []byte{}
+	}
 	sess.tmu.Unlock()
 
 	status, body := r.dispatch(selector, sess, counter, plain, now)
-	return protocol.SealChatResponse(sess.ks, selector, counter, status, body)
+	reply := protocol.SealChatResponse(sess.ks, selector, counter, status, body)
+	sess.tmu.Lock()
+	sess.replies.put(counter, reply, now)
+	sess.tmu.Unlock()
+	return reply
 }
 
 // handshake reassembles the client ephemeral key across unsealed fragments
@@ -601,7 +703,7 @@ func (r *MTProtoRelay) dispatch(ref [protocol.ChatSelectorSize]byte, sess *mtpSe
 		if reply, ok := sess.repeatCtl(counter); ok {
 			return protocol.MTPStatusOK, reply
 		}
-		reply := r.open(ref, sess, dc, now)
+		reply := r.open(ref, sess, dc, counter, now)
 		sess.rememberCtl(counter, reply)
 		return protocol.MTPStatusOK, reply
 
@@ -629,7 +731,7 @@ func (r *MTProtoRelay) dispatch(ref [protocol.ChatSelectorSize]byte, sess *mtpSe
 			return protocol.MTPStatusBadRequest, nil
 		}
 		t := sess.currentTunnel()
-		if t == nil {
+		if t == nil || counter < t.from {
 			return protocol.MTPStatusOK, []byte{protocol.MTPStatusNoTunnel}
 		}
 		return protocol.MTPStatusOK, t.handle(req)
@@ -638,7 +740,7 @@ func (r *MTProtoRelay) dispatch(ref [protocol.ChatSelectorSize]byte, sess *mtpSe
 }
 
 // open dials a DC for an established session and attaches the tunnel.
-func (r *MTProtoRelay) open(ref [protocol.ChatSelectorSize]byte, sess *mtpSession, dc uint8, now time.Time) []byte {
+func (r *MTProtoRelay) open(ref [protocol.ChatSelectorSize]byte, sess *mtpSession, dc uint8, counter uint32, now time.Time) []byte {
 	host, ok := r.addr[dc]
 	if !ok {
 		return protocol.BuildMTPOpenReply(protocol.MTPStatusBadDC, 0)
@@ -649,6 +751,7 @@ func (r *MTProtoRelay) open(ref [protocol.ChatSelectorSize]byte, sess *mtpSessio
 	// cell at a time, so a connection opened now is always dead before the
 	// client's first byte reaches it.
 	t := &mtpTunnel{
+		from: counter,
 		host: host, dialDC: dc, dialTO: r.cfg.DialTimeout,
 		lastSeen: now, bufCap: r.cfg.BufferBytes,
 		rateCap: r.cfg.DownBytesPerMin, debug: r.cfg.Debug,
