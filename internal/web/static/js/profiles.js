@@ -294,7 +294,17 @@ async function pasteImportUri() {
   }
 }
 
+// importBusy blocks a second import while one is running: on a slow phone
+// the bank check can take seconds, and a repeat tap opened a second dialog.
+var importBusy = false;
+
 async function doImportUri() {
+  if (importBusy) return;
+  importBusy = true;
+  try { await doImportUriOnce(); } finally { importBusy = false; }
+}
+
+async function doImportUriOnce() {
   var errEl = document.getElementById('importError'); var okEl = document.getElementById('importSuccess');
   errEl.style.display = 'none'; okEl.style.display = 'none';
   var uri = document.getElementById('importUriInput').value.trim();
@@ -428,6 +438,12 @@ function renderDefaultConfigs() {
 // importDefaultConfig imports default config i, or updates the existing
 // profile updateId in place (key/serverKey changed in a new version).
 async function importDefaultConfig(i, updateId) {
+  if (importBusy) return;
+  importBusy = true;
+  try { await importDefaultConfigOnce(i, updateId); } finally { importBusy = false; }
+}
+
+async function importDefaultConfigOnce(i, updateId) {
   if (!defaultConfigs || !defaultConfigs.profiles || !defaultConfigs.profiles[i]) return;
   var d = defaultConfigs.profiles[i];
   var errEl = document.getElementById('importError'); var okEl = document.getElementById('importSuccess');

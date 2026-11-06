@@ -908,6 +908,17 @@ async function telResendCode() {
 }
 window.telResendCode = telResendCode;
 
+// telEditPhone goes back to the number field, keeping what was typed. Local
+// only: the code already sent simply expires, which costs no query.
+function telEditPhone() {
+  if (telState.busy) return;
+  telState.codeHash = '';
+  telState.codeVia = '';
+  telState.error = '';
+  telRender();
+}
+window.telEditPhone = telEditPhone;
+
 async function telSignIn() {
   var code = ((document.getElementById('telCode') || {}).value || '').trim();
   if (!code) return;
@@ -928,6 +939,9 @@ async function telSignIn() {
       telState.error = telT('tel_err_signin');
       return;
     }
+    // A new account starts clean, whatever a late answer for the previous
+    // one left behind.
+    telResetData();
     await telRefreshInfo();
     if (telReady()) telLoadDialogs();
   });
@@ -941,6 +955,7 @@ async function telSignInPassword() {
     var r = await telCall('/api/tel/auth', { action: 'password', password: pw }, 'tel_err_signin');
     if (!r) return;
     telState.needPassword = false;
+    telResetData();
     await telRefreshInfo();
     if (telReady()) telLoadDialogs();
   });
@@ -2818,6 +2833,8 @@ function telRenderLogin() {
     (telState.busy ? ' disabled' : '') + '>' + telEsc(telT('tel_continue')) + '</button>' +
     '<button class="tel-btn" onclick="telResendCode()"' + (telState.busy ? ' disabled' : '') + '>' +
     telEsc(telT('tel_resend')) + '</button>' +
+    '<button class="tel-btn" onclick="telEditPhone()"' + (telState.busy ? ' disabled' : '') + '>' +
+    telEsc(telT('tel_edit_phone')) + '</button>' +
     '<div class="tel-hint" dir="auto">' + telEsc(telT('tel_code_hint')) + '</div></div>';
   return html;
 }

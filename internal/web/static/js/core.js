@@ -516,8 +516,40 @@ function showConfirmDialog(msg, yesText, noText) {
     overlay.style.zIndex = '99990';
     overlay.innerHTML = '<div class="modal" style="max-width:380px"><p style="font-size:13px;color:var(--text);margin-bottom:16px;line-height:1.6">' + esc(msg) + '</p><div class="modal-actions"><button class="btn btn-flat" id="confirmNo">' + esc(noText || t('cancel')) + '</button><button class="btn btn-primary" id="confirmYes">' + esc(yesText || t('ok')) + '</button></div></div>';
     document.body.appendChild(overlay);
-    document.getElementById('confirmNo').onclick = function () { document.body.removeChild(overlay); resolve(false) };
-    document.getElementById('confirmYes').onclick = function () { document.body.removeChild(overlay); resolve(true) };
+    // Look buttons up inside THIS overlay: when two dialogs are open at once
+    // the ids repeat and getElementById would wire the hidden one.
+    overlay.querySelector('#confirmNo').onclick = function () { overlay.remove(); resolve(false) };
+    overlay.querySelector('#confirmYes').onclick = function () { overlay.remove(); resolve(true) };
+  });
+}
+
+// showChoiceDialog is a themed replacement for a native <select> popup:
+// one row per item, the current one ticked. Resolves the chosen value, or
+// null when dismissed.
+function showChoiceDialog(opts) {
+  return new Promise(function (resolve) {
+    var overlay = document.createElement('div');
+    overlay.className = 'modal-overlay active';
+    overlay.style.zIndex = '99990'; // above full-screen views (see showConfirmDialog)
+    var h = '<div class="modal choice-modal">';
+    if (opts.title) h += '<h2 class="choice-title">' + esc(opts.title) + '</h2>';
+    h += '<div class="choice-list">';
+    (opts.items || []).forEach(function (it, i) {
+      var on = it.value === opts.value;
+      h += '<button type="button" class="choice-row' + (on ? ' on' : '') + '" data-i="' + i + '">'
+        + '<span class="choice-text"><span class="choice-label" dir="auto">' + esc(it.label) + '</span>'
+        + (it.sub ? '<span class="choice-sub" dir="ltr">' + esc(it.sub) + '</span>' : '')
+        + '</span>' + (on ? '<span class="choice-check">' + icon('check') + '</span>' : '') + '</button>';
+    });
+    h += '</div></div>';
+    overlay.innerHTML = h;
+    document.body.appendChild(overlay);
+    function done(v) { overlay.remove(); resolve(v); }
+    overlay.onclick = function (e) {
+      var row = e.target.closest('.choice-row');
+      if (row) done(opts.items[+row.dataset.i].value);
+      else if (e.target === overlay) done(null);
+    };
   });
 }
 
@@ -547,14 +579,14 @@ function showInputDialog(opts) {
       + '<button class="btn btn-primary" id="inputDialogOk">' + esc(opts.okText || t('ok') || 'OK') + '</button>'
       + '</div></div>';
     document.body.appendChild(overlay);
-    var field = document.getElementById('inputDialogField');
+    var field = overlay.querySelector('#inputDialogField');
     var done = function (val) {
       document.removeEventListener('keydown', onKey);
       if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
       resolve(val);
     };
-    document.getElementById('inputDialogCancel').onclick = function () { done(null); };
-    document.getElementById('inputDialogOk').onclick = function () {
+    overlay.querySelector('#inputDialogCancel').onclick = function () { done(null); };
+    overlay.querySelector('#inputDialogOk').onclick = function () {
       var v = (field.value || '').trim();
       done(v || null);
     };
@@ -695,7 +727,7 @@ function showInfoDialog(msg, okText) {
     overlay.innerHTML = '<div class="modal" style="max-width:380px"><p style="font-size:13px;color:var(--text);margin-bottom:16px;line-height:1.6;white-space:pre-line">' + esc(msg) + '</p><div class="modal-actions"><button class="btn btn-primary" id="infoOk">' + esc(okText || t('ok') || 'OK') + '</button></div></div>';
     document.body.appendChild(overlay);
     function close() { if (overlay.parentNode) document.body.removeChild(overlay); resolve(true); }
-    document.getElementById('infoOk').onclick = close;
+    overlay.querySelector('#infoOk').onclick = close;
     // Tap outside the card (on the backdrop) also dismisses.
     overlay.onclick = function (e) { if (e.target === overlay) close(); };
   });

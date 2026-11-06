@@ -343,6 +343,103 @@
       font-weight: var(--weight-semibold)
     }
 
+    /* showChoiceDialog: a themed list replacing a native <select> popup. */
+    .choice-modal {
+      max-width: 380px;
+      padding: var(--space-4)
+    }
+
+    .modal h2.choice-title {
+      font-size: var(--text-md, 15px);
+      margin: 0 0 var(--space-3)
+    }
+
+    .choice-list {
+      display: flex;
+      flex-direction: column;
+      gap: 2px
+    }
+
+    .choice-row {
+      display: flex;
+      align-items: center;
+      gap: var(--space-3);
+      width: 100%;
+      padding: 10px 12px;
+      border: 0;
+      border-radius: var(--radius-md);
+      background: none;
+      color: var(--text);
+      text-align: start
+    }
+
+    .choice-row:hover { background: var(--hover) }
+    .choice-row.on { background: var(--surface2) }
+
+    .choice-text {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start; /* both lines at the start side, in RTL too */
+      gap: 2px;
+      flex: 1;
+      min-width: 0
+    }
+
+    .choice-label {
+      max-width: 100%;
+      font-size: var(--text-sm);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap
+    }
+
+    .choice-sub {
+      font-size: var(--text-xs);
+      color: var(--text-dim)
+    }
+
+    .choice-check {
+      color: var(--accent);
+      display: inline-flex
+    }
+
+    .choice-check svg { width: 18px; height: 18px }
+
+    /* The closed control: looks like the form fields, chevron at the end. */
+    .select-btn {
+      display: flex;
+      align-items: center;
+      width: 100%;
+      padding: var(--space-2) var(--space-3);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      background: var(--bg);
+      color: var(--text);
+      font-size: var(--text-sm);
+      text-align: start
+    }
+
+    .select-btn::after {
+      content: '';
+      width: 7px;
+      height: 7px;
+      margin-inline-start: auto;
+      border-right: 2px solid var(--text-dim);
+      border-bottom: 2px solid var(--text-dim);
+      transform: translateY(-2px) rotate(45deg);
+      flex: 0 0 auto
+    }
+
+    .select-btn:disabled::after { display: none }
+    .select-btn:disabled { cursor: default }
+
+    .select-btn-label {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      padding-inline-end: var(--space-2)
+    }
+
     .modal-actions {
       display: flex;
       gap: var(--space-2);

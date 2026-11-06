@@ -58,6 +58,22 @@ var xHandleRe = regexp.MustCompile(`@[A-Za-z0-9_]{1,15}`)
 var xRepostLeadRe = regexp.MustCompile(`(?i)^RT\s+(@[A-Za-z0-9_]{1,15})\s*:\s*`)
 var xRepostByRe = regexp.MustCompile(`(?i)^RT\s+by\s+.+\((@[A-Za-z0-9_]{1,15})\)\s*:\s*`)
 
+// xRSSMaxRedirects bounds the hops followed to reach an instance's feed.
+const xRSSMaxRedirects = 3
+
+// xRSSCheckRedirect follows an instance that moved (a new domain, or http to
+// https), but only to https: an instance must not be able to point the server
+// at a plain-http address such as an internal service.
+func xRSSCheckRedirect(req *http.Request, via []*http.Request) error {
+	if len(via) > xRSSMaxRedirects {
+		return fmt.Errorf("stopped after %d redirects", xRSSMaxRedirects)
+	}
+	if req.URL.Scheme != "https" {
+		return fmt.Errorf("refused redirect to %s", req.URL.Scheme)
+	}
+	return nil
+}
+
 func NewXPublicReader(accounts []string, feed *Feed, msgLimit int, baseCh int, instancesCSV string) *XPublicReader {
 	cleaned := make([]string, 0, len(accounts))
 	for _, a := range accounts {
@@ -81,10 +97,8 @@ func NewXPublicReader(accounts []string, feed *Feed, msgLimit int, baseCh int, i
 		msgLimit: msgLimit,
 		baseCh:   baseCh,
 		client: &http.Client{
-			Timeout: 25 * time.Second,
-			CheckRedirect: func(req *http.Request, via []*http.Request) error {
-				return http.ErrUseLastResponse
-			},
+			Timeout:       25 * time.Second,
+			CheckRedirect: xRSSCheckRedirect,
 		},
 		instances:     instances,
 		cache:         make(map[string]cachedMessages),

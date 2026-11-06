@@ -1075,8 +1075,9 @@
           </div>
         </div>
         <div class="form-group">
-          <label for="scanProfile" data-i18n="scanner_profile">Config</label>
-          <select id="scanProfile" style="width:100%"></select>
+          <label for="scanProfileBtn" data-i18n="scanner_profile">Config</label>
+          <select id="scanProfile" hidden></select>
+          <button type="button" id="scanProfileBtn" class="select-btn" onclick="pickScanProfile()"><span class="select-btn-label" dir="auto"></span></button>
         </div>
         <details style="margin-bottom:12px">
           <summary style="cursor:pointer;font-size:13px;color:var(--text-dim);user-select:none"

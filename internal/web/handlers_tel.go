@@ -90,6 +90,9 @@ type telHub struct {
 	// while it is unchanged (guarded by sessMu).
 	sessMu   sync.Mutex
 	signOuts uint64
+	// wipes counts cache wipes. A call that was on the tunnel across one
+	// carries the previous account's data and must not be written back.
+	wipes atomic.Uint64
 
 	mu sync.Mutex
 	// ctx is the hub's lifetime context, set by reset (mirrors chatHub): a
@@ -677,7 +680,20 @@ func (h *telHub) withBridgeOnce(ctx context.Context, fn func(*tgbridge.Bridge) e
 	return h.callBridge(ctx, false, fn)
 }
 
+// errTelAccountGone is the answer of a call that outlived the account it was
+// made for.
+var errTelAccountGone = errors.New("tel: signed out during the call")
+
 func (h *telHub) callBridge(ctx context.Context, retry bool, fn func(*tgbridge.Bridge) error) error {
+	wipes := h.wipes.Load()
+	err := h.callBridgeOnce(ctx, retry, fn)
+	if err == nil && h.wipes.Load() != wipes {
+		return errTelAccountGone
+	}
+	return err
+}
+
+func (h *telHub) callBridgeOnce(ctx context.Context, retry bool, fn func(*tgbridge.Bridge) error) error {
 	b, err := h.current()
 	if err != nil {
 		return err
@@ -991,6 +1007,7 @@ func randomID() int64 { return rand.Int63() }
 func (h *telHub) wipeSession() error {
 	// The conversations belong to the account being signed out of. Leaving
 	// them would show one person's chats to whoever signs in next.
+	h.wipes.Add(1)
 	h.store().Forget()
 	h.adsMu.Lock()
 	h.ads = nil

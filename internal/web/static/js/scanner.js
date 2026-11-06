@@ -47,6 +47,8 @@ function closeScanner() {
   if (scanPollTimer) { clearInterval(scanPollTimer); scanPollTimer = null }
 }
 
+// The hidden <select> holds the value the scan reads; the button beside it
+// is what the user sees, opening a themed list instead of the native popup.
 function populateScanProfileSelect() {
   var sel = document.getElementById('scanProfile');
   sel.innerHTML = '';
@@ -60,6 +62,29 @@ function populateScanProfileSelect() {
       sel.appendChild(opt);
     }
   }
+  renderScanProfileBtn();
+}
+
+function renderScanProfileBtn() {
+  var sel = document.getElementById('scanProfile');
+  var btn = document.getElementById('scanProfileBtn');
+  if (!sel || !btn) return;
+  var opt = sel.options[sel.selectedIndex];
+  btn.querySelector('.select-btn-label').textContent = opt ? opt.textContent : '';
+  btn.disabled = sel.options.length < 2;
+}
+
+async function pickScanProfile() {
+  var sel = document.getElementById('scanProfile');
+  var list = (profiles && profiles.profiles) || [];
+  var v = await showChoiceDialog({
+    title: t('scanner_profile'),
+    value: sel.value,
+    items: list.map(function (p) { return { value: p.id, label: p.nickname || p.config.domain || p.id, sub: p.config.domain }; })
+  });
+  if (v === null || v === sel.value) return;
+  sel.value = v;
+  renderScanProfileBtn();
 }
 
 async function loadScannerPresets() {
