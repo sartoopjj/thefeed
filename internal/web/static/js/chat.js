@@ -540,7 +540,13 @@ async function chatLoadThreads() {
     var r = await fetch('/api/chat/threads');
     chatState.threads = (await r.json()) || [];
     chatState.pinned = {};
-    chatState.threads.forEach(function (th) { if (th.pinned) chatState.pinned[th.addr] = true });
+    chatState.threads.forEach(function (th) { if (th.pinned) chatState.pinned[th.addr] = true; });
+    // From the blocklist itself, not the rows: an address can be blocked
+    // with no conversation (new, or deleted after blocking).
+    var rb = await fetch('/api/chat/blocked');
+    var blocked = {};
+    ((await rb.json()) || []).forEach(function (b) { blocked[b.addr] = true; });
+    chatState.blocked = blocked;
     var rc = await fetch('/api/chat/contacts');
     var contacts = (await rc.json()) || [];
     chatState.contacts = {};
@@ -862,7 +868,8 @@ function chatRenderList(keepView) {
       var pinMark = th.pinned ? ('<span class="chat-pin-mark">' + icon('pinned') + '</span> ') : '';
       html += '<div class="chat-thread-item" onclick="openChatThread(\'' + jsStr(th.addr) + '\')">' +
         chatAvatarHTML(nm, 44) + // match the feed (.ch-avatar) and mirror list avatars (44px)
-        '<div class="chat-thread-main"><div class="chat-thread-name">' + pinMark + esc(nm) + '</div>' +
+        '<div class="chat-thread-main"><div class="chat-thread-name">' + pinMark + esc(nm) +
+        (chatState.blocked && chatState.blocked[th.addr] ? ' <span class="chat-blocked-tag">' + esc(chatT('chat_blocked_tag')) + '</span>' : '') + '</div>' +
         '<div class="chat-thread-last">' + esc(th.lastText || '') + '</div></div>' +
         (th.unread ? '<span class="chat-unread-badge">' + th.unread + '</span>' : '') +
         '<span class="chat-thread-time">' + chatFmtTime(th.lastTs) + '</span>' +
@@ -1400,6 +1407,51 @@ async function chatDelete(addr) {
   chatBackToList();
 }
 
+// chatToggleBlock blocks or unblocks an address. Local: new messages from a
+// blocked address are dropped on arrival (still acknowledged, so they free
+// the inbox). Nobody else is told.
+async function chatToggleBlock(addr) {
+  chatCloseMenu();
+  var want = !(chatState.blocked && chatState.blocked[addr]);
+  if (want && !(await showConfirmDialog(chatT('chat_block_confirm'), chatT('chat_block'), chatT('cancel')))) return;
+  var r = await fetch('/api/chat/thread', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ peer: addr, action: want ? 'block' : 'unblock' }) });
+  if (!r.ok) { showToast(chatT('chat_err_generic')); return; }
+  chatState.blocked = chatState.blocked || {};
+  if (want) chatState.blocked[addr] = true; else delete chatState.blocked[addr];
+  showToast(chatT(want ? 'chat_blocked_done' : 'chat_unblocked_done'));
+  await chatLoadThreads();
+  if (chatState.view === 'thread' && chatState.peer === addr) chatRenderThread();
+}
+
+// chatBlockedList shows every blocked address, with or without a
+// conversation left, each with Unblock.
+async function chatBlockedList() {
+  var list = [];
+  try { list = (await (await fetch('/api/chat/blocked')).json()) || []; } catch (e) { }
+  chatCloseMenu();
+  var sheet = document.createElement('div');
+  sheet.className = 'chat-sheet-overlay';
+  sheet.id = 'chatSheet';
+  sheet.onclick = function (e) { if (e.target === sheet) chatCloseMenu(); };
+  var h = '<div class="chat-sheet"><div class="chat-sheet-title" dir="auto">' + esc(chatT('chat_blocked_list')) + '</div>';
+  if (!list.length) h += '<div class="chat-blocked-empty" dir="auto">' + esc(chatT('chat_blocked_none')) + '</div>';
+  list.forEach(function (b) {
+    h += '<div class="chat-blocked-row"><span class="chat-blocked-name" dir="auto">' + esc(b.name || chatName(b.addr)) + '</span>' +
+      '<button class="chat-btn-soft" onclick="chatUnblockFromList(\'' + jsStr(b.addr) + '\')">' + esc(chatT('chat_unblock')) + '</button></div>';
+  });
+  h += '<button class="chat-sheet-item chat-sheet-cancel" onclick="chatCloseMenu()">' + esc(chatT('close')) + '</button></div>';
+  sheet.innerHTML = h;
+  document.getElementById('chatModal').appendChild(sheet);
+}
+
+async function chatUnblockFromList(addr) {
+  await fetch('/api/chat/thread', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ peer: addr, action: 'unblock' }) });
+  if (chatState.blocked) delete chatState.blocked[addr];
+  showToast(chatT('chat_unblocked_done'));
+  await chatLoadThreads();
+  chatBlockedList();
+}
+
 // chatClearMessages wipes the message history of a conversation but keeps the
 // conversation itself (contact, server, seq counters, ✓/✓✓). Local-only.
 async function chatClearMessages(addr) {
@@ -1442,6 +1494,8 @@ function chatListMenu() {
     icon('log') + ' ' + esc(chatT('chat_log')) + '</button>' +
     '<button class="chat-sheet-item" onclick="chatCloseMenu();chatCellSizeSheet()">' +
     icon('stats') + ' ' + esc(chatT('chat_query_size')) + '</button>' +
+    '<button class="chat-sheet-item" onclick="chatCloseMenu();chatBlockedList()">' +
+    icon('close') + ' ' + esc(chatT('chat_blocked_list')) + '</button>' +
     '<button class="chat-sheet-item chat-sheet-cancel" onclick="chatCloseMenu()">' + esc(chatT('cancel')) + '</button>' +
     '</div>';
   document.getElementById('chatModal').appendChild(sheet);
@@ -1686,6 +1740,11 @@ async function chatRenderThread() {
   html += '<div class="chat-footer">';
   html += '<div class="chat-send-error" id="chatSendError"></div>';
   html += '<div class="chat-progress-wrap"><div class="chat-progress" id="chatSendProgress"><div class="chat-progress-fill" id="chatSendProgressFill"></div></div><span class="chat-progress-label" id="chatSendProgressLabel"></span></div>';
+  // Blocked: no composer, a note and the way back instead.
+  if (chatState.blocked && chatState.blocked[chatState.peer]) {
+    html += '<div class="chat-blocked-bar"><span dir="auto">' + esc(chatT('chat_blocked_note')) + '</span>' +
+      '<button class="chat-btn-soft" onclick="chatToggleBlock(\'' + jsStr(chatState.peer) + '\')">' + esc(chatT('chat_unblock')) + '</button></div>';
+  } else
   // Compose row: three SEPARATE pills — quota ring (start) · text pill · send
   // circle. The quota ring shows remaining sends; tap it for the full detail.
   html += '<div class="chat-input-row">' +
@@ -1990,6 +2049,9 @@ function chatContactInfo() {
   h += '<button class="chat-sheet-item" onclick="chatContactRename()">' + icon('edit') + ' ' + esc(chatT('chat_rename')) + '</button>';
   // Merged in from the old thread ⋮ menu: clear / delete the conversation.
   h += '<button class="chat-sheet-item" onclick="chatClearMessages(\'' + jsStr(addr) + '\')">' + icon('eraser') + ' ' + esc(chatT('chat_clear')) + '</button>';
+  var blocked = !!(chatState.blocked && chatState.blocked[addr]);
+  h += '<button class="chat-sheet-item' + (blocked ? '' : ' chat-sheet-danger') + '" onclick="chatToggleBlock(\'' + jsStr(addr) + '\')">' +
+    icon(blocked ? 'success' : 'close') + ' ' + esc(chatT(blocked ? 'chat_unblock' : 'chat_block')) + '</button>';
   h += '<button class="chat-sheet-item chat-sheet-danger" onclick="chatDelete(\'' + jsStr(addr) + '\')">' + icon('delete') + ' ' + esc(chatT('chat_delete')) + '</button>';
   h += '<button class="chat-sheet-item chat-sheet-cancel" onclick="chatCloseMenu()">' + esc(chatT('close')) + '</button></div>';
   sheet.innerHTML = h;

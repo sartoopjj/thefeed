@@ -168,7 +168,7 @@ func (s *Server) handleBackupExport(w http.ResponseWriter, r *http.Request) {
 
 // chatBackupFiles are the only names the chat section ever contains. Restore
 // checks against this same list, so the two cannot drift apart.
-var chatBackupFiles = []string{"identity", "contacts", "threads", "servers", "settings"}
+var chatBackupFiles = []string{"identity", "contacts", "threads", "servers", "settings", "blocked"}
 
 func (s *Server) collectChatBackup() json.RawMessage {
 	chatDir := filepath.Join(s.dataDir, "chat")
@@ -492,7 +492,7 @@ func (s *Server) restoreChat(data json.RawMessage) error {
 	// profiles.json. The victim only has to restore a backup someone gave
 	// them, which is exactly what a backup file is for.
 	//
-	// An allow-list, not a sanitiser: these five names are the whole format.
+	// An allow-list, not a sanitiser: these names are the whole format.
 	allowed := make(map[string]bool, len(chatBackupFiles))
 	for _, n := range chatBackupFiles {
 		allowed[n] = true

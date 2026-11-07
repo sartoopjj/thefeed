@@ -70,7 +70,9 @@ const target = (matches) => ({ closest: (sel) => (matches && sel.split(', ').som
 {
   const { seen, api } = harness({ ...channel, protected: true }, [{ id: 4, text: '' }]);
   api.menu(4);
-  eq('nothing to offer, no sheet', seen.sheet, '');
+  // Only Report is left: nothing can be copied, forwarded or answered here,
+  // but someone else's post can always be reported to Telegram.
+  eq('a protected read-only post offers only Report', seen.sheet.replace(/<fail telReportMsg\(4\)>\[tel_report\]<\/>/, ''), '');
 }
 
 // --- who is being answered ------------------------------------------------------

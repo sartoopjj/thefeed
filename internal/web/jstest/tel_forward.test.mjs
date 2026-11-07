@@ -56,7 +56,7 @@ function harness(peer, msgs, answer, fetchedTarget) {
   eq('a channel post can be forwarded', /telStartForward\(5\)/.test(seen.sheet), true);
   seen.sheet = '';
   api.menu(6);
-  eq('a protected message: no menu at all here', seen.sheet, '');
+  eq('a protected message: only Report here', seen.sheet.replace(/<fail telReportMsg\(6\)>\[tel_report\]<\/>/, ''), '');
   eq('a protected message: no Forward', /telStartForward/.test(seen.sheet), false);
   eq('and no Copy either', /telCopyMsg/.test(seen.sheet), false);
 }
@@ -64,6 +64,7 @@ function harness(peer, msgs, answer, fetchedTarget) {
   const { seen, api } = harness({ ...chan, protected: true }, [{ id: 5, text: 'post' }]);
   api.menu(5);
   eq('a protected channel: neither Forward nor Copy', [/telStartForward/.test(seen.sheet), /telCopyMsg/.test(seen.sheet)], [false, false]);
+  seen.sheet = '';
   api.start(5);
   eq('nor can the picker be opened around the menu', seen.sheet, '');
 }
@@ -94,7 +95,9 @@ function harness(peer, msgs, answer, fetchedTarget) {
   }
   eq('the ⋮ is drawn exactly when the menu opens', agree, total);
   const { api } = harness(chan, []);
-  eq('a protected channel post has no ⋮', api.has({ ...chan, protected: true }, { id: 1, text: 'x' }), false);
+  // Still drawn: someone else's post can be reported even where it cannot be
+  // copied or forwarded.
+  eq('a protected channel post keeps its ⋮, for Report', api.has({ ...chan, protected: true }, { id: 1, text: 'x' }), true);
 }
 eq('the bubble asks before drawing it', /!m\.service && telHasMsgMenu\(peer, m\) \? '<button class="tel-msg-more"/.test(src), true);
 

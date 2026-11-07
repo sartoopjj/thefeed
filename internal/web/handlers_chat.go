@@ -267,6 +267,11 @@ type chatHub struct {
 	activeKey string                    // the active profile's server key
 	contacts  map[string]string
 	threads   map[string]*chatThreadFile
+	// blocked is the set of addresses whose messages are dropped on arrival,
+	// each with the contact name it had when blocked (so the blocked list can
+	// name it after the conversation is deleted). Kept apart from threads, so
+	// deleting a conversation does not unblock.
+	blocked map[string]string
 	// enabled is the set of server keys the user has explicitly opted in to.
 	// Only these are polled and registered on (publishing the chat pubkey), so
 	// an untrusted feed server never silently receives the user's identity.
@@ -302,6 +307,7 @@ func newChatHub(s *Server, dataDir string) *chatHub {
 		servers:    make(map[string]*perServerChat),
 		contacts:   make(map[string]string),
 		threads:    make(map[string]*chatThreadFile),
+		blocked:    make(map[string]string),
 		enabled:    make(map[string]bool),
 		probing:    make(map[string]bool),
 		pollKick:   make(chan bool, 1),
@@ -340,6 +346,12 @@ func (h *chatHub) loadState() {
 			for _, th := range h.threads {
 				th.migrateStatus()
 			}
+		}
+	}
+	if raw, err := os.ReadFile(filepath.Join(h.dir, "blocked.json")); err == nil {
+		var bl map[string]string
+		if json.Unmarshal(raw, &bl) == nil && bl != nil {
+			h.blocked = bl
 		}
 	}
 	if raw, err := os.ReadFile(filepath.Join(h.dir, "servers.json")); err == nil {
@@ -454,6 +466,10 @@ func (h *chatHub) saveContactsLocked() {
 
 func (h *chatHub) saveThreadsLocked() {
 	_ = h.writeJSONAtomic("threads.json", chatThreadsFile{Threads: h.threads})
+}
+
+func (h *chatHub) saveBlockedLocked() {
+	_ = h.writeJSONAtomic("blocked.json", h.blocked)
 }
 
 func (h *chatHub) saveEnabledLocked() {
@@ -1083,6 +1099,70 @@ func (h *chatHub) pollOrder(now time.Time) []*perServerChat {
 	return out
 }
 
+// storeInboxLocked files fetched messages into their conversations and
+// returns how many are new. Everything in msgs is acknowledged by the caller
+// whether stored or not: unreadable, blocked and replayed copies included.
+func (h *chatHub) storeInboxLocked(serverKey, localAddr string, msgs []client.ChatIncoming, maxSeq map[string]uint32) int {
+	added := 0
+
+	// Detect server-side seq regression: if every incoming seq from a peer
+	// is at/below our acked watermark, the server likely reset its store.
+	for addr, mx := range maxSeq {
+		th := h.threads[addr]
+		if th != nil && th.AckedIn[serverKey] > 0 && mx <= th.AckedIn[serverKey] {
+			th.resetAckedIn(serverKey)
+		}
+	}
+
+	for _, m := range msgs {
+		addr := client.ChatAddressString(m.From)
+		// An envelope we cannot read still has to be acknowledged -- that is
+		// the whole point, it frees the inbox slot -- but there is nothing to
+		// store or show. Anyone can send ciphertext we cannot open; leaving it
+		// unacknowledged let a few throwaway identities fill the inbox and
+		// lock out every real sender for 72 hours.
+		if m.Undecryptable {
+			continue
+		}
+		// Blocked: acknowledged like everything else, so the sender cannot
+		// fill the inbox, but never stored or shown.
+		if _, blocked := h.blocked[addr]; blocked {
+			continue
+		}
+		th := h.threads[addr]
+		if th == nil {
+			th = &chatThreadFile{}
+			h.threads[addr] = th
+		}
+		if th.Server == "" {
+			th.Server = serverKey
+		}
+		// Replay guard: a seq at/below our acked watermark was already delivered,
+		// so a (re-)served copy is a duplicate — drop it without re-rendering,
+		// even if local history was cleared.
+		if th.replayedIn(serverKey, m.Seq) {
+			continue
+		}
+		dup := false
+		for _, ex := range th.Msgs {
+			if ex.Dir == "in" && ex.Seq == m.Seq && ex.Server == serverKey && ex.LocalAddr == localAddr {
+				dup = true
+				break
+			}
+		}
+		if dup {
+			continue
+		}
+		th.Msgs = append(th.Msgs, chatStoredMsg{
+			Dir: "in", Seq: m.Seq, Text: m.Text,
+			TS: time.Now().Unix(), Server: serverKey, LocalAddr: localAddr,
+		})
+		th.Unread++
+		added++
+	}
+	return added
+}
+
 // pollServer fetches one server's inbox, stores new messages (tagged with the
 // server), and acks them.
 func (h *chatHub) pollServer(ctx context.Context, ps *perServerChat, progress client.ChatProgress, localAddr string) (int, error) {
@@ -1102,59 +1182,8 @@ func (h *chatHub) pollServer(ctx context.Context, ps *perServerChat, progress cl
 	}
 
 	h.mu.Lock()
-	added := 0
 	maxSeq := ackWatermarks(msgs)
-
-	// Detect server-side seq regression: if every incoming seq from a peer
-	// is at/below our acked watermark, the server likely reset its store.
-	for addr, mx := range maxSeq {
-		th := h.threads[addr]
-		if th != nil && th.AckedIn[ps.serverKey] > 0 && mx <= th.AckedIn[ps.serverKey] {
-			th.resetAckedIn(ps.serverKey)
-		}
-	}
-
-	for _, m := range msgs {
-		addr := client.ChatAddressString(m.From)
-		// An envelope we cannot read still has to be acknowledged -- that is
-		// the whole point, it frees the inbox slot -- but there is nothing to
-		// store or show. Anyone can send ciphertext we cannot open; leaving it
-		// unacknowledged let a few throwaway identities fill the inbox and
-		// lock out every real sender for 72 hours.
-		if m.Undecryptable {
-			continue
-		}
-		th := h.threads[addr]
-		if th == nil {
-			th = &chatThreadFile{}
-			h.threads[addr] = th
-		}
-		if th.Server == "" {
-			th.Server = ps.serverKey
-		}
-		// Replay guard: a seq at/below our acked watermark was already delivered,
-		// so a (re-)served copy is a duplicate — drop it without re-rendering,
-		// even if local history was cleared.
-		if th.replayedIn(ps.serverKey, m.Seq) {
-			continue
-		}
-		dup := false
-		for _, ex := range th.Msgs {
-			if ex.Dir == "in" && ex.Seq == m.Seq && ex.Server == ps.serverKey && ex.LocalAddr == localAddr {
-				dup = true
-				break
-			}
-		}
-		if dup {
-			continue
-		}
-		th.Msgs = append(th.Msgs, chatStoredMsg{
-			Dir: "in", Seq: m.Seq, Text: m.Text,
-			TS: time.Now().Unix(), Server: ps.serverKey, LocalAddr: localAddr,
-		})
-		th.Unread++
-		added++
-	}
+	added := h.storeInboxLocked(ps.serverKey, localAddr, msgs, maxSeq)
 	if added > 0 {
 		h.saveThreadsLocked()
 	}
@@ -2064,6 +2093,28 @@ func (s *Server) handleChatThreads(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, out)
 }
 
+// handleChatBlocked lists the blocked addresses, with the name each was
+// saved under, including those whose conversation was deleted.
+func (s *Server) handleChatBlocked(w http.ResponseWriter, r *http.Request) {
+	h := s.chat
+	h.mu.Lock()
+	type entry struct {
+		Addr string `json:"addr"`
+		Name string `json:"name,omitempty"`
+	}
+	out := make([]entry, 0, len(h.blocked))
+	for addr, saved := range h.blocked {
+		name := h.contacts[addr]
+		if name == "" {
+			name = saved
+		}
+		out = append(out, entry{Addr: addr, Name: name})
+	}
+	h.mu.Unlock()
+	sort.Slice(out, func(i, j int) bool { return out[i].Addr < out[j].Addr })
+	writeJSON(w, out)
+}
+
 // handleChatThread mutates one conversation: delete it, or pin/unpin it.
 func (s *Server) handleChatThread(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
@@ -2072,7 +2123,7 @@ func (s *Server) handleChatThread(w http.ResponseWriter, r *http.Request) {
 	}
 	var req struct {
 		Peer   string `json:"peer"`
-		Action string `json:"action"` // delete | clear | pin | unpin
+		Action string `json:"action"` // delete | clear | pin | unpin | block | unblock
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "bad request", 400)
@@ -2114,6 +2165,13 @@ func (s *Server) handleChatThread(w http.ResponseWriter, r *http.Request) {
 		}
 		th.Pinned = req.Action == "pin"
 		h.saveThreadsLocked()
+	case "block", "unblock":
+		if req.Action == "block" {
+			h.blocked[addr] = h.contacts[addr]
+		} else {
+			delete(h.blocked, addr)
+		}
+		h.saveBlockedLocked()
 	default:
 		http.Error(w, "unknown action", 400)
 		return

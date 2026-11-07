@@ -1832,3 +1832,95 @@ input.tel-fwd-search:focus {
 .tel-fwd-none {
   padding: 10px 12px;
 }
+
+/* A blocked person: a note above the Unblock button, in place of the composer. */
+.tel-blocked-bar {
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.tel-blocked-note {
+  pointer-events: auto;
+  max-width: 340px;
+  padding: 4px 12px;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, .35);
+  color: #fff;
+  font-size: var(--text-xs);
+  text-align: center;
+}
+
+/* Blocked users list (Telegram menu). */
+.tel-blocked-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 16px;
+}
+
+.tel-blocked-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+
+.tel-blocked-name,
+.tel-blocked-sub {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tel-blocked-sub {
+  font-size: var(--text-xs);
+  color: var(--text-dim);
+}
+
+.tel-blocked-count {
+  font-weight: var(--weight-normal, 400);
+  color: var(--text-dim);
+}
+
+.tel-blocked-row .tel-blocked-unblock {
+  width: auto;
+  margin: 0;
+  padding: 6px 14px;
+  flex: 0 0 auto;
+}
+
+/* Invite preview: what a private link leads to, before joining. */
+.tel-invite {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px 4px;
+  text-align: center;
+}
+
+.tel-invite-title {
+  font-size: var(--text-md, 15px);
+  font-weight: var(--weight-semibold, 600);
+}
+
+.tel-invite-sub {
+  font-size: var(--text-xs);
+  color: var(--text-dim);
+}
+
+.tel-invite-about {
+  max-height: 120px;
+  overflow-y: auto;
+  font-size: var(--text-sm);
+  white-space: pre-line;
+}
+
+.tel-invite .tel-btn {
+  width: 100%;
+  margin-top: 6px;
+}

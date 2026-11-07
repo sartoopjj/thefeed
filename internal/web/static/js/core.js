@@ -586,15 +586,17 @@ function showInputDialog(opts) {
       resolve(val);
     };
     overlay.querySelector('#inputDialogCancel').onclick = function () { done(null); };
+    // allowEmpty: OK with nothing typed answers '' -- only Cancel is null.
+    var empty = opts.allowEmpty ? '' : null;
     overlay.querySelector('#inputDialogOk').onclick = function () {
       var v = (field.value || '').trim();
-      done(v || null);
+      done(v || empty);
     };
     var onKey = function (e) {
       if (e.key === 'Escape') { done(null); }
       else if (e.key === 'Enter') {
         var v = (field.value || '').trim();
-        done(v || null);
+        done(v || empty);
       }
     };
     document.addEventListener('keydown', onKey);

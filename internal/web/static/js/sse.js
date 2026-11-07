@@ -31,6 +31,11 @@ function connectSSE() {
       }
       return;
     }
+    // The Telegram blocklist changed (blocked or unblocked on another device).
+    if (data === 'tel-blocks') {
+      if (typeof window.telLoadBlocked === 'function') window.telLoadBlocked();
+      return;
+    }
     if (data === 'resolver-lists') {
       // Resolver UI is a reparented section now (not the old modal). Refresh the
       // lists/sidebar + the visible board when the section is open.

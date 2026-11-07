@@ -604,6 +604,8 @@ func TestTelStateChangingEndpointsRefuseGET(t *testing.T) {
 		{"disconnect", s.handleTelDisconnect, "/api/tel/disconnect"},
 		{"credentials", s.handleTelCredentials, "/api/tel/credentials"},
 		{"auth", s.handleTelAuth, "/api/tel/auth"},
+		{"report", s.handleTelReport, "/api/tel/report"},
+		{"invite", s.handleTelInvite, "/api/tel/invite"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			rec := httptest.NewRecorder()

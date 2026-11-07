@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"sync"
 	"time"
 
@@ -57,6 +58,11 @@ type telCacheData struct {
 	// dropped), so "held < total" can be true for ever. That is what left a
 	// list sitting on "197 of 198" with a button that fetched nothing.
 	DialogsComplete bool `json:"dialogsComplete,omitempty"`
+	// Blocked is the account's blocklist as last learnt, by user id: from a
+	// block here, a block update from another device, a send refused because
+	// of one, or the list itself. Telegram's dialog list does not say, so a
+	// mark on the rows would be lost on the next merge.
+	Blocked map[string]tgbridge.BlockedPeer `json:"blocked,omitempty"`
 	// DialogTotal is how many conversations Telegram says the account has, as
 	// of the last live page that said so. Kept because the cache otherwise has
 	// no way to know it is partial: holding forty rows of three hundred looks
@@ -82,6 +88,8 @@ type telCache struct {
 	tc   *telCrypto
 	data telCacheData
 	seq  int64 // monotonic stand-in for a clock, for eviction order
+	// blockEdits counts local blocklist changes (see BlockEdits).
+	blockEdits uint64
 }
 
 // telCacheKey names a conversation the same way the frontend does, so the two
@@ -773,6 +781,122 @@ func (c *telCache) SetMuted(key string, muted bool) {
 	}
 	c.mu.Unlock()
 	c.save()
+}
+
+// BlockedPeers lists the blocklist, most recently blocked first.
+func (c *telCache) BlockedPeers() []tgbridge.BlockedPeer {
+	if c == nil {
+		return nil
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	out := make([]tgbridge.BlockedPeer, 0, len(c.data.Blocked))
+	for _, b := range c.data.Blocked {
+		out = append(out, b)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Date != out[j].Date {
+			return out[i].Date > out[j].Date
+		}
+		return out[i].Peer.ID < out[j].Peer.ID
+	})
+	return out
+}
+
+// ApplyBlocks records blocks and unblocks. An already-blocked row keeps its
+// date and deleted mark; a block that came without the person's details takes
+// them from the conversation list, since Unblock needs the access hash.
+//
+// It reports whether the list itself changed (someone added or removed).
+func (c *telCache) ApplyBlocks(bs []tgbridge.PeerBlock) bool {
+	if c == nil || len(bs) == 0 {
+		return false
+	}
+	changed, dirty := false, false
+	c.mu.Lock()
+	for _, b := range bs {
+		id := strconv.FormatInt(b.Peer.ID, 10)
+		if !b.Blocked {
+			if _, ok := c.data.Blocked[id]; ok {
+				delete(c.data.Blocked, id)
+				changed = true
+			}
+			continue
+		}
+		if c.data.Blocked == nil {
+			c.data.Blocked = map[string]tgbridge.BlockedPeer{}
+		}
+		p := b.Peer
+		if p.AccessHash == 0 {
+			for _, d := range c.data.Dialogs {
+				if d.Peer.ID == p.ID && (d.Peer.Kind == tgbridge.PeerUser || d.Peer.Kind == tgbridge.PeerBot) {
+					p = d.Peer
+					break
+				}
+			}
+		}
+		if old, ok := c.data.Blocked[id]; ok {
+			if p.AccessHash != 0 && !old.Deleted && (old.Peer.Title != p.Title || old.Peer.AccessHash != p.AccessHash || old.Peer.Username != p.Username) {
+				old.Peer = p
+				c.data.Blocked[id] = old
+				dirty = true
+			}
+			continue
+		}
+		c.data.Blocked[id] = tgbridge.BlockedPeer{Peer: p, Date: int(time.Now().Unix())}
+		changed = true
+	}
+	if changed {
+		c.blockEdits++
+	}
+	c.mu.Unlock()
+	// Written only when something moved: a send to someone not blocked calls
+	// this too, and rewriting the whole sealed cache for nothing is real I/O
+	// on a weak phone.
+	if changed || dirty {
+		c.save()
+	}
+	return changed
+}
+
+// BlockEdits counts changes made to the blocklist here. A read of
+// Telegram's list that overlapped one is stale and must not replace it.
+func (c *telCache) BlockEdits() uint64 {
+	if c == nil {
+		return 0
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.blockEdits
+}
+
+func (c *telCache) SetBlocked(p tgbridge.Peer, blocked bool) {
+	c.ApplyBlocks([]tgbridge.PeerBlock{{Peer: p, Blocked: blocked}})
+}
+
+// ReplaceBlocked takes Telegram's own list. When the list is longer than
+// what was read (complete false), entries past the page are kept.
+//
+// edits is BlockEdits() from before the read: if the list changed here while
+// it was in flight, the read is dropped (false), since it predates that change.
+func (c *telCache) ReplaceBlocked(rows []tgbridge.BlockedPeer, complete bool, edits uint64) bool {
+	if c == nil {
+		return false
+	}
+	c.mu.Lock()
+	if c.blockEdits != edits {
+		c.mu.Unlock()
+		return false
+	}
+	if complete || c.data.Blocked == nil {
+		c.data.Blocked = map[string]tgbridge.BlockedPeer{}
+	}
+	for _, b := range rows {
+		c.data.Blocked[strconv.FormatInt(b.Peer.ID, 10)] = b
+	}
+	c.mu.Unlock()
+	c.save()
+	return true
 }
 
 // Forget drops everything. Used when the account signs out: the next account

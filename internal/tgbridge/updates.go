@@ -77,6 +77,9 @@ type Changes struct {
 	// self-destruct timer. Telegram's terms forbid keeping them on screen.
 	Deleted []Deletion `json:"deleted,omitempty"`
 
+	// Blocks are people blocked or unblocked, here or on another device.
+	Blocks []PeerBlock `json:"blocks,omitempty"`
+
 	// Resync means the cursor is too far behind for Telegram to answer with a
 	// difference, so the caller has to fall back to listing conversations.
 	Resync bool `json:"resync"`
@@ -142,6 +145,7 @@ func (b *Bridge) Changes(ctx context.Context, from UpdateState) (*Changes, error
 			Mutes:    h.Mutes,
 			Gone:     h.Gone,
 			Deleted:  h.Deleted,
+			Blocks:   h.Blocks,
 		}, nil
 
 	case *tg.UpdatesDifferenceSlice:
@@ -164,6 +168,7 @@ func (b *Bridge) Changes(ctx context.Context, from UpdateState) (*Changes, error
 			Mutes:    h.Mutes,
 			Gone:     h.Gone,
 			Deleted:  h.Deleted,
+			Blocks:   h.Blocks,
 		}, nil
 
 	case *tg.UpdatesDifferenceTooLong:
@@ -217,6 +222,7 @@ type harvest struct {
 	Mutes    []PeerMute
 	Gone     []Peer
 	Deleted  []Deletion
+	Blocks   []PeerBlock
 	// DefaultsChanged marks an account-wide notification change (the per-type
 	// defaults, not one conversation). The cached defaults are stale after it.
 	DefaultsChanged bool
@@ -316,6 +322,21 @@ func otherUpdates(ups []tg.UpdateClass, users []tg.UserClass, chats []tg.ChatCla
 			if p, ok := peerOf(np.Peer, idx); ok {
 				out.Mutes = append(out.Mutes, PeerMute{Peer: p, Muted: mutedNow(u.NotifySettings, def.For(p.Kind))})
 			}
+		case *tg.UpdatePeerBlocked:
+			// The main blocklist only. With the stories flag set the update is
+			// about the stories list alone, and Blocked says nothing about
+			// messaging -- taking it as an unblock would lift a real block.
+			pu, ok := u.PeerID.(*tg.PeerUser)
+			if !ok || u.BlockedMyStoriesFrom {
+				continue
+			}
+			p, known := peerOf(u.PeerID, idx)
+			if !known {
+				// No entity came with it. The id is enough to mark the row;
+				// the blocked list fills in the rest when it is opened.
+				p = Peer{Kind: PeerUser, ID: pu.UserID}
+			}
+			out.Blocks = append(out.Blocks, PeerBlock{Peer: p, Blocked: u.Blocked})
 		case *tg.UpdateReadChannelInbox:
 			// No topic field on this one: a channel's read mark is the whole
 			// channel, and a forum topic read arrives as readHistoryInbox.

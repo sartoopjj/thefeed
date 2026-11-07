@@ -159,6 +159,7 @@ func (s *Server) handleTelForward(w http.ResponseWriter, r *http.Request) {
 		msgs, e = b.ForwardMessages(ctx, req.From, req.IDs, rnd, req.To, req.Options)
 		return e
 	}); err != nil {
+		h.noteYouBlocked(req.To, err)
 		telFail(w, h, err)
 		return
 	}

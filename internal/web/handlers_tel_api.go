@@ -563,6 +563,12 @@ func (s *Server) handleTelDialogs(w http.ResponseWriter, r *http.Request) {
 	if _, err := h.current(); err != nil {
 		connected = false
 	}
+	// A manual refresh also reads the update stream: the list carries no
+	// blocks, mutes or reads made on another device, the stream does.
+	// Deferred before endOp so it runs after it (it stands aside for ops).
+	if connected && r.URL.Query().Get("refresh") == "1" {
+		defer h.refreshDialogs()
+	}
 	h.beginOp()
 	defer h.endOp()
 	ctx, cancel := context.WithTimeout(r.Context(), telCallTimeout)
@@ -691,6 +697,17 @@ func (s *Server) handleTelDialogs(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]any{"ok": true, "page": page})
 }
 
+// telHistoryKind tells a history request apart: poll is a check for newer
+// messages; looking means the user is at this chat now -- it was just opened
+// (no cursor yet) or refreshed by hand (fresh=1). A timer poll is not looking,
+// and an older page is neither.
+func telHistoryKind(q url.Values) (poll, looking bool) {
+	newest := telAtoi(q.Get("offsetId"), 0) == 0
+	poll = newest && telAtoi(q.Get("minId"), 0) > 0
+	looking = newest && (!poll || q.Get("fresh") == "1")
+	return poll, looking
+}
+
 // handleTelHistory fetches messages for one conversation.
 func (s *Server) handleTelHistory(w http.ResponseWriter, r *http.Request) {
 	h := s.telHubOrFail(w)
@@ -718,7 +735,21 @@ func (s *Server) handleTelHistory(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, map[string]any{"ok": false, "reason": "tel_err_no_cache"})
 		return
 	}
-	if _, err := h.current(); err != nil {
+	// Behind this answer, the background refresh: it asks Telegram what
+	// changed, which is the only way edits to messages already held arrive
+	// (history only returns ids above the cursor), and for a person's chat it
+	// re-reads the blocklist, so a block or unblock made on another device
+	// shows here. Deferred before endOp so it runs after it -- the refresh
+	// stands aside while any op is in flight.
+	poll, looking := telHistoryKind(q)
+	_, linkErr := h.current()
+	if linkErr == nil && (poll || looking) {
+		if looking {
+			h.noteBlockedInterest(peer)
+		}
+		defer h.refreshDialogs()
+	}
+	if linkErr != nil {
 		// No link. The messages we already hold are still the messages: answer
 		// from the cache rather than with an error, which is what made a
 		// restart -- or a page reload before the tunnel was back up -- look
@@ -732,13 +763,6 @@ func (s *Server) handleTelHistory(w http.ResponseWriter, r *http.Request) {
 		}
 		writeJSON(w, map[string]any{"ok": false, "reason": "tel_err_not_connected"})
 		return
-	}
-	// A poll of an open conversation also asks Telegram what changed, which
-	// is the only way edits to messages already held arrive: history only
-	// returns ids above the cursor. Deferred before endOp so it runs after
-	// it -- the refresh stands aside while any op is in flight.
-	if telAtoi(q.Get("offsetId"), 0) == 0 && telAtoi(q.Get("minId"), 0) > 0 {
-		defer h.refreshDialogs()
 	}
 	h.beginOp()
 	defer h.endOp()
@@ -810,10 +834,12 @@ func (s *Server) handleTelSend(w http.ResponseWriter, r *http.Request) {
 		sentID, e = b.SendText(ctx, req.Peer, text, randomID(), req.ReplyTo)
 		return e
 	}); err != nil {
+		h.noteYouBlocked(req.Peer, err)
 		telFail(w, h, err)
 		return
 	}
 	h.setErr(nil)
+	h.noteDelivered(req.Peer)
 	// The id Telegram assigned, so the UI can settle the message it already
 	// drew instead of spending a second round trip reading it back.
 	if sentID > 0 {
@@ -1095,7 +1121,17 @@ func telStatusKey(err error) string {
 		return "tel_err_paid"
 	case tgerr.Is(err, "CHAT_FORWARDS_RESTRICTED"):
 		return "tel_err_forward_protected"
-	case tgerr.Is(err, "CHAT_WRITE_FORBIDDEN", "CHAT_SEND_PLAIN_FORBIDDEN", "USER_IS_BLOCKED", "YOU_BLOCKED_USER", "CHAT_ADMIN_REQUIRED"):
+	case tgerr.Is(err, "INVITE_HASH_EXPIRED", "INVITE_HASH_INVALID", "INVITE_HASH_EMPTY"):
+		return "tel_err_invite_invalid"
+	case tgerr.Is(err, "CHANNELS_TOO_MUCH"):
+		return "tel_err_too_many_channels"
+	case tgerr.Is(err, "USERS_TOO_MUCH"):
+		return "tel_err_chat_full"
+	case errors.Is(err, tgbridge.ErrInviteNeedsApp):
+		return "tel_err_invite_app"
+	case tgerr.Is(err, "YOU_BLOCKED_USER"):
+		return "tel_err_you_blocked"
+	case tgerr.Is(err, "CHAT_WRITE_FORBIDDEN", "CHAT_SEND_PLAIN_FORBIDDEN", "USER_IS_BLOCKED", "CHAT_ADMIN_REQUIRED"):
 		return "tel_err_cannot_write"
 	case errors.Is(err, tgbridge.ErrNoDirectMessages):
 		return "tel_err_no_direct"

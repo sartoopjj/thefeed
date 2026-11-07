@@ -46,7 +46,7 @@ func TestTelForwardErrorsAreReadable(t *testing.T) {
 		"CHAT_WRITE_FORBIDDEN":      "tel_err_cannot_write",
 		"CHAT_SEND_PLAIN_FORBIDDEN": "tel_err_cannot_write",
 		"USER_IS_BLOCKED":           "tel_err_cannot_write",
-		"YOU_BLOCKED_USER":          "tel_err_cannot_write",
+		"YOU_BLOCKED_USER":          "tel_err_you_blocked", // says how to fix it
 	} {
 		if got := telStatusKey(tgerr.New(400, code)); got != want {
 			t.Errorf("%s: %s", code, got)

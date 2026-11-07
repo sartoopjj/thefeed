@@ -941,6 +941,14 @@ function doBackupExport() {
   });
 }
 
+// backupErrorText says in the user's language what the server answered in
+// English: a damaged or foreign file, or one too large to read.
+function backupErrorText(status, txt) {
+  if (status === 413) return t('backup_too_large') || 'File too large';
+  if (/invalid backup|unreadable/.test(txt || '')) return t('backup_invalid_file') || 'Not a valid backup file';
+  return (txt || '').trim() || (t('import_error') || 'Error');
+}
+
 function doBackupPreview() {
   var fileEl = document.getElementById('bkImportFile');
   var pw = document.getElementById('bkImportPw').value;
@@ -954,7 +962,7 @@ function doBackupPreview() {
   fetch('/api/backup/preview', { method: 'POST', body: fd })
     .then(function (r) {
       if (r.status === 401) throw new Error(t('backup_wrong_password') || 'Wrong password');
-      if (!r.ok) return r.text().then(function (t) { throw new Error(t); });
+      if (!r.ok) return r.text().then(function (txt) { throw new Error(backupErrorText(r.status, txt)); });
       return r.json();
     })
     .then(function (d) { renderBackupPreview(d); })
@@ -1058,7 +1066,7 @@ async function doBackupRestore() {
     .then(function (r) {
       if (r.status === 401) throw new Error(t('backup_wrong_password') || 'Wrong password');
       if (r.status === 423) throw new Error(t('backup_saved_locked') || 'Unlock saved messages first');
-      if (!r.ok) return r.text().then(function (t) { throw new Error(t); });
+      if (!r.ok) return r.text().then(function (txt) { throw new Error(backupErrorText(r.status, txt)); });
       return r.json();
     })
     .then(function () {

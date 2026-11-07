@@ -93,6 +93,9 @@ type telHub struct {
 	// wipes counts cache wipes. A call that was on the tunnel across one
 	// carries the previous account's data and must not be written back.
 	wipes atomic.Uint64
+	// wantBlocked asks the refresh behind the current answer to re-read the
+	// blocklist: a person's chat was opened, or refreshed by hand.
+	wantBlocked atomic.Bool
 
 	mu sync.Mutex
 	// ctx is the hub's lifetime context, set by reset (mirrors chatHub): a
@@ -274,7 +277,21 @@ func (h *telHub) refreshDialogs() {
 		if err := h.Sync(ctx); err != nil {
 			return
 		}
+		// The blocklist is read rather than learnt from the update stream: a
+		// block made on another device does not arrive in a difference. Only
+		// when the user opens or refreshes a person's chat -- never on a timer.
+		if h.wantBlocked.Swap(false) {
+			_, _ = h.readBlocked(ctx)
+		}
 	})
+}
+
+// noteBlockedInterest asks for the blocklist behind the answer being given,
+// for a person's or bot's chat only.
+func (h *telHub) noteBlockedInterest(peer tgbridge.Peer) {
+	if peer.Kind == tgbridge.PeerUser || peer.Kind == tgbridge.PeerBot {
+		h.wantBlocked.Store(true)
+	}
 }
 
 // store returns the message cache, loading it the first time it is asked for.
@@ -1259,6 +1276,11 @@ func (h *telHub) Sync(ctx context.Context) error {
 	// themselves, so a channel silenced elsewhere must already be silent here
 	// -- otherwise it rings once more on the very poll that learns it is muted.
 	h.store().ApplyMutes(ch.Mutes)
+	// Blocked or unblocked on another device: the page is told at once, so
+	// an open chat gains or loses its blocked bar without a reload.
+	if h.store().ApplyBlocks(ch.Blocks) {
+		h.s.broadcast("event: update\ndata: \"tel-blocks\"\n\n")
+	}
 	n := h.store().ApplyNew(ch.New)
 	h.store().ApplyDeletes(ch.Deleted)
 	h.store().ApplyReads(ch.Reads)

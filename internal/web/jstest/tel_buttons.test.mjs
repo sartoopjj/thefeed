@@ -22,7 +22,7 @@ const fn = (name) => {
 const sheets = [];
 const api = new Function('telState', 'telT', 'esc', 'escAttr', 'parseTgLink', 'showLinkSheet', 'openExternal', 'telJumpToMsg', 'telOpenByUsername',
   'function telEsc(s){return esc(String(s==null?"":s))}function telAttrQ(s){return escAttr(String(s==null?"":s))}' +
-  fn('telSafeText') + fn('telSafeURL') + fn('telButtonsHTML') + fn('telLinkClick') +
+  fn('telSafeText') + fn('telSafeURL') + fn('telButtonsHTML') + fn('telIsInvite') + fn('telLinkClick') +
   'return { buttons: telButtonsHTML, click: telLinkClick };',
 )({ peer: { username: 'here' } }, (k) => k, (s) => s, (s) => s,
   (u) => { const m = /^https:\/\/t\.me\/(\w+)/.exec(u); return m ? { user: m[1] } : null; },
@@ -47,5 +47,13 @@ eq('the sheet shows the real target', sheets[0], { url: 'https://203.0.113.9/log
 tap('https://t.me/examplechannel');
 eq('a Telegram target can be opened here', sheets[1], { url: 'https://t.me/examplechannel', extra: 'tel_open_channel' });
 
+// A private invite link offers its preview from the sheet; a tap never joins.
+{
+  const before = sheets.length;
+  const a = { getAttribute: () => 'https://t.me/+AbCdEfGh123', closest: () => a };
+  const e = { target: { closest: () => a }, preventDefault() {}, stopPropagation() {} };
+  api.click(e);
+  eq('an invite link opens the sheet with Show invite', sheets.slice(before), [{ url: 'https://t.me/+AbCdEfGh123', extra: 'tel_invite_show' }]);
+}
 console.log(`${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
