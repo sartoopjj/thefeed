@@ -401,10 +401,25 @@ class AndroidBridge(private val activity: Activity) {
         var legacy: File? = null // pre-Q has no pending flag; delete by path
         var safe = fallbackName
         try {
-            val conn = (java.net.URL(url).openConnection() as java.net.HttpURLConnection).apply {
+            val u = java.net.URL(url)
+            val conn = (u.openConnection() as java.net.HttpURLConnection).apply {
                 connectTimeout = 30_000
                 readTimeout = 60_000
                 instanceFollowRedirects = true
+                // Our own server answers only with the per-launch Basic
+                // secret (the WebView answers its challenge; this request
+                // does not go through the WebView). Sent to loopback only,
+                // with redirects off so it can never follow anywhere else.
+                val port = prefs.getInt(ThefeedService.PREF_PORT, -1)
+                if (u.host == "127.0.0.1" && u.port == port) {
+                    val secret = prefs.getString(ThefeedService.PREF_LOCAL_SECRET, "") ?: ""
+                    if (secret.isNotEmpty()) {
+                        instanceFollowRedirects = false
+                        val basic = android.util.Base64.encodeToString(
+                            "thefeed:$secret".toByteArray(), android.util.Base64.NO_WRAP)
+                        setRequestProperty("Authorization", "Basic $basic")
+                    }
+                }
             }
             try {
                 if (conn.responseCode / 100 != 2) throw java.io.IOException("HTTP ${conn.responseCode}")
