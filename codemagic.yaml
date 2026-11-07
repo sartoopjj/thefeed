@@ -1,8 +1,11 @@
 # Codemagic CI/CD for thefeed.
 #
-# Two workflows:
-#   ios-testflight    → builds a SIGNED .ipa and uploads it to TestFlight
-#   android-googleplay → builds a SIGNED .aab and uploads it to Google Play (internal track)
+# Three workflows, all manual (pick the tag in the Codemagic UI):
+#   ios-testflight     → SIGNED .ipa to TestFlight only. Any tag, -rc included.
+#   ios-appstore       → same build to TestFlight AND submitted for App Store
+#                        review (released by hand after approval). Final
+#                        vX.Y.Z tags only; an -rc tag is refused.
+#   android-googleplay → SIGNED .aab to Google Play (internal track)
 #
 # This is NOT a plain iOS/Android project: the app embeds a Go HTTP server
 # compiled with `gomobile`. Codemagic machines ship Xcode, the Android
@@ -26,21 +29,38 @@ definitions:
       name: Derive marketing version from the selected tag
       script: |
         set -e
-        # Start a build in the Codemagic UI and pick a release tag (vX.Y.Z);
-        # CM_TAG carries it here. A leading v (or an old app-v) is stripped so
-        # v0.31.0 → marketing version 0.31.0.
+        # Start a build in the Codemagic UI and pick a release tag; CM_TAG
+        # carries it here. A leading v (or an old app-v) is stripped.
+        #   v0.43.0      → 0.43.0, a release
+        #   v0.43.0-rc1  → 0.43.0, a release candidate (also -rc.1)
+        # Apple and Play want the numbers only, so the -rc part stays out of
+        # the store version; the build number still rises, so the final tag's
+        # build is accepted after the candidates. The app itself shows the
+        # whole tag (APP_VERSION_LABEL).
         VER="${CM_TAG#app-}"
         VER="${VER#v}"
+        PRE=""
         if [ -z "$CM_TAG" ]; then
           VER="0.0.1"   # started on a branch, no tag — debug builds only
+          PRE="dev"
           echo "WARNING: no tag selected; using fallback version $VER"
         else
           case "$VER" in
-            *[!0-9.]*|"") echo "Pick a vX.Y.Z tag (got: $CM_TAG)"; exit 1;;
+            *-rc*) PRE="${VER#*-}"; VER="${VER%%-*}";;
+          esac
+          case "$VER" in
+            *[!0-9.]*|"") echo "Pick a vX.Y.Z or vX.Y.Z-rcN tag (got: $CM_TAG)"; exit 1;;
+          esac
+          case "$PRE" in
+            ""|rc[0-9]*|rc.[0-9]*) ;;
+            *) echo "Only -rcN pre-release tags are supported (got: $CM_TAG)"; exit 1;;
           esac
         fi
+        LABEL="$VER"; [ -n "$PRE" ] && LABEL="$VER-$PRE"
         echo "APP_MARKETING_VERSION=$VER" >> "$CM_ENV"
-        echo "Marketing version: $VER"
+        echo "APP_PRERELEASE=$PRE" >> "$CM_ENV"
+        echo "APP_VERSION_LABEL=$LABEL" >> "$CM_ENV"
+        echo "Marketing version: $VER (in-app: v$LABEL)"
     - &install_go
       name: Install Go + gomobile
       script: |
@@ -58,7 +78,7 @@ definitions:
 
 workflows:
   # ===========================================================================
-  # iOS → TestFlight
+  # iOS → TestFlight (any tag, -rc included)
   # ===========================================================================
   ios-testflight:
     name: iOS · TestFlight
@@ -71,9 +91,9 @@ workflows:
     # Must match the App Store Connect API key's reference name under
     # Codemagic → Teams → Integrations → Developer Portal (exact string).
     # This project uses its own dedicated key — do not reuse other projects'.
-    integrations:
+    integrations: &ios_integrations
       app_store_connect: "CodeMagic API Key"
-    environment:
+    environment: &ios_environment
       # Same group as Android: it also holds TEL_API_ID / TEL_API_HASH,
       # the bundled Telegram app credentials (sealed in by cmd/telseal).
       groups:
@@ -89,14 +109,15 @@ workflows:
         BUNDLE_ID: "com.thefeed.ios"
         XCODE_PROJECT: "ios/Thefeed.xcodeproj"
         XCODE_SCHEME: "Thefeed"
-    cache:
+    cache: &go_cache
       cache_paths:
         - $HOME/go/pkg/mod
         - $HOME/Library/Caches/go-build
     scripts:
       - *derive_version
       - *install_go
-      - name: Build Mobile.xcframework (gomobile)
+      - &ios_bind
+        name: Build Mobile.xcframework (gomobile)
         script: |
           set -e
           export PATH="/usr/local/go/bin:$HOME/go/bin:$PATH"
@@ -106,12 +127,14 @@ workflows:
           COMMIT=$(git rev-parse --short HEAD)
           DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
           TEL_LDFLAG=$(GOOS=$(go env GOHOSTOS) GOARCH=$(go env GOHOSTARCH) go run ./cmd/telseal)
-          LDFLAGS="-X github.com/sartoopjj/thefeed/internal/version.Version=v${APP_MARKETING_VERSION} -X github.com/sartoopjj/thefeed/internal/version.Commit=${COMMIT} -X github.com/sartoopjj/thefeed/internal/version.Date=${DATE} ${TEL_LDFLAG}"
+          LDFLAGS="-X github.com/sartoopjj/thefeed/internal/version.Version=v${APP_VERSION_LABEL} -X github.com/sartoopjj/thefeed/internal/version.Commit=${COMMIT} -X github.com/sartoopjj/thefeed/internal/version.Date=${DATE} ${TEL_LDFLAG}"
           # Device slice only; see the same step in .github/workflows/build.yml.
           gomobile bind -iosversion=15.0 -target=ios/arm64 -ldflags="${LDFLAGS}" -o ios/Mobile.xcframework ./mobile
-      - name: Set up provisioning profiles
+      - &ios_profiles
+        name: Set up provisioning profiles
         script: xcode-project use-profiles
-      - name: Build signed IPA
+      - &ios_ipa
+        name: Build signed IPA
         script: |
           set -e
           # CFBundleVersion must strictly increase per TestFlight upload for a
@@ -122,20 +145,57 @@ workflows:
             --project "$XCODE_PROJECT" \
             --scheme "$XCODE_SCHEME" \
             --archive-xcargs "CODE_SIGNING_ALLOWED=YES CODE_SIGNING_REQUIRED=YES MARKETING_VERSION=${APP_MARKETING_VERSION} CURRENT_PROJECT_VERSION=${BUILD_NUMBER}"
-    artifacts:
+    artifacts: &ios_artifacts
       - build/ios/ipa/*.ipa
       - /tmp/xcodebuild_logs/*.log
       - $HOME/Library/Developer/Xcode/DerivedData/**/Build/**/*.dSYM
     publishing:
       app_store_connect:
         auth: integration
-        # Uploads the build to TestFlight. Leave submit_to_app_store off until
-        # you are ready for a public App Store release.
+        # TestFlight only. App Store releases go through ios-appstore below.
         submit_to_testflight: true
         # Optional: auto-add the build to internal tester groups you created
         # in App Store Connect (must already exist). Uncomment + edit:
         # beta_groups:
         #   - Internal Testers
+
+  # ===========================================================================
+  # iOS → TestFlight + App Store review (final vX.Y.Z tags only)
+  # ===========================================================================
+  # The same build as ios-testflight, also submitted for review. Released by
+  # hand: after Apple approves, press "Release" in App Store Connect. The App
+  # Store page (texts, screenshots, privacy, age rating, review notes) is what
+  # App Store Connect already holds -- fill it there before the first run.
+  ios-appstore:
+    name: iOS · App Store
+    max_build_duration: 90
+    instance_type: mac_mini_m2
+    integrations: *ios_integrations
+    environment: *ios_environment
+    cache: *go_cache
+    scripts:
+      - *derive_version
+      - name: Refuse release candidates
+        script: |
+          # A candidate goes to TestFlight (ios-testflight), never to review.
+          if [ -n "$APP_PRERELEASE" ]; then
+            echo "App Store builds need a final vX.Y.Z tag (got: $CM_TAG). Use ios-testflight for -rc tags."
+            exit 1
+          fi
+      - *install_go
+      - *ios_bind
+      - *ios_profiles
+      - *ios_ipa
+    artifacts: *ios_artifacts
+    publishing:
+      app_store_connect:
+        auth: integration
+        submit_to_testflight: true
+        submit_to_app_store: true
+        # Released by hand once approved (Apple's "Manually release").
+        release_type: MANUAL
+        # A newer build replaces one still waiting for review.
+        cancel_previous_submissions: true
 
   # ===========================================================================
   # Android → Google Play (internal track)
@@ -178,7 +238,7 @@ workflows:
           # -s -w strips symbols (~12 MB/ABI); max-page-size=16384 keeps the
           # .so loadable on Android 15+ 16 KB-page devices.
           TEL_LDFLAG=$(GOOS=$(go env GOHOSTOS) GOARCH=$(go env GOHOSTARCH) go run ./cmd/telseal)
-          LDFLAGS="-s -w -X github.com/sartoopjj/thefeed/internal/version.Version=v${APP_MARKETING_VERSION} -X github.com/sartoopjj/thefeed/internal/version.Commit=${COMMIT} -X github.com/sartoopjj/thefeed/internal/version.Date=${DATE} -extldflags=-Wl,-z,max-page-size=16384 ${TEL_LDFLAG}"
+          LDFLAGS="-s -w -X github.com/sartoopjj/thefeed/internal/version.Version=v${APP_VERSION_LABEL} -X github.com/sartoopjj/thefeed/internal/version.Commit=${COMMIT} -X github.com/sartoopjj/thefeed/internal/version.Date=${DATE} -extldflags=-Wl,-z,max-page-size=16384 ${TEL_LDFLAG}"
           mkdir -p android/app/libs
           bash scripts/gomobile-android-aar.sh android/app/libs/mobile.aar "${LDFLAGS}"
       - name: Wire signing keystore
