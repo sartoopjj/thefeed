@@ -80,7 +80,21 @@ type telCacheData struct {
 	// Directs maps a channel to its direct-messages conversation, so finding
 	// it costs one call per channel, ever.
 	Directs map[string]tgbridge.Peer `json:"directs,omitempty"`
+	// Members are channel member counts read on demand (the entity often
+	// comes without one), by conversation key. Each holds for a day.
+	Members map[string]telMemberCount `json:"members,omitempty"`
 }
+
+// telMemberCount is one read of a channel's member count; N 0 is a channel
+// that hides it, which is an answer too.
+type telMemberCount struct {
+	N  int   `json:"n"`
+	At int64 `json:"at"`
+}
+
+// telMembersFor is how long a read member count is served before it is read
+// again: one call per channel per day, and only when the chat is opened.
+const telMembersFor = 24 * time.Hour
 
 type telCache struct {
 	mu   sync.Mutex
@@ -235,7 +249,11 @@ func (c *telCache) MergeDialogs(ds []tgbridge.Dialog) int {
 	for _, d := range ds {
 		if i, ok := have[telCacheKey(d.Peer)]; ok {
 			// Already listed: take the fresher row, since this page read it
-			// from Telegram just now.
+			// from Telegram just now. Its entity may lack the member count
+			// the old one had; not knowing is not a change.
+			if d.Peer.Members == 0 {
+				d.Peer.Members = c.data.Dialogs[i].Peer.Members
+			}
 			c.data.Dialogs[i] = d
 			continue
 		}
@@ -704,6 +722,10 @@ func (c *telCache) bumpRow(p tgbridge.Peer, last tgbridge.Message, unread int) {
 	// channel, new rights), so it replaces it. Muted is NOT in the peer and
 	// is carried over: a difference says nothing about notification settings,
 	// and losing the flag here would make a muted channel start ringing.
+	// The member count likewise: a difference's entity often lacks it.
+	if p.Members == 0 {
+		p.Members = row.Peer.Members
+	}
 	row.Peer = p
 	if last.ID > 0 {
 		row.TopMsg, row.When = last.ID, last.Date
@@ -897,6 +919,46 @@ func (c *telCache) ReplaceBlocked(rows []tgbridge.BlockedPeer, complete bool, ed
 	c.mu.Unlock()
 	c.save()
 	return true
+}
+
+// Members is a conversation's member count, and whether it is known: one
+// Telegram sent with the list row, else one read within the last day.
+func (c *telCache) Members(key string, now time.Time) (int, bool) {
+	if c == nil {
+		return 0, false
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for _, d := range c.data.Dialogs {
+		if telCacheKey(d.Peer) == key && d.Peer.Members > 0 {
+			return d.Peer.Members, true
+		}
+	}
+	m, ok := c.data.Members[key]
+	if !ok || now.Sub(time.Unix(m.At, 0)) >= telMembersFor {
+		return 0, false
+	}
+	return m.N, true
+}
+
+// SetMembers records a count read from Telegram at now.
+func (c *telCache) SetMembers(key string, n int, now time.Time) {
+	if c == nil {
+		return
+	}
+	c.mu.Lock()
+	if c.data.Members == nil {
+		c.data.Members = map[string]telMemberCount{}
+	}
+	// Expired reads go: they are read again on the next open anyway.
+	for k, m := range c.data.Members {
+		if now.Sub(time.Unix(m.At, 0)) >= telMembersFor {
+			delete(c.data.Members, k)
+		}
+	}
+	c.data.Members[key] = telMemberCount{N: n, At: now.Unix()}
+	c.mu.Unlock()
+	c.save()
 }
 
 // Forget drops everything. Used when the account signs out: the next account

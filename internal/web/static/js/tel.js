@@ -17,6 +17,9 @@ var telState = {
   // The account's blocklist as the backend last learnt it, by user id:
   // {peer, date, deleted} rows.
   blocked: {},
+  // Member counts read on demand, by conversation key (0: hidden by the
+  // channel). A count that came with the list row is on the peer itself.
+  members: {},
   cursor: null,          // {date,id,peer} — where the next page continues
   more: false,           // another page exists
   total: 0,              // rows Telegram says exist, when it says
@@ -769,6 +772,7 @@ window.telRecheck = telRecheck;
 function telResetData() {
   telState.dialogs = [];
   telState.blocked = {};
+  telState.members = {};
   telState.threads = {};
   telState.cursor = null;
   telState.more = false;
@@ -1285,17 +1289,22 @@ async function telPrimeThreadFromCache(key, peer) {
 }
 window.telPrimeThreadFromCache = telPrimeThreadFromCache;
 
-// telLoadDialogs fetches the first page and replaces the list.
+// telLoadDialogs fetches the first page and merges it into the list.
 //
 // force=true means the user asked Telegram, so the backend must not answer
 // from its cache: that is the only way a conversation started on another
 // device shows up here.
+//
+// Merged, never replaced: a live answer is the newest page only, and
+// replacing with it dropped every older row from the screen -- the quiet
+// private chats first, since active channels and bots fill that page. A new
+// account starts from an empty list anyway (telResetData).
 async function telLoadDialogs(force) {
   await telOp('tel_loading_chats', async function () {
     var r = await telCall('/api/tel/dialogs?limit=' + TEL_DIALOG_PAGE +
       (force ? '&refresh=1' : ''));
     if (!r) return;
-    telApplyPage(r.page, true);
+    telApplyPage(r.page, false);
     telState.loadedOnce = true;
     // ONE page, and that is all: the rest is the user's to ask for, one page
     // per press of "load more chats".
@@ -1330,9 +1339,11 @@ async function telLoadMoreDialogs(background) {
     '&offsetDate=' + encodeURIComponent(c.date || 0) +
     '&offsetId=' + encodeURIComponent(c.id || 0);
   // Telegram pages from this peer, and cannot address it without its hash.
+  // Its own fields: offsetId is the message, not the peer.
   if (c.peer && c.peer.id) {
-    q += '&offsetKind=' + encodeURIComponent(c.peer.kind) +
-      '&offsetAccessHash=' + encodeURIComponent(c.peer.accessHash || 0);
+    q += '&offsetPeerKind=' + encodeURIComponent(c.peer.kind) +
+      '&offsetPeerId=' + encodeURIComponent(c.peer.id) +
+      '&offsetPeerAccessHash=' + encodeURIComponent(c.peer.accessHash || 0);
   }
   var ran = false;
   var added = 0;
@@ -1573,6 +1584,7 @@ async function telOpenPeer(key) {
   var unreadAt = d ? (d.unread || 0) : 0;
   if (unreadAt > 0) telSepPin(key, d.readInbox || 0);
   var th = telEnterThread(key, peer);
+  telLoadMembers();
   telScheduleNext();
   // Show what we already have before asking for more. A page of history costs
   // about half a minute over DNS, and spending it in front of a blank pane is
@@ -1598,6 +1610,8 @@ async function telOpenPeer(key) {
   // Counters last, and only for a conversation still open: the messages
   // matter more than the numbers on them, so they get the link first.
   if (telPeerKey(telState.peer) === key) await telRefreshStats(key, peer);
+  // The member count, where it is missing: one more step, once a day.
+  if (telPeerKey(telState.peer) === key) await telFetchMembers(key, peer);
   telStepsDone();
   // Last chance: on a cold open the history fetch above is what brought the
   // messages, so neither attempt earlier had anything to count back through.
@@ -2104,7 +2118,7 @@ function telTick() {
   telAutoResume();
   telState.ticks = (telState.ticks || 0) + 1;
   // In flight: only the query counter is worth refreshing, every other tick.
-  if (telState.busy || telState.bg || (telState.info && telState.info.connecting)) {
+  if (telState.busy || telState.bg || telState.adBusy || (telState.info && telState.info.connecting)) {
     if (telState.ticks % 2 === 0) {
       telFetch('/api/tel/info').then(function (info) {
         var before = telScreenKey(telState.info);
@@ -2388,11 +2402,8 @@ function telRenderTopbar() {
   html += '<div class="tel-topbar-title"><span class="tel-title" dir="auto">' +
     telEsc(telT('tel_title')) + '</span>' +
     '<span class="tel-badge">' + telEsc(telT('tel_badge')) + '</span></div>';
-  if (telReady()) html += telSearchBtnHTML('list') + telCountdownHTML();
-  html += '<button class="tel-icon-btn tel-refresh-btn' + ((telState.busy || telState.bg) ? ' spinning' : '') + '"' +
-    (telState.busy ? ' disabled' : '') + ' title="' + telAttrQ(telT('tel_refresh')) +
-    '" aria-label="' + telAttrQ(telT('tel_refresh')) + '"' + TEL_KEEP_FOCUS + ' onclick="telRefreshNow(\'list\')">' +
-    icon('refresh') + '</button>';
+  if (telReady()) html += telSearchBtnHTML('list');
+  html += telRefreshBtnHTML('list');
   // ALWAYS present, never conditional. The re-check lives inside the sheet it
   // opens, so hiding the shield when nothing looks usable removes the one
   // control that could make something usable again. Red says "nothing is
@@ -2491,24 +2502,25 @@ async function telSwitchServer(key) {
   telRender();
 }
 
-// telCountdownHTML is the ring counting down to the next automatic check.
-function telCountdownHTML() {
-  return '<button class="tel-icon-btn tel-timer-btn" onclick="telToastNextPoll()" aria-label="' +
-    telAttrQ(telT('tel_next_check').replace('{n}', '')) + '">' +
+// telRefreshBtnHTML is the countdown to the next automatic check, and the
+// button that does it now: one control, not two. While a fetch runs, the ring
+// gives way to the turning arrow (CSS). what is 'list' or 'thread'.
+function telRefreshBtnHTML(what) {
+  var spin = telState.busy || telState.bg;
+  return '<button class="tel-icon-btn tel-refresh-btn tel-timer-btn' + (spin ? ' spinning' : '') + '"' +
+    (telState.busy ? ' disabled' : '') + ' title="' + telAttrQ(telT('tel_refresh')) +
+    '" aria-label="' + telAttrQ(telT('tel_refresh')) + '"' + TEL_KEEP_FOCUS +
+    ' onclick="telRefreshNow(\'' + what + '\')">' + icon('refresh') +
     '<span class="tel-timer-ring"><span class="tel-timer-num"></span></span></button>';
 }
-
-function telToastNextPoll() { showToast(telState._nextText || ''); }
-window.telToastNextPoll = telToastNextPoll;
 
 function telPaintCountdown() {
   var secs = Math.max(0, Math.ceil((telState.nextAt - Date.now()) / 1000));
   var text = telT('tel_next_check').replace('{n}', secs);
-  telState._nextText = text;
   var total = telPollInterval() / 1000;
   var deg = Math.round(Math.max(0, Math.min(1, secs / total)) * 360);
   document.querySelectorAll('.tel-timer-btn').forEach(function (btn) {
-    btn.title = text;
+    btn.title = telT('tel_refresh') + ' — ' + text;
     var ring = btn.querySelector('.tel-timer-ring');
     if (ring) ring.style.background = 'conic-gradient(var(--accent) ' + deg + 'deg, var(--border) ' + deg + 'deg)';
     var num = btn.querySelector('.tel-timer-num');
@@ -2591,11 +2603,14 @@ function telPaintProgress() {
   var info = telState.info || {};
   // Connecting counts: it runs on the backend, with no call in flight here.
   var connecting = !!info.connecting;
-  var running = telState.busy || telState.bg || connecting;
+  // An ad fetch too: it is outside telOp so it never holds anyone up, but it
+  // spends queries like any other round trip and must say so.
+  var running = telState.busy || telState.bg || connecting || !!telState.adBusy;
   var label = '';
   if (telState.busy) label = telT(telState.busyLabel || 'tel_working');
   else if (telState.bg) label = telT(telState.bgLabel || 'tel_checking_new');
   else if (connecting) label = telPhaseLabel(info.phase);
+  else if (telState.adBusy) label = telT('tel_loading_ad');
   // Which conversation this is for. Switching channels mid-fetch is otherwise
   // invisible: every step reads the same, so there is no way to tell that the
   // tap landed and the old fetch was dropped.
@@ -2861,6 +2876,69 @@ function telRenderLogin() {
     telEsc(telT('tel_edit_phone')) + '</button>' +
     '<div class="tel-hint" dir="auto">' + telEsc(telT('tel_code_hint')) + '</div></div>';
   return html;
+}
+
+// telThreadSub is the line under the open chat's name, as HTML: how many are
+// in it -- or, with no count, what it is -- then the @username. One line cut
+// with an ellipsis, so the end is what a phone loses: the count goes first.
+// Each part is isolated so a Latin @id cannot reorder a Persian line.
+function telThreadSub(peer) {
+  if (peer.direct) return '<bdi>' + telEsc(telT('tel_direct_sub')) + '</bdi>';
+  var n = telMembersLine(peer);
+  var parts = ['<bdi>' + telEsc(n || telT('tel_kind_' + peer.kind)) + '</bdi>'];
+  if (peer.username) parts.push('<bdi dir="ltr">@' + telEsc(peer.username) + '</bdi>');
+  return parts.join(' · ');
+}
+
+// telUIDir is the interface's direction. The header line is in the UI's
+// language; dir="auto" would take it from the @id's first letter instead.
+function telUIDir() {
+  return document.documentElement.dir === 'rtl' ? 'rtl' : 'ltr';
+}
+
+// telMembersLine is "12.3K subscribers" / "42 members", or '' when not known
+// (or hidden). People and bots have none.
+function telMembersLine(peer) {
+  if (!peer || peer.direct || (peer.kind !== 'channel' && peer.kind !== 'group' && peer.kind !== 'forum')) return '';
+  var n = peer.members || telState.members[telPeerKey(peer)] || 0;
+  if (!n) return '';
+  var sub = peer.kind === 'channel';
+  if (n === 1) return telT(sub ? 'tel_subscribers_one' : 'tel_members_one');
+  return telT(sub ? 'tel_subscribers_n' : 'tel_members_n').replace('{n}', telFmtCount(n));
+}
+
+// telLoadMembers reads the open chat's member count from the backend's cache.
+// Never the link: telFetchMembers is the step that asks Telegram.
+async function telLoadMembers() {
+  var peer = telState.peer;
+  if (!peer || peer.direct || (peer.kind !== 'channel' && peer.kind !== 'group' && peer.kind !== 'forum')) return;
+  var key = telPeerKey(peer);
+  try {
+    var r = await telFetch('/api/tel/members?kind=' + encodeURIComponent(peer.kind) +
+      '&id=' + encodeURIComponent(peer.id) + '&accessHash=' + encodeURIComponent(peer.accessHash || 0));
+    if (!r || !r.ok || !r.known || telState.members[key] === r.members) return;
+    telState.members[key] = r.members;
+    if (telPeerKey(telState.peer) === key) telRender();
+  } catch (e) { }
+}
+window.telLoadMembers = telLoadMembers;
+
+// telFetchMembers asks Telegram for a channel's member count when neither the
+// list row nor the day's cache has one: one round trip, drawn as a step of
+// opening the chat. Basic groups always come with theirs; people, bots and
+// direct messages have none.
+async function telFetchMembers(key, peer) {
+  if (!peer || peer.direct || (peer.kind !== 'channel' && peer.kind !== 'group' && peer.kind !== 'forum')) return;
+  if (peer.kind === 'group' && (!peer.accessHash || String(peer.accessHash) === '0')) return;
+  await telLoadMembers();
+  if (peer.members || telState.members[key] !== undefined) return;
+  telStepsMore(telState.stepNo + 1);
+  var r = await telBgOp('tel_loading_members', function () {
+    return telCallQuiet('/api/tel/members', { peer: peer });
+  });
+  if (!r || !r.ok || !r.known) return;
+  telState.members[key] = r.members;
+  if (telPeerKey(telState.peer) === key) telRender();
 }
 
 // ----- the conversation list -----
@@ -3599,13 +3677,10 @@ function telRenderPane() {
     '<div class="tel-topbar-title">' + telAvatar(peer.title, 34, peer.thumb) +
     '<span class="tel-thread-meta"><span class="tel-title" dir="auto">' +
     telFlag(telEsc(peer.title || peer.username || '')) + '</span>' +
-    '<span class="tel-thread-sub" dir="auto">' + telEsc(telT(peer.direct ? 'tel_direct_sub' : 'tel_kind_' + peer.kind)) +
-    (peer.username ? ' · @' + telEsc(peer.username) : '') + '</span></span></div>' +
-    telSearchBtnHTML('thread') + telCountdownHTML() +
-    '<button class="tel-icon-btn' + ((telState.busy || telState.bg) ? ' spinning' : '') + '"' +
-    (telState.busy ? ' disabled' : '') + ' title="' + telAttrQ(telT('tel_refresh')) +
-    '" aria-label="' + telAttrQ(telT('tel_refresh')) + '"' + TEL_KEEP_FOCUS + ' onclick="telRefreshNow(\'thread\')">' +
-    icon('refresh') + '</button>' +
+    '<span class="tel-thread-sub" dir="' + telUIDir() + '">' + telThreadSub(peer) + '</span></span></div>' +
+    // Search is in ⋮, and the countdown is the refresh button: on a phone
+    // the line under the name needs the room.
+    telRefreshBtnHTML('thread') +
     '<button class="tel-icon-btn" title="' + telAttrQ(telT('tel_menu')) +
     '" aria-label="' + telAttrQ(telT('tel_menu')) + '" onclick="telThreadMenu()">' +
     icon('more') + '</button></div>';
@@ -4079,6 +4154,8 @@ function telAdAbort() {
   if (telAdCtl) {
     try { telAdCtl.abort(); } catch (e) { }
     telAdCtl = null;
+    telState.adBusy = false;
+    telPaintProgress();
   }
 }
 
@@ -4087,11 +4164,18 @@ async function telLoadAds(key, peer) {
   telAdAbort();
   var ctl = new AbortController();
   telAdCtl = ctl;
+  // Drawn on the strip like any round trip; telAdAbort takes it down.
+  telState.adBusy = true;
+  telPaintProgress();
   var r = null;
   try {
     r = await telFetch('/api/tel/sponsored', Object.assign(telPost({ peer: peer }), { signal: ctl.signal }));
   } catch (e) { r = null; }
-  if (telAdCtl === ctl) telAdCtl = null;
+  if (telAdCtl === ctl) {
+    telAdCtl = null;
+    telState.adBusy = false;
+    telPaintProgress();
+  }
   if (!r || !r.ok || telPeerKey(telState.peer) !== key) return;
   telThread(key).ads = r.ads || [];
   telRender();
@@ -4377,6 +4461,9 @@ function telThreadMenu() {
   if (!peer) return;
   var key = telPeerKey(peer);
   var items = telSheetItem('refresh', telT('tel_refresh'), 'telCloseSheet();telThreadFetchNew()');
+  // Search lives here rather than in the header, which a phone needs for the
+  // name and the line under it.
+  items += telSheetItem('magnifier', telT('tel_search'), 'telCloseSheet();telToggleSearch(\'thread\')');
   items += telSheetItem('clock', telT('tel_load_older'), 'telCloseSheet();telThreadFetchOlder()');
   // Mute belongs here as much as in the list: Telegram puts it in the open
   // conversation's own menu, which is where someone reading a noisy channel

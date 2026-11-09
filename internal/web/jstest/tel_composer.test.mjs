@@ -54,8 +54,9 @@ ok('Messenger: the same',
   /var CHAT_KEEP_FOCUS = ' onmousedown="event\.preventDefault\(\)"';/.test(chatSrc));
 for (const [where, text, btn] of [
   ['Tel send', src, /class="tel-send-btn"' \+ TEL_KEEP_FOCUS \+ ' onclick="telSend\(\)"/],
-  ['Tel list refresh', src, /TEL_KEEP_FOCUS \+ ' onclick="telRefreshNow\(\\'list\\'\)"/],
-  ['Tel thread refresh', src, /TEL_KEEP_FOCUS \+ ' onclick="telRefreshNow\(\\'thread\\'\)"/],
+  // Both headers draw the one refresh button (the countdown) through
+  // telRefreshBtnHTML; tel_header_buttons checks each header calls it.
+  ['Tel refresh (list and thread)', src, /TEL_KEEP_FOCUS \+\s*' onclick="telRefreshNow\(\\'' \+ what \+ '\\'\)"/],
   ['Messenger send', chatSrc, /id="chatSendBtn"' \+ CHAT_KEEP_FOCUS \+ ' onclick="sendChatMessage\(\)"/],
   ['Messenger list refresh', chatSrc, /CHAT_KEEP_FOCUS \+ ' onclick="chatPollNow\(\)"/],
   ['Messenger thread refresh', chatSrc, /CHAT_KEEP_FOCUS \+ ' onclick="chatThreadRefresh\(\)"/],

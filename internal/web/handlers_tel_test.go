@@ -123,11 +123,11 @@ func TestTelPeerFromQuery(t *testing.T) {
 // Dialog paging carries its cursor as a SECOND peer in the same query, so the
 // prefixed form must read those fields and not the request's own peer.
 func TestTelPeerFromQueryPrefixed(t *testing.T) {
-	q, err := url.ParseQuery("kind=user&id=7&offsetKind=channel&offsetId=11&offsetAccessHash=13")
+	q, err := url.ParseQuery("kind=user&id=7&offsetPeerKind=channel&offsetPeerId=11&offsetPeerAccessHash=13")
 	if err != nil {
 		t.Fatal(err)
 	}
-	peer, ok := telPeerFromQuery(q, "offset")
+	peer, ok := telPeerFromQuery(q, "offsetPeer")
 	if !ok {
 		t.Fatal("prefixed peer not read")
 	}
@@ -136,7 +136,7 @@ func TestTelPeerFromQueryPrefixed(t *testing.T) {
 	}
 	// Absent cursor must report "no peer", not the request's own peer.
 	q2, _ := url.ParseQuery("kind=user&id=7")
-	if p, ok := telPeerFromQuery(q2, "offset"); ok {
+	if p, ok := telPeerFromQuery(q2, "offsetPeer"); ok {
 		t.Fatalf("missing cursor reported a peer: %+v", p)
 	}
 }
@@ -784,5 +784,26 @@ func TestTelMuteAcceptsWhatThePageSends(t *testing.T) {
 	})
 	if code := send(string(wrapped)); code != http.StatusBadRequest {
 		t.Fatalf("a body without a peer must be refused, got %d", code)
+	}
+}
+
+// A load-more query carries the cursor's message id and the conversation it
+// belongs to as two separate fields. Reading the message id as the peer's id
+// asked Telegram to page from a conversation that does not exist.
+func TestTelDialogFilterKeepsCursorPeerApart(t *testing.T) {
+	q, err := url.ParseQuery("limit=40&offsetDate=1961&offsetId=4991&offsetPeerKind=bot&offsetPeerId=2009&offsetPeerAccessHash=77")
+	if err != nil {
+		t.Fatal(err)
+	}
+	f := telDialogFilter(q)
+	if f.Limit != 40 || f.OffsetDate != 1961 || f.OffsetID != 4991 {
+		t.Fatalf("cursor position wrong: %+v", f)
+	}
+	if f.OffsetPeer.Kind != tgbridge.PeerBot || f.OffsetPeer.ID != 2009 || f.OffsetPeer.AccessHash != 77 {
+		t.Fatalf("cursor peer wrong: %+v", f.OffsetPeer)
+	}
+	// A first page has no cursor peer, whatever else is in the query.
+	if f := telDialogFilter(url.Values{"limit": {"40"}, "offsetId": {"4991"}}); f.OffsetPeer.ID != 0 {
+		t.Fatalf("a message id became a peer: %+v", f.OffsetPeer)
 	}
 }

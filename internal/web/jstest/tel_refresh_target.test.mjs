@@ -63,15 +63,15 @@ eq('and the list when there is not', await run(undefined, null), ['list']);
 
 // --- and the buttons actually name their target ---------------------------
 
-// The onclick is written inside a JS string, so its quotes are escaped in the
-// source: telRefreshNow(\'list\').
-const arg = /onclick="telRefreshNow\((?:\\'(\w+)\\')?\)/;
-// The sidebar's button is the one with .tel-refresh-btn.
-const sidebarBtn = src.match(new RegExp('tel-refresh-btn[\\s\\S]{0,400}?' + arg.source));
-eq('the sidebar button asks for the list', sidebarBtn && sidebarBtn[1], 'list');
-// The thread topbar's sits next to telThreadMenu.
-const threadBtn = src.match(new RegExp(arg.source + '[\\s\\S]{0,300}?telThreadMenu'));
-eq('the thread button asks for the thread', threadBtn && threadBtn[1], 'thread');
+// Both headers draw the one refresh button (the countdown) through
+// telRefreshBtnHTML, which writes the target into its onclick.
+const btnFn = src.match(/function telRefreshBtnHTML\([\s\S]*?\n}/)[0];
+eq('the button names the target it was given',
+  /onclick="telRefreshNow\(\\'' \+ what \+ '\\'\)"/.test(btnFn), true);
+const topFn = src.match(/function telRenderTopbar\([\s\S]*?\n}/)[0];
+eq('the sidebar button asks for the list', /telRefreshBtnHTML\('list'\)/.test(topFn), true);
+const paneFn = src.match(/function telRenderPane\([\s\S]*?\n}/)[0];
+eq('the thread button asks for the thread', /telRefreshBtnHTML\('thread'\)/.test(paneFn), true);
 
 console.log(`${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

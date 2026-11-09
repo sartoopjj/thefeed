@@ -60,9 +60,14 @@ html.tel-section #telPane {
 }
 
 /* Desktop two-pane shows the list AND the conversation, each with a countdown.
-   Keep only the conversation's so it isn't on screen twice. */
-html.tel-thread #telSidebar .tel-timer-btn {
+   Keep only the conversation's so it isn't on screen twice: the list's button
+   stays (it refreshes the list), as a plain arrow. */
+html.tel-thread #telSidebar .tel-timer-btn .tel-timer-ring {
   display: none;
+}
+
+html.tel-thread #telSidebar .tel-timer-btn .icon {
+  display: inline-flex;
 }
 
 /* ---- topbar ----------------------------------------------------------- */
@@ -321,7 +326,16 @@ html.tel-thread #telSidebar .tel-timer-btn {
 }
 
 /* Next-automatic-check ring: a depleting dial with the seconds inside, so an
-   automatic fetch over a scarce link is never a surprise. */
+   automatic fetch over a scarce link is never a surprise. It is also the
+   refresh button: the ring while idle, the turning arrow while a fetch runs. */
+.tel-timer-btn .icon {
+  display: none;
+}
+
+.tel-timer-btn.spinning .tel-timer-ring {
+  display: none;
+}
+
 .tel-timer-ring {
   width: 26px;
   height: 26px;

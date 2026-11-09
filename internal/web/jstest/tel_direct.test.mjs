@@ -104,7 +104,16 @@ function harness(answer) {
 const pane = fn('telRenderPane');
 eq('the bar replaces the composer where we cannot write', /if \(peer\.readOnly\) \{\s*return html \+ telReadOnlyBarHTML\(peer\);/.test(pane), true);
 eq('no button up in the header any more', /onclick="telOpenDirect\(\)"/.test(pane), false);
-eq('the conversation says what it is', /peer\.direct \? 'tel_direct_sub'/.test(pane), true);
+// The header's sub-line says what it is, and a direct-messages conversation
+// carries no member count (it has none).
+eq('the header draws its sub-line', /telThreadSub\(peer\)/.test(pane), true);
+{
+  const sub = new Function('telState', 'telT', 'telFmtCount', 'telPeerKey', 'telEsc',
+    fn('telMembersLine') + '\n' + fn('telThreadSub') + '\nreturn telThreadSub;')(
+    { members: {} }, (k) => '[' + k + ']', String, (p) => p.kind + ':' + p.id, String);
+  eq('the conversation says what it is',
+    sub({ kind: 'group', id: 3, direct: true, members: 50 }).replace(/<[^>]*>/g, ''), '[tel_direct_sub]');
+}
 eq('and so does its row', /d\.peer\.direct \? ' · ' \+ telEsc\(telT\('tel_direct_short'\)\)/.test(src), true);
 for (const k of ['tel_direct', 'tel_direct_opening', 'tel_direct_sub', 'tel_direct_short', 'tel_direct_paid', 'tel_err_paid', 'tel_err_no_direct']) {
   eq(k + ' in fa and en', (i18n.match(new RegExp('\\b' + k + ':', 'g')) || []).length, 2);

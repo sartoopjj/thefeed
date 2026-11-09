@@ -471,3 +471,20 @@ func TestJSTelButtons(t *testing.T) {
 	}
 	t.Logf("%s", out)
 }
+
+// "Reload chats" merges its page into the list instead of shrinking the list
+// to it, "load more chats" names the conversation it continues from, the
+// open chat shows its member count, and every round trip draws the strip.
+func TestJSTelegramDialogListKeepsRows(t *testing.T) {
+	node, err := exec.LookPath("node")
+	if err != nil {
+		t.Skip("node not installed")
+	}
+	for _, f := range []string{"jstest/tel_reload_keeps_rows.test.mjs", "jstest/tel_more_cursor.test.mjs", "jstest/tel_members.test.mjs", "jstest/tel_quiet_progress.test.mjs", "jstest/tel_header_buttons.test.mjs"} {
+		out, err := exec.Command(node, f).CombinedOutput()
+		if err != nil {
+			t.Fatalf("%s failed:\n%s", f, out)
+		}
+		t.Logf("%s: %s", f, out)
+	}
+}

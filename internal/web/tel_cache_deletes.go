@@ -52,6 +52,17 @@ func (c *telCache) channelThreadLocked(key string, channelID int64) bool {
 	return false
 }
 
+// PeerFor is the cached peer for a conversation key, from its row or the
+// direct-messages index.
+func (c *telCache) PeerFor(key string) (tgbridge.Peer, bool) {
+	if c == nil {
+		return tgbridge.Peer{}, false
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.peerLocked(key)
+}
+
 // peerLocked finds a conversation by key: a row, or a channel's direct
 // messages, which have no row until they get one from Telegram.
 func (c *telCache) peerLocked(key string) (tgbridge.Peer, bool) {

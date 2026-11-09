@@ -36,13 +36,13 @@ eq('the ad fetch never takes the link through telOp/telBgOp',
 
 // --- fetching -----------------------------------------------------------------
 const mkLoad = (state, calls, answer) => new Function(
-  'telState', 'telThread', 'telPeerKey', 'telRender', 'telAdCheckView', 'telFetch', 'telPost',
+  'telState', 'telThread', 'telPeerKey', 'telRender', 'telAdCheckView', 'telFetch', 'telPost', 'telPaintProgress',
   'var telAdCtl = null;' + fn('telAdAbort') + fn('telLoadAds') +
   '; return { load: telLoadAds, abort: telAdAbort };',
 )(state, (k) => (state.threads[k] = state.threads[k] || {}), (p) => p ? p.kind + ':' + p.id : '',
   () => { state.renders++; }, () => {},
   (url, opts) => { calls.push({ url, body: JSON.parse(opts.body), signal: opts.signal }); return answer(opts.signal); },
-  (b) => ({ method: 'POST', body: JSON.stringify(b) }));
+  (b) => ({ method: 'POST', body: JSON.stringify(b) }), () => {});
 
 {
   const chan = { kind: 'channel', id: 5 };

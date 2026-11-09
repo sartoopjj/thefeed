@@ -54,6 +54,9 @@ type Peer struct {
 	// Protected is Telegram's content protection: nothing here may be copied
 	// or forwarded.
 	Protected bool `json:"protected,omitempty"`
+	// Members is the group's or channel's member count when Telegram sent
+	// one with the entity; 0 means not known.
+	Members int `json:"members,omitempty"`
 }
 
 // Dialog is one row in the chat list.
@@ -415,7 +418,8 @@ func peerFromChat(c *tg.Chat) Peer {
 	if b, ok := c.GetDefaultBannedRights(); ok && b.SendMessages && !c.Creator {
 		readOnly = true
 	}
-	return Peer{Kind: PeerGroup, ID: c.ID, Title: c.Title, ReadOnly: readOnly, Thumb: chatThumb(c.Photo), Protected: c.Noforwards}
+	return Peer{Kind: PeerGroup, ID: c.ID, Title: c.Title, ReadOnly: readOnly, Thumb: chatThumb(c.Photo),
+		Protected: c.Noforwards, Members: c.ParticipantsCount}
 }
 
 // peerFromChannel maps a channel, supergroup or forum, which Telegram models
@@ -433,6 +437,7 @@ func peerFromChannel(c *tg.Channel) Peer {
 		Title: c.Title, Username: c.Username, ReadOnly: channelReadOnly(c),
 		Thumb: chatThumb(c.Photo), Protected: c.Noforwards,
 	}
+	p.Members, _ = c.GetParticipantsCount()
 	if c.BroadcastMessagesAllowed {
 		p.DirectID, _ = c.GetLinkedMonoforumID()
 	}

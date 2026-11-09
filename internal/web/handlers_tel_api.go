@@ -575,14 +575,7 @@ func (s *Server) handleTelDialogs(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 
 	q := r.URL.Query()
-	filter := tgbridge.DialogFilter{
-		Limit:      telAtoi(q.Get("limit"), 40),
-		OffsetDate: telAtoi(q.Get("offsetDate"), 0),
-		OffsetID:   telAtoi(q.Get("offsetId"), 0),
-	}
-	if p, ok := telPeerFromQuery(q, "offset"); ok {
-		filter.OffsetPeer = p
-	}
+	filter := telDialogFilter(q)
 	// A warm cache answers at once, and the refresh runs behind the answer.
 	// Fetching the list costs about a minute on a degraded link, and almost
 	// all of that is spent re-reading conversations that have not changed.
@@ -1006,6 +999,69 @@ func (s *Server) handleTelPeer(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]any{"ok": true, "dialog": d})
 }
 
+// handleTelMembers answers a conversation's member count. GET reads the
+// cache only. POST is the page's own step when opening a chat: it asks
+// Telegram (one call) only for a channel or supergroup with no count from the
+// list or from a read within the day.
+func (s *Server) handleTelMembers(w http.ResponseWriter, r *http.Request) {
+	h := s.telHubOrFail(w)
+	if h == nil {
+		return
+	}
+	var peer tgbridge.Peer
+	if r.Method == http.MethodPost {
+		var req struct {
+			Peer tgbridge.Peer `json:"peer"`
+		}
+		if err := s.telDecode(r, &req); err != nil || req.Peer.ID == 0 {
+			http.Error(w, "bad peer", 400)
+			return
+		}
+		peer = req.Peer
+	} else {
+		p, ok := telPeerFromQuery(r.URL.Query(), "")
+		if !ok {
+			http.Error(w, "bad peer", 400)
+			return
+		}
+		peer = p
+	}
+	key := telCacheKey(peer)
+	if n, known := h.store().Members(key, time.Now()); known || r.Method != http.MethodPost {
+		writeJSON(w, map[string]any{"ok": true, "members": n, "known": known})
+		return
+	}
+	// The request names the peer by kind, id and hash; the cached row also
+	// says whether it is a channel's direct messages, which have no count.
+	if cached, ok := h.store().PeerFor(key); ok {
+		peer = cached
+	}
+	if !peer.ChannelBased() || peer.Direct {
+		writeJSON(w, map[string]any{"ok": true, "known": false})
+		return
+	}
+	if _, err := h.current(); err != nil {
+		writeJSON(w, map[string]any{"ok": false, "reason": "tel_err_not_connected"})
+		return
+	}
+	h.beginOp()
+	defer h.endOp()
+	ctx, cancel := context.WithTimeout(r.Context(), telCallTimeout)
+	defer cancel()
+	var n int
+	if err := h.withBridge(ctx, func(b *tgbridge.Bridge) error {
+		var e error
+		n, e = b.MemberCount(ctx, peer)
+		return e
+	}); err != nil {
+		telFail(w, h, err)
+		return
+	}
+	h.setErr(nil)
+	h.store().SetMembers(key, n, time.Now())
+	writeJSON(w, map[string]any{"ok": true, "members": n, "known": true})
+}
+
 // handleTelRead clears a conversation's unread count. Separate from history so
 // reading older messages never marks anything read by accident.
 func (s *Server) handleTelRead(w http.ResponseWriter, r *http.Request) {
@@ -1163,8 +1219,23 @@ func telStatusKey(err error) string {
 	return "tel_err_generic"
 }
 
+// telDialogFilter reads a list page request. The cursor is a message
+// (offsetId, offsetDate) and the conversation it belongs to (offsetPeer*):
+// offsetId is the message, never the peer.
+func telDialogFilter(q url.Values) tgbridge.DialogFilter {
+	f := tgbridge.DialogFilter{
+		Limit:      telAtoi(q.Get("limit"), 40),
+		OffsetDate: telAtoi(q.Get("offsetDate"), 0),
+		OffsetID:   telAtoi(q.Get("offsetId"), 0),
+	}
+	if p, ok := telPeerFromQuery(q, "offsetPeer"); ok {
+		f.OffsetPeer = p
+	}
+	return f
+}
+
 // telPeerFromQuery rebuilds a peer from query parameters; prefix selects a
-// second one ("offset" → offsetKind, offsetId, offsetAccessHash).
+// second one ("offsetPeer" → offsetPeerKind, offsetPeerId, offsetPeerAccessHash).
 func telPeerFromQuery(q url.Values, prefix string) (tgbridge.Peer, bool) {
 	field := func(name string) string {
 		if prefix == "" {

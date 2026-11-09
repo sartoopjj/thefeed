@@ -625,6 +625,7 @@ func (s *Server) serve(ln net.Listener) error {
 	mux.HandleFunc("/api/tel/recheck", s.handleTelRecheck)
 	mux.HandleFunc("/api/tel/auth", s.handleTelAuth)
 	mux.HandleFunc("/api/tel/dialogs", s.handleTelDialogs)
+	mux.HandleFunc("/api/tel/members", s.handleTelMembers)
 	mux.HandleFunc("/api/tel/history", s.handleTelHistory)
 	mux.HandleFunc("/api/tel/send", s.handleTelSend)
 	mux.HandleFunc("/api/tel/delete", s.handleTelDelete)
