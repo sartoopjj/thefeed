@@ -480,7 +480,7 @@ func TestJSTelegramDialogListKeepsRows(t *testing.T) {
 	if err != nil {
 		t.Skip("node not installed")
 	}
-	for _, f := range []string{"jstest/tel_reload_keeps_rows.test.mjs", "jstest/tel_more_cursor.test.mjs", "jstest/tel_members.test.mjs", "jstest/tel_quiet_progress.test.mjs", "jstest/tel_header_buttons.test.mjs"} {
+	for _, f := range []string{"jstest/tel_reload_keeps_rows.test.mjs", "jstest/tel_more_cursor.test.mjs", "jstest/tel_members.test.mjs", "jstest/tel_quiet_progress.test.mjs", "jstest/tel_header_buttons.test.mjs", "jstest/tel_dialog_order.test.mjs"} {
 		out, err := exec.Command(node, f).CombinedOutput()
 		if err != nil {
 			t.Fatalf("%s failed:\n%s", f, out)

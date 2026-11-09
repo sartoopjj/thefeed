@@ -20,6 +20,9 @@ var telState = {
   // Member counts read on demand, by conversation key (0: hidden by the
   // channel). A count that came with the list row is on the peer itself.
   members: {},
+  // Whether each of those is still current in the backend (a read holds a
+  // day). A stale one stays on screen until the step reads it again.
+  membersFresh: {},
   cursor: null,          // {date,id,peer} — where the next page continues
   more: false,           // another page exists
   total: 0,              // rows Telegram says exist, when it says
@@ -773,6 +776,7 @@ function telResetData() {
   telState.dialogs = [];
   telState.blocked = {};
   telState.members = {};
+  telState.membersFresh = {};
   telState.threads = {};
   telState.cursor = null;
   telState.more = false;
@@ -1424,11 +1428,7 @@ function telApplyPage(page, replace) {
       if (d.preview) cur.preview = d.preview;
     }
   });
-  // Pinned first, then by the newest message we know of — Telegram's own order.
-  telState.dialogs.sort(function (a, b) {
-    if (!!a.pinned !== !!b.pinned) return a.pinned ? -1 : 1;
-    return (b.topMsg || 0) - (a.topMsg || 0);
-  });
+  telSortDialogs();
   telState.more = !!page.more && telState.dialogs.length < TEL_DIALOG_MAX;
   telState.total = page.totalKnown || telState.total;
   telState.cursor = page.more
@@ -1436,6 +1436,17 @@ function telApplyPage(page, replace) {
     : null;
   telRender();
   return added;
+}
+
+// telSortDialogs puts the list in Telegram's order: pinned first, then by the
+// time of the newest message. Not by its id: private chats, bots and basic
+// groups share one id counter and each channel has its own, so a busy
+// channel's ids buried a private chat written to a minute ago.
+function telSortDialogs() {
+  telState.dialogs.sort(function (a, b) {
+    if (!!a.pinned !== !!b.pinned) return a.pinned ? -1 : 1;
+    return ((b.when || 0) - (a.when || 0)) || ((b.topMsg || 0) - (a.topMsg || 0));
+  });
 }
 
 // telDialogPagesExpected is how many fetches the whole list will take, from
@@ -1810,12 +1821,16 @@ function telMergeMessages(th, msgs, live) {
 function telTouchPreview(key, th) {
   var d = telDialogFor(key);
   if (!d || !th.msgs.length) return;
-  // topMsg orders the list, so a placeholder's id must never reach it.
+  // A placeholder's id must never reach topMsg: it pages the history.
   var newest = telNewestRealID(th);
   if (newest) d.topMsg = Math.max(d.topMsg || 0, newest);
   var last = th.msgs[th.msgs.length - 1];
   if (last.text) d.preview = last.text;
-  if (last.date) d.when = Math.max(d.when || 0, last.date);
+  if (last.date && last.date > (d.when || 0)) {
+    d.when = last.date;
+    // As in Telegram: the conversation moves up at once.
+    telSortDialogs();
+  }
 }
 
 async function telMarkRead(peer, maxID) {
@@ -2053,10 +2068,12 @@ async function telStartNewChat() {
   telCloseSheet();
   // A private group or channel's invite link: preview it, join on a tap.
   if (telIsInvite(name)) { telOpenInvite(name); return; }
+  var opened = null;
   await telOp('tel_working', async function () {
     var r = await telCall('/api/tel/resolve', { username: name }, 'tel_err_username');
     if (!r || !r.peer) return;
     var key = telPeerKey(r.peer);
+    opened = { key: key, peer: r.peer };
     var th = telThread(key);
     th.peer = r.peer;
     // Put it at the top of the list so it has a row to come back to.
@@ -2077,6 +2094,8 @@ async function telStartNewChat() {
     telState.jumpToBottom = true;
     telRender();
   });
+  // As in telOpenByUsername: the member-count step, once the link is free.
+  if (opened && telPeerKey(telState.peer) === opened.key) await telFetchMembers(opened.key, opened.peer);
 }
 window.telStartNewChat = telStartNewChat;
 
@@ -2916,7 +2935,11 @@ async function telLoadMembers() {
   try {
     var r = await telFetch('/api/tel/members?kind=' + encodeURIComponent(peer.kind) +
       '&id=' + encodeURIComponent(peer.id) + '&accessHash=' + encodeURIComponent(peer.accessHash || 0));
-    if (!r || !r.ok || !r.known || telState.members[key] === r.members) return;
+    if (!r || !r.ok) return;
+    // Not known any more: what is shown stays until the step replaces it,
+    // but it is read again rather than trusted for the life of the page.
+    telState.membersFresh[key] = !!r.known;
+    if (!r.known || telState.members[key] === r.members) return;
     telState.members[key] = r.members;
     if (telPeerKey(telState.peer) === key) telRender();
   } catch (e) { }
@@ -2931,13 +2954,14 @@ async function telFetchMembers(key, peer) {
   if (!peer || peer.direct || (peer.kind !== 'channel' && peer.kind !== 'group' && peer.kind !== 'forum')) return;
   if (peer.kind === 'group' && (!peer.accessHash || String(peer.accessHash) === '0')) return;
   await telLoadMembers();
-  if (peer.members || telState.members[key] !== undefined) return;
+  if (peer.members || telState.membersFresh[key]) return;
   telStepsMore(telState.stepNo + 1);
   var r = await telBgOp('tel_loading_members', function () {
     return telCallQuiet('/api/tel/members', { peer: peer });
   });
   if (!r || !r.ok || !r.known) return;
   telState.members[key] = r.members;
+  telState.membersFresh[key] = true;
   if (telPeerKey(telState.peer) === key) telRender();
 }
 
@@ -3194,10 +3218,12 @@ window.telJoinInvite = telJoinInvite;
 
 // telOpenByUsername resolves @name and opens that conversation here.
 async function telOpenByUsername(user, msgId) {
+  var opened = null;
   await telOp('tel_working', async function () {
     var r = await telCall('/api/tel/resolve', { username: user }, 'tel_err_username');
     if (!r || !r.peer) return;
     var key = telPeerKey(r.peer);
+    opened = { key: key, peer: r.peer };
     if (!telDialogFor(key)) {
       // A row to come back to. Not a subscription: the list is ours, and
       // Telegram is not told anything by this.
@@ -3216,6 +3242,9 @@ async function telOpenByUsername(user, msgId) {
     if (msgId) telState.jumpTo = msgId;
   });
   telRender();
+  // Opened inline, so the member-count step of telOpenPeer runs here: after
+  // the operation, which holds the link it needs.
+  if (opened && telPeerKey(telState.peer) === opened.key) await telFetchMembers(opened.key, opened.peer);
 }
 window.telOpenByUsername = telOpenByUsername;
 

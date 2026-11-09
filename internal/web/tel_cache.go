@@ -249,11 +249,9 @@ func (c *telCache) MergeDialogs(ds []tgbridge.Dialog) int {
 	for _, d := range ds {
 		if i, ok := have[telCacheKey(d.Peer)]; ok {
 			// Already listed: take the fresher row, since this page read it
-			// from Telegram just now. Its entity may lack the member count
-			// the old one had; not knowing is not a change.
-			if d.Peer.Members == 0 {
-				d.Peer.Members = c.data.Dialogs[i].Peer.Members
-			}
+			// from Telegram just now. Its member count included: one this
+			// entity lacks is unknown, not the old one -- kept, an old count
+			// was served for ever and never read again.
 			c.data.Dialogs[i] = d
 			continue
 		}
@@ -722,10 +720,8 @@ func (c *telCache) bumpRow(p tgbridge.Peer, last tgbridge.Message, unread int) {
 	// channel, new rights), so it replaces it. Muted is NOT in the peer and
 	// is carried over: a difference says nothing about notification settings,
 	// and losing the flag here would make a muted channel start ringing.
-	// The member count likewise: a difference's entity often lacks it.
-	if p.Members == 0 {
-		p.Members = row.Peer.Members
-	}
+	// The member count is taken with the peer, absent or not: an old one
+	// kept here would be served for ever (see Members).
 	row.Peer = p
 	if last.ID > 0 {
 		row.TopMsg, row.When = last.ID, last.Date
@@ -922,7 +918,9 @@ func (c *telCache) ReplaceBlocked(rows []tgbridge.BlockedPeer, complete bool, ed
 }
 
 // Members is a conversation's member count, and whether it is known: one
-// Telegram sent with the list row, else one read within the last day.
+// Telegram sent with the row's current entity, else one read within the last
+// day. A row's count is never carried past an entity without one, so it is
+// as fresh as the row.
 func (c *telCache) Members(key string, now time.Time) (int, bool) {
 	if c == nil {
 		return 0, false

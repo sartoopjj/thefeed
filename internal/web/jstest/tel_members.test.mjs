@@ -61,7 +61,20 @@ const load = grab('telLoadMembers');
 eq('the count is read from the cache endpoint', /\/api\/tel\/members\?/.test(load), true);
 eq('without taking the link', /telOp\(|telBgOp\(|telCall\(/.test(load), false);
 eq('the backend does not fetch it behind the page\'s back', /tel-members/.test(sse), false);
-eq('a new account starts with no counts', /telState\.members = \{\}/.test(grab('telResetData')), true);
+eq('a new account starts with no counts', /telState\.members = \{\}/.test(grab('telResetData')) &&
+  /telState\.membersFresh = \{\}/.test(grab('telResetData')), true);
+{
+  // The cache read keeps what is on screen but says whether it is current.
+  const st = { peer: { kind: 'channel', id: '9' }, members: { 'channel:9': 10 }, membersFresh: { 'channel:9': true } };
+  let answer = { ok: true, known: false, members: 0 };
+  const load = new Function('telState', 'telPeerKey', 'telFetch', 'telRender', grab('telLoadMembers') + '\nreturn telLoadMembers;')(
+    st, (p) => p.kind + ':' + p.id, async () => answer, () => {});
+  await load();
+  eq('expired in the backend: still shown, no longer fresh', [st.members['channel:9'], st.membersFresh['channel:9']], [10, false]);
+  answer = { ok: true, known: true, members: 12 };
+  await load();
+  eq('current again: replaced and fresh', [st.members['channel:9'], st.membersFresh['channel:9']], [12, true]);
+}
 
 console.log(`${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

@@ -98,21 +98,32 @@ function members(state, peer) {
   return { calls, go: () => f('channel:9', peer) };
 }
 {
-  const st = { peer: { kind: 'channel', id: '9' }, members: {} };
+  const st = { peer: { kind: 'channel', id: '9' }, members: {}, membersFresh: {} };
   const m = members(st, st.peer);
   await m.go();
   eq('an unknown count is a visible step', m.calls, ['tel_loading_members', '/api/tel/members']);
   eq('and lands in the header', st.members['channel:9'], 321);
 }
 {
-  const st = { peer: { kind: 'channel', id: '9' }, members: { 'channel:9': 10 } };
+  const st = { peer: { kind: 'channel', id: '9' }, members: { 'channel:9': 10 }, membersFresh: { 'channel:9': true } };
   const m = members(st, st.peer);
   await m.go();
-  eq('a known count costs nothing', m.calls, []);
+  eq('a fresh count costs nothing', m.calls, []);
+}
+{
+  // The page stayed open past the day: the backend says the count it holds
+  // is no longer current. It is shown until the new one lands, and read again
+  // -- held in memory as "known", it was never read again while the page
+  // lived, which on a phone is days.
+  const st = { peer: { kind: 'channel', id: '9' }, members: { 'channel:9': 10 }, membersFresh: { 'channel:9': false } };
+  const m = members(st, st.peer);
+  await m.go();
+  eq('a stale count is read again', m.calls, ['tel_loading_members', '/api/tel/members']);
+  eq('and replaced', [st.members['channel:9'], st.membersFresh['channel:9']], [321, true]);
 }
 {
   const peer = { kind: 'channel', id: '9', members: 50 };
-  const st = { peer, members: {} };
+  const st = { peer, members: {}, membersFresh: {} };
   const m = members(st, peer);
   await m.go();
   eq('nor does one that came with the list', m.calls, []);
@@ -120,17 +131,29 @@ function members(state, peer) {
 for (const [what, peer] of [['person', { kind: 'user', id: '9' }], ['bot', { kind: 'bot', id: '9' }],
   ['direct chat', { kind: 'group', id: '9', accessHash: '4', direct: true }],
   ['basic group', { kind: 'group', id: '9', accessHash: '0' }]]) {
-  const st = { peer, members: {} };
+  const st = { peer, members: {}, membersFresh: {} };
   const m = members(st, peer);
   await m.go();
   eq(`no count is asked for a ${what}`, m.calls, []);
 }
 {
   const peer = { kind: 'group', id: '9', accessHash: '4' };
-  const st = { peer, members: {} };
+  const st = { peer, members: {}, membersFresh: {} };
   const m = members(st, peer);
   await m.go();
   eq('a supergroup is asked for', m.calls, ['tel_loading_members', '/api/tel/members']);
+}
+
+// A channel opened by @username or a t.me link (or the new-chat box) opens
+// inline, not through telOpenPeer, and skipped the step: it showed no count at
+// all (seen live: Telegram's username lookup carries none). After their own
+// telOp, since the step is a telBgOp and would be refused while it runs.
+for (const fn of ['telOpenByUsername', 'telStartNewChat']) {
+  const body = grab(fn);
+  const at = body.indexOf('telFetchMembers(');
+  eq(`${fn} reads the member count too`, at > 0, true);
+  eq(`${fn}: after its own operation, not inside it`, at > body.lastIndexOf('\n  });'), true);
+  eq(`${fn}: only for the chat still open`, /telPeerKey\(telState\.peer\) === [\w.]+\) await telFetchMembers\(/.test(body), true);
 }
 
 for (const k of ['tel_loading_members', 'tel_loading_ad']) {

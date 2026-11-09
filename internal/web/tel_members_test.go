@@ -52,27 +52,45 @@ func TestTelMembersCache(t *testing.T) {
 	}
 }
 
-// A message arriving through the update stream carries an entity that often
-// lacks the count; it must not wipe the one the list gave.
-func TestTelMembersSurviveRowUpdates(t *testing.T) {
+// A count that came with a row is only as fresh as that row. When a later
+// entity comes without one, the old count must not be kept: kept, it was
+// served for ever and the day's read never happened, so a channel's count
+// froze at whatever Telegram once sent. Unknown instead, the next open reads
+// it -- at most once a day.
+func TestTelMembersDoNotFreeze(t *testing.T) {
 	c := loadTelCache(t.TempDir())
+	now := time.Unix(1_800_000_000, 0)
+	key := telCacheKey(telTestChannel)
 	ch := telTestChannel
 	ch.Members = 500
 	c.PutDialogs([]tgbridge.Dialog{{Peer: ch, TopMsg: 1}})
+	if n, ok := c.Members(key, now); !ok || n != 500 {
+		t.Fatalf("the row's count: %d %v", n, ok)
+	}
 	bare := telTestChannel // same channel, no count
-	c.ApplyNew([]tgbridge.PeerMessages{{Peer: bare, Messages: []tgbridge.Message{{ID: 2, Text: "hi"}}}})
-	if got := c.Dialogs()[0].Peer.Members; got != 500 {
-		t.Fatalf("after a new message: %d", got)
-	}
 	c.MergeDialogs([]tgbridge.Dialog{{Peer: bare, TopMsg: 2}})
-	if got := c.Dialogs()[0].Peer.Members; got != 500 {
-		t.Fatalf("after a merge: %d", got)
+	if n, ok := c.Members(key, now.Add(90*24*time.Hour)); ok {
+		t.Fatalf("a list read without a count kept the old one for 90 days: %d", n)
 	}
-	// A real new count still replaces the old one.
-	ch.Members = 501
+	// Same through the update stream.
 	c.MergeDialogs([]tgbridge.Dialog{{Peer: ch, TopMsg: 2}})
-	if got := c.Dialogs()[0].Peer.Members; got != 501 {
-		t.Fatalf("a new count was ignored: %d", got)
+	c.ApplyNew([]tgbridge.PeerMessages{{Peer: bare, Messages: []tgbridge.Message{{ID: 3, Text: "hi"}}}})
+	if n, ok := c.Members(key, now); ok {
+		t.Fatalf("a message without a count kept the old one: %d", n)
+	}
+	// Read on the next open, it holds for the day, then is read again.
+	c.SetMembers(key, 700, now)
+	if n, ok := c.Members(key, now.Add(23*time.Hour)); !ok || n != 700 {
+		t.Fatalf("today's read: %d %v", n, ok)
+	}
+	if _, ok := c.Members(key, now.Add(25*time.Hour)); ok {
+		t.Fatal("yesterday's read is still served")
+	}
+	// A row that comes with a count is current, and wins.
+	ch.Members = 501
+	c.MergeDialogs([]tgbridge.Dialog{{Peer: ch, TopMsg: 4}})
+	if n, ok := c.Members(key, now.Add(25*time.Hour)); !ok || n != 501 {
+		t.Fatalf("a new count from the list: %d %v", n, ok)
 	}
 }
 

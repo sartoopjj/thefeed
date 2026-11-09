@@ -32,7 +32,7 @@ function harness(liveAnswer) {
     TEL_DIALOG_PAGE: 40,
   };
   const names = Object.keys(env);
-  const body = [grab('telPeerKey'), grab('telApplyPage'), grab('telLoadDialogs')].join('\n') +
+  const body = [grab('telPeerKey'), grab('telSortDialogs'), grab('telApplyPage'), grab('telLoadDialogs')].join('\n') +
     '\nreturn { telApplyPage, telLoadDialogs };';
   const fns = new Function(...names, body)(...names.map((n) => env[n]));
   return { telState, ...fns };
