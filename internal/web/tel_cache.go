@@ -252,6 +252,11 @@ func (c *telCache) MergeDialogs(ds []tgbridge.Dialog) int {
 			// from Telegram just now. Its member count included: one this
 			// entity lacks is unknown, not the old one -- kept, an old count
 			// was served for ever and never read again.
+			// A pin order only comes with a list page; a row re-read on its
+			// own keeps the one it had while it stays pinned.
+			if d.Pinned && d.PinOrder == 0 && c.data.Dialogs[i].Pinned {
+				d.PinOrder = c.data.Dialogs[i].PinOrder
+			}
 			c.data.Dialogs[i] = d
 			continue
 		}

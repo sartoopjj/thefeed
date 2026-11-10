@@ -821,10 +821,10 @@ func (s *Server) handleTelSend(w http.ResponseWriter, r *http.Request) {
 	defer h.endOp()
 	ctx, cancel := context.WithTimeout(r.Context(), telCallTimeout)
 	defer cancel()
-	var sentID int
+	var sent tgbridge.Sent
 	if err := h.withBridge(ctx, func(b *tgbridge.Bridge) error {
 		var e error
-		sentID, e = b.SendText(ctx, req.Peer, text, randomID(), req.ReplyTo)
+		sent, e = b.SendText(ctx, req.Peer, text, randomID(), req.ReplyTo)
 		return e
 	}); err != nil {
 		h.noteYouBlocked(req.Peer, err)
@@ -834,14 +834,18 @@ func (s *Server) handleTelSend(w http.ResponseWriter, r *http.Request) {
 	h.setErr(nil)
 	h.noteDelivered(req.Peer)
 	// The id Telegram assigned, so the UI can settle the message it already
-	// drew instead of spending a second round trip reading it back.
-	if sentID > 0 {
+	// drew instead of spending a second round trip reading it back -- and its
+	// time, Telegram's, since this device's clock may be far off.
+	if sent.ID > 0 {
+		date := sent.Date
+		if date == 0 {
+			date = int(time.Now().Unix())
+		}
 		h.store().MergeThread(telCacheKey(req.Peer), []tgbridge.Message{{
-			ID: sentID, Text: text, Out: true, Date: int(time.Now().Unix()),
-			ReplyTo: req.ReplyTo,
+			ID: sent.ID, Text: text, Out: true, Date: date, ReplyTo: req.ReplyTo,
 		}})
 	}
-	writeJSON(w, map[string]any{"ok": true, "msgId": sentID})
+	writeJSON(w, map[string]any{"ok": true, "msgId": sent.ID, "date": sent.Date})
 }
 
 // handleTelDelete removes a conversation: leaving a channel, or clearing a

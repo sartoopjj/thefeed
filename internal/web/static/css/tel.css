@@ -1934,6 +1934,46 @@ input.tel-fwd-search:focus {
   white-space: pre-line;
 }
 
+/* The open chat's info (tap its name): the invite preview's head, then the
+   usernames, then the actions. */
+.tel-topbar-tap {
+  cursor: pointer;
+  border-radius: 12px;
+}
+
+.tel-topbar-tap:focus-visible {
+  outline: 2px solid var(--accent);
+}
+
+.tel-profile-field {
+  padding: 6px 16px 10px;
+}
+
+.tel-profile-label {
+  font-size: var(--text-xs);
+  color: var(--text-dim);
+  margin-bottom: 2px;
+}
+
+.tel-profile-un {
+  background: none;
+  border: 0;
+  padding: 2px 0;
+  color: var(--accent);
+  font: inherit;
+  font-size: var(--text-md, 15px);
+  cursor: pointer;
+}
+
+.tel-profile-also {
+  font-size: var(--text-sm);
+  color: var(--text-dim);
+}
+
+.tel-profile-also .tel-profile-un {
+  font-size: var(--text-sm);
+}
+
 .tel-invite .tel-btn {
   width: 100%;
   margin-top: 6px;

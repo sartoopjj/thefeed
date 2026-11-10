@@ -206,6 +206,7 @@ func dialogsFrom(res tg.MessagesDialogsClass, def NotifyDefaults) []Dialog {
 	}
 
 	out := make([]Dialog, 0, len(rawDialogs))
+	pins := 0
 	for _, raw := range rawDialogs {
 		d, ok := raw.(*tg.Dialog)
 		if !ok {
@@ -233,6 +234,12 @@ func dialogsFrom(res tg.MessagesDialogsClass, def NotifyDefaults) []Dialog {
 			continue
 		}
 		key := peerKey(d.Peer)
+		// Pins come first, in the user's order: their place here is it.
+		pinOrder := 0
+		if d.Pinned {
+			pins++
+			pinOrder = pins
+		}
 		out = append(out, Dialog{
 			Peer:       peer,
 			Unread:     d.UnreadCount,
@@ -241,6 +248,7 @@ func dialogsFrom(res tg.MessagesDialogsClass, def NotifyDefaults) []Dialog {
 			ReadOutbox: d.ReadOutboxMaxID,
 			ReadInbox:  d.ReadInboxMaxID,
 			Pinned:     d.Pinned,
+			PinOrder:   pinOrder,
 			Preview:    previewByPeer[key],
 			Muted:      mutedNow(d.NotifySettings, def.For(peer.Kind)),
 		})
@@ -493,12 +501,17 @@ func (b *Bridge) PeerStates(ctx context.Context, peers []Peer) ([]Dialog, error)
 	if err != nil {
 		return nil, err
 	}
-	return dialogsFrom(&tg.MessagesDialogs{
+	rows := dialogsFrom(&tg.MessagesDialogs{
 		Dialogs:  res.Dialogs,
 		Messages: res.Messages,
 		Users:    res.Users,
 		Chats:    res.Chats,
-	}, b.notifyDefaults(ctx)), nil
+	}, b.notifyDefaults(ctx))
+	// These come in the order asked for, not the user's pin order.
+	for i := range rows {
+		rows[i].PinOrder = 0
+	}
+	return rows, nil
 }
 
 // MarkRead clears the unread count up to maxID. Telegram models this per peer
@@ -590,16 +603,24 @@ func messagesFrom(res tg.MessagesMessagesClass) []Message {
 	return out
 }
 
+// Sent is what a send's answer says about the new message: the id Telegram
+// assigned and Telegram's time for it. Zero means it did not say.
+type Sent struct {
+	ID   int
+	Date int
+}
+
 // SendText sends a plain text message. randomID deduplicates a retry: Telegram
 // drops a repeat with the same id, which matters on a lossy tunnel. replyTo,
 // when set, answers that message -- twelve bytes more on the wire.
-// The id Telegram assigned comes back in the answer, so the caller does not
-// have to read the message back to learn it. Over DNS that saved round trip is
-// most of the wait: the whole send was two fetches where one would do.
-func (b *Bridge) SendText(ctx context.Context, peer Peer, text string, randomID int64, replyTo int) (int, error) {
+// The id and time Telegram assigned come back in the answer, so the caller
+// does not have to read the message back to learn them. Over DNS that saved
+// round trip is most of the wait: the whole send was two fetches where one
+// would do.
+func (b *Bridge) SendText(ctx context.Context, peer Peer, text string, randomID int64, replyTo int) (Sent, error) {
 	_, api, err := b.snapshot()
 	if err != nil {
-		return 0, err
+		return Sent{}, err
 	}
 	req := &tg.MessagesSendMessageRequest{
 		Peer:     peer.inputPeer(),
@@ -611,40 +632,51 @@ func (b *Bridge) SendText(ctx context.Context, peer Peer, text string, randomID 
 	}
 	ups, err := api.MessagesSendMessage(ctx, req)
 	if err != nil {
-		return 0, err
+		return Sent{}, err
 	}
-	return sentMessageID(ups), nil
+	return sentMessage(ups), nil
 }
 
-// sentMessageID digs the assigned id out of a send's answer. Zero means
-// Telegram did not say, which is not an error -- the message was accepted
-// either way, and the caller falls back to reading it back.
-func sentMessageID(ups tg.UpdatesClass) int {
-	var list []tg.UpdateClass
+// sentMessage digs the assigned id and Telegram's time out of a send's
+// answer. Zero means Telegram did not say, which is not an error -- the
+// message was accepted either way, and the caller falls back to reading it
+// back. The time is the message's own where the answer carries it, else the
+// answer's: both are Telegram's clock, never the device's.
+func sentMessage(ups tg.UpdatesClass) Sent {
+	var (
+		list []tg.UpdateClass
+		date int
+	)
 	switch u := ups.(type) {
 	case *tg.Updates:
-		list = u.Updates
+		list, date = u.Updates, u.Date
 	case *tg.UpdatesCombined:
-		list = u.Updates
+		list, date = u.Updates, u.Date
 	case *tg.UpdateShortSentMessage:
 		// The common answer for a plain text message to a private chat.
-		return u.ID
+		return Sent{ID: u.ID, Date: u.Date}
 	case *tg.UpdateShort:
-		list = []tg.UpdateClass{u.Update}
+		list, date = []tg.UpdateClass{u.Update}, u.Date
 	}
+	var out Sent
 	for _, up := range list {
 		switch t := up.(type) {
 		case *tg.UpdateMessageID:
-			return t.ID
+			if out.ID == 0 {
+				out.ID = t.ID
+			}
 		case *tg.UpdateNewMessage:
 			if m, ok := t.Message.(*tg.Message); ok {
-				return m.ID
+				out.ID, out.Date = m.ID, m.Date
 			}
 		case *tg.UpdateNewChannelMessage:
 			if m, ok := t.Message.(*tg.Message); ok {
-				return m.ID
+				out.ID, out.Date = m.ID, m.Date
 			}
 		}
 	}
-	return 0
+	if out.ID != 0 && out.Date == 0 {
+		out.Date = date
+	}
+	return out
 }

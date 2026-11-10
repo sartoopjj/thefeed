@@ -1408,6 +1408,8 @@ function telApplyPage(page, replace) {
     } else {
       // Keep the cached row's object identity but take the fresh values.
       var cur = telState.dialogs[byKey[k]];
+      // The account lists it, so it was joined (here or elsewhere).
+      if (cur.visiting) { cur.visiting = false; cur.visitedAt = 0; }
       cur.peer = d.peer;             // a renamed chat / rotated access hash
       cur.unread = d.unread;
       cur.topMsg = d.topMsg;
@@ -1415,6 +1417,7 @@ function telApplyPage(page, replace) {
       cur.readOutbox = d.readOutbox; // how far the other side has read
       cur.readInbox = d.readInbox;   // how far WE have, on any device
       cur.pinned = d.pinned;
+      cur.pinOrder = d.pinOrder;     // the user's order among the pins
       // Muted was missing from this list, and a row that already existed
       // therefore kept whatever it was first fetched with FOR EVER. Telegram
       // sent the right value, the backend stored the right value, and the row
@@ -1438,13 +1441,24 @@ function telApplyPage(page, replace) {
   return added;
 }
 
-// telSortDialogs puts the list in Telegram's order: pinned first, then by the
-// time of the newest message. Not by its id: private chats, bots and basic
-// groups share one id counter and each channel has its own, so a busy
-// channel's ids buried a private chat written to a minute ago.
+// telSortDialogs puts the list in Telegram's order: pinned first, in the
+// user's pin order, then by the time of the newest message. Not by its id:
+// private chats, bots and basic groups share one id counter and each channel
+// has its own, so a busy channel's ids buried a private chat written to a
+// minute ago.
 function telSortDialogs() {
   telState.dialogs.sort(function (a, b) {
     if (!!a.pinned !== !!b.pinned) return a.pinned ? -1 : 1;
+    if (a.pinned) {
+      // A pin with no known order goes after those with one.
+      var pa = a.pinOrder || 1e9, pb = b.pinOrder || 1e9;
+      if (pa !== pb) return pa - pb;
+    }
+    // Opened by name or link, not joined: the row is there to come back to,
+    // so it stays under the pins, newest visit first -- by time, one with no
+    // messages went to the very bottom.
+    if (!!a.visiting !== !!b.visiting) return a.visiting ? -1 : 1;
+    if (a.visiting) return (b.visitedAt || 0) - (a.visitedAt || 0);
     return ((b.when || 0) - (a.when || 0)) || ((b.topMsg || 0) - (a.topMsg || 0));
   });
 }
@@ -1826,8 +1840,14 @@ function telTouchPreview(key, th) {
   if (newest) d.topMsg = Math.max(d.topMsg || 0, newest);
   var last = th.msgs[th.msgs.length - 1];
   if (last.text) d.preview = last.text;
-  if (last.date && last.date > (d.when || 0)) {
-    d.when = last.date;
+  // The row's time is the newest REAL message's, which is Telegram's clock.
+  // A placeholder or a failed send carries this device's, often far off.
+  var when = 0;
+  for (var i = th.msgs.length - 1; i >= 0; i--) {
+    if (th.msgs[i].id < TEL_PENDING_BASE) { when = th.msgs[i].date || 0; break; }
+  }
+  if (when > (d.when || 0)) {
+    d.when = when;
     // As in Telegram: the conversation moves up at once.
     telSortDialogs();
   }
@@ -1894,6 +1914,9 @@ async function telSend() {
       // simply becomes the real message. Reading it back cost a second round
       // trip -- about half the wait -- to learn something already known.
       pending.id = r.msgId;
+      // Telegram's time for it, not this device's: the list is ordered by
+      // it, and a phone's clock is often far off.
+      if (r.date) pending.date = r.date;
       pending.pending = false;
       // Known from our own answer, not fetched: see telFetchCursor.
       pending.sent = true;
@@ -2076,13 +2099,18 @@ async function telStartNewChat() {
     opened = { key: key, peer: r.peer };
     var th = telThread(key);
     th.peer = r.peer;
-    // Put it at the top of the list so it has a row to come back to.
+    // A row to come back to. It takes its place by its newest message's
+    // time once the history lands, like every other row.
     if (!telDialogFor(key)) {
       // visiting: opened by name or through a link, not subscribed to. The
       // join offer hangs off this, so it only appears where joining means
       // something.
-      telState.dialogs.unshift({ peer: r.peer, unread: 0, topMsg: 0, preview: '', visiting: true });
+      telState.dialogs.unshift({ peer: r.peer, unread: 0, topMsg: 0, preview: '', visiting: true, visitedAt: Date.now() });
+    } else {
+      var seen = telDialogFor(key);
+      if (seen.visiting) seen.visitedAt = Date.now();
     }
+    telSortDialogs();
     // Opened inline: telOpenPeer would wait for the tunnel this call holds.
     var th = telEnterThread(key, r.peer);
     var h = await telCall(telHistoryQuery(r.peer, { limit: TEL_HISTORY_PAGE }));
@@ -3225,13 +3253,18 @@ async function telOpenByUsername(user, msgId) {
     var key = telPeerKey(r.peer);
     opened = { key: key, peer: r.peer };
     if (!telDialogFor(key)) {
-      // A row to come back to. Not a subscription: the list is ours, and
+      // A row to come back to, placed by its newest message's time once the
+      // history lands. Not a subscription: the list is ours, and
       // Telegram is not told anything by this.
       // visiting: opened by name or through a link, not subscribed to. The
       // join offer hangs off this, so it only appears where joining means
       // something.
-      telState.dialogs.unshift({ peer: r.peer, unread: 0, topMsg: 0, preview: '', visiting: true });
+      telState.dialogs.unshift({ peer: r.peer, unread: 0, topMsg: 0, preview: '', visiting: true, visitedAt: Date.now() });
+    } else {
+      var seen = telDialogFor(key);
+      if (seen.visiting) seen.visitedAt = Date.now();
     }
+    telSortDialogs();
     var th = telEnterThread(key, r.peer);
     var h = await telCall(telHistoryQuery(r.peer, { limit: TEL_HISTORY_PAGE }));
     th.fetched = true;
@@ -3703,7 +3736,9 @@ function telRenderPane() {
   var html = '<div class="tel-topbar tel-thread-bar">' +
     '<button class="tel-back" onclick="telBackToList()" aria-label="' +
     telAttrQ(telT('tel_back')) + '">' + icon('arrowLeft') + '</button>' +
-    '<div class="tel-topbar-title">' + telAvatar(peer.title, 34, peer.thumb) +
+    // Tap the name for its info, as in the messenger and in Telegram.
+    '<div class="tel-topbar-title tel-topbar-tap" role="button" tabindex="0" aria-label="' +
+    telAttrQ(telT('tel_info')) + '" onclick="telPeerProfile()">' + telAvatar(peer.title, 34, peer.thumb) +
     '<span class="tel-thread-meta"><span class="tel-title" dir="auto">' +
     telFlag(telEsc(peer.title || peer.username || '')) + '</span>' +
     '<span class="tel-thread-sub" dir="' + telUIDir() + '">' + telThreadSub(peer) + '</span></span></div>' +
@@ -4527,6 +4562,53 @@ function telThreadMenu() {
   telSheet(items);
 }
 window.telThreadMenu = telThreadMenu;
+
+// telPeerProfile is the open chat's info: picture, name, what it is and how
+// many are in it, every username it holds, and what can be done with it.
+// Nothing is fetched; all of it came with the conversation. The ⋮ menu keeps
+// its items too.
+function telPeerProfile() {
+  var peer = telState.peer;
+  if (!peer) return;
+  var key = telPeerKey(peer);
+  var d = telDialogFor(key);
+  var what = peer.direct ? telT('tel_direct_sub') : (telMembersLine(peer) || telT('tel_kind_' + peer.kind));
+  var h = '<div class="tel-invite tel-profile">' + telAvatar(peer.title, 64, peer.thumb) +
+    '<div class="tel-invite-title" dir="auto">' + telEsc(telSafeText(peer.title || peer.username || '')) + '</div>' +
+    '<div class="tel-invite-sub" dir="auto">' + telEsc(what) + '</div></div>';
+  if (peer.username) {
+    // Each one copies on a tap. Left-to-right whatever the UI language.
+    var un = function (u) {
+      return '<button class="tel-profile-un" dir="ltr" onclick="telCopy(\'' + jsStr('@' + u) + '\')">@' + telEsc(u) + '</button>';
+    };
+    h += '<div class="tel-profile-field"><div class="tel-profile-label" dir="auto">' + telEsc(telT('tel_info_username')) + '</div>' +
+      un(peer.username);
+    if (peer.usernames && peer.usernames.length) {
+      h += '<div class="tel-profile-also" dir="auto">' + telEsc(telT('tel_info_also')) + ' ' +
+        peer.usernames.map(un).join('<span class="tel-profile-sep">' + (telUIDir() === 'rtl' ? '، ' : ', ') + '</span>') + '</div>';
+    }
+    h += '</div>';
+  }
+  if (d && d.visiting && (peer.kind === 'channel' || peer.kind === 'forum')) {
+    h += telSheetItem('success', telT('tel_join'), 'telCloseSheet();telJoinChannel(\'' + jsStr(key) + '\')');
+  }
+  // Not a member yet: Join is all there is, as in Telegram.
+  if (d && !d.visiting) {
+    h += telSheetItem(d.muted ? 'bell' : 'bellOff', telT(d.muted ? 'tel_unmute' : 'tel_mute'),
+      'telCloseSheet();telToggleMute(\'' + jsStr(key) + '\')');
+  }
+  if (peer.kind === 'user' || peer.kind === 'bot') {
+    var bl = telIsBlocked(peer);
+    h += telSheetItem(bl ? 'success' : 'close', telT(bl ? 'tel_unblock' : 'tel_block'), 'telCloseSheet();telToggleBlock()');
+  }
+  if (d && !d.visiting) {
+    var isChannel = peer.kind === 'channel' || peer.kind === 'forum';
+    h += '<button class="tel-sheet-item tel-sheet-danger" onclick="telDeleteChat(\'' + jsStr(key) + '\')">' +
+      icon('delete') + ' <span dir="auto">' + telEsc(telT(isChannel ? 'tel_leave' : 'tel_delete')) + '</span></button>';
+  }
+  telSheet(h);
+}
+window.telPeerProfile = telPeerProfile;
 
 // ----------------------------------------------------- report and block -----
 
