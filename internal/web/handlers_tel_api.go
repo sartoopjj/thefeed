@@ -664,6 +664,7 @@ func (s *Server) handleTelDialogs(w http.ResponseWriter, r *http.Request) {
 		// user had asked for, gone. Conversations that really are over are
 		// removed by the Gone path instead, which Telegram reports outright.
 		h.store().MergeDialogs(page.Dialogs)
+		h.store().SettlePins(page.Dialogs)
 		// Telegram's count of the whole list, kept so the cached answer can
 		// still tell a partial list from a complete one on the next start.
 		h.store().SetDialogTotal(page.TotalKnown)
@@ -1003,25 +1004,29 @@ func (s *Server) handleTelPeer(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]any{"ok": true, "dialog": d})
 }
 
-// handleTelMembers answers a conversation's member count. GET reads the
-// cache only. POST is the page's own step when opening a chat: it asks
-// Telegram (one call) only for a channel or supergroup with no count from the
-// list or from a read within the day.
+// handleTelMembers answers what a channel's full info says: its member count
+// and its description. GET reads the cache only. POST is the page's own step
+// (opening a chat, or its info with about:true): it asks Telegram -- one call,
+// both at once -- only when the count is not known from the list or a read
+// within the day, or the description was asked for and not read within it.
+// A failed read leaves what was there: an old description is still shown.
 func (s *Server) handleTelMembers(w http.ResponseWriter, r *http.Request) {
 	h := s.telHubOrFail(w)
 	if h == nil {
 		return
 	}
 	var peer tgbridge.Peer
+	wantAbout := false
 	if r.Method == http.MethodPost {
 		var req struct {
-			Peer tgbridge.Peer `json:"peer"`
+			Peer  tgbridge.Peer `json:"peer"`
+			About bool          `json:"about"`
 		}
 		if err := s.telDecode(r, &req); err != nil || req.Peer.ID == 0 {
 			http.Error(w, "bad peer", 400)
 			return
 		}
-		peer = req.Peer
+		peer, wantAbout = req.Peer, req.About
 	} else {
 		p, ok := telPeerFromQuery(r.URL.Query(), "")
 		if !ok {
@@ -1031,39 +1036,93 @@ func (s *Server) handleTelMembers(w http.ResponseWriter, r *http.Request) {
 		peer = p
 	}
 	key := telCacheKey(peer)
-	if n, known := h.store().Members(key, time.Now()); known || r.Method != http.MethodPost {
-		writeJSON(w, map[string]any{"ok": true, "members": n, "known": known})
+	answer := func() {
+		now := time.Now()
+		n, known := h.store().Members(key, now)
+		about, read, fresh := h.store().About(key, now)
+		writeJSON(w, map[string]any{"ok": true, "members": n, "known": known,
+			"about": about, "aboutRead": read, "aboutFresh": fresh})
+	}
+	needed := func() bool {
+		now := time.Now()
+		_, known := h.store().Members(key, now)
+		_, _, fresh := h.store().About(key, now)
+		return !known || (wantAbout && !fresh)
+	}
+	if r.Method != http.MethodPost || !needed() {
+		answer()
 		return
 	}
 	// The request names the peer by kind, id and hash; the cached row also
-	// says whether it is a channel's direct messages, which have no count.
+	// says whether it is a channel's direct messages, which have neither.
 	if cached, ok := h.store().PeerFor(key); ok {
 		peer = cached
 	}
 	if !peer.ChannelBased() || peer.Direct {
-		writeJSON(w, map[string]any{"ok": true, "known": false})
+		answer()
 		return
 	}
-	if _, err := h.current(); err != nil {
+	// One read at a time: the chat's step and its info opened together, or
+	// two tabs, would otherwise ask Telegram the same thing twice. Whoever
+	// waited finds the answer already cached.
+	telInfoMu.Lock()
+	defer telInfoMu.Unlock()
+	if !needed() {
+		answer()
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), telCallTimeout)
+	defer cancel()
+	info, err := telReadChannelInfo(ctx, h, peer)
+	if errors.Is(err, errTelNoLink) {
 		writeJSON(w, map[string]any{"ok": false, "reason": "tel_err_not_connected"})
 		return
 	}
-	h.beginOp()
-	defer h.endOp()
-	ctx, cancel := context.WithTimeout(r.Context(), telCallTimeout)
-	defer cancel()
-	var n int
-	if err := h.withBridge(ctx, func(b *tgbridge.Bridge) error {
-		var e error
-		n, e = b.MemberCount(ctx, peer)
-		return e
-	}); err != nil {
-		telFail(w, h, err)
+	if err != nil {
+		if !telMembersRefused(err) {
+			telFail(w, h, err)
+			return
+		}
+		// Telegram will not say (a private or banned channel): held for the
+		// day like a hidden count, or every open would ask again.
+		h.setErr(nil)
+		h.store().SetInfoRefused(key, time.Now())
+		answer()
 		return
 	}
 	h.setErr(nil)
-	h.store().SetMembers(key, n, time.Now())
-	writeJSON(w, map[string]any{"ok": true, "members": n, "known": true})
+	h.store().SetChannelInfo(key, info, time.Now())
+	answer()
+}
+
+// telInfoMu serializes full-info reads (see handleTelMembers).
+var telInfoMu sync.Mutex
+
+// errTelNoLink is a call that could not be made: no Telegram link.
+var errTelNoLink = errors.New("tel: not connected")
+
+// telReadChannelInfo asks Telegram for a channel's full info: one call. A
+// variable so tests can stand in for Telegram.
+var telReadChannelInfo = func(ctx context.Context, h *telHub, peer tgbridge.Peer) (tgbridge.ChannelInfo, error) {
+	if _, err := h.current(); err != nil {
+		return tgbridge.ChannelInfo{}, errTelNoLink
+	}
+	h.beginOp()
+	defer h.endOp()
+	var info tgbridge.ChannelInfo
+	err := h.withBridge(ctx, func(b *tgbridge.Bridge) error {
+		var e error
+		info, e = b.ChannelInfo(ctx, peer)
+		return e
+	})
+	return info, err
+}
+
+// telMembersRefused tells Telegram declining to describe a channel (private,
+// banned, gone: a 400/403/406 answer) from a failure to ask it at all. Only
+// the first is an answer worth keeping; a flood wait is about us, not it.
+func telMembersRefused(err error) bool {
+	return tgerr.IsCode(err, 400, 403, 406)
 }
 
 // handleTelRead clears a conversation's unread count. Separate from history so

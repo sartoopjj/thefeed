@@ -752,29 +752,54 @@ func (s *Server) Shutdown() {
 	}
 }
 
-// sameOriginGuard blocks cross-site STATE-CHANGING requests, the CSRF/DNS-
-// rebinding vector against this localhost UI: a hostile web page the user is
-// also visiting could otherwise POST to 127.0.0.1 and drive chat/admin actions
-// (e.g. enabling a chat server, sending a message). It keys off the browser-set
-// Fetch-Metadata header, which is sent on every request and cannot be forged by
-// the calling page:
-//   - "cross-site" on an unsafe method → reject.
-//   - same-origin / same-site / none (direct navigation), or no header at all
-//     (curl, native/mobile clients, the in-app webview's own calls) → allow.
+// sameOriginGuard refuses what another web page makes the browser send here --
+// the CSRF vector against this UI. A page the user is also visiting can aim
+// requests at 127.0.0.1 (or at the user's own server behind nginx) without
+// being able to read the answers; it does not need to. A GET is enough to make
+// this client spend Telegram and DNS queries (GET /api/tel/dialogs?refresh=1)
+// and, by whether it loads at all, to learn that thefeed is running here.
 //
-// Reads (GET/HEAD) are never blocked, so no legitimate same-origin flow breaks.
+// It goes by the browser's Fetch-Metadata header, which the calling page
+// cannot set or forge, and which a reverse proxy passes through untouched --
+// unlike Origin, Referer and Host, which a proxy may rewrite:
+//   - same-origin: the app's own page. Allowed.
+//   - none: the user typed it, or opened a bookmark. Allowed.
+//   - no header: curl, the native shells, monitoring, browsers too old to
+//     send it. Allowed.
+//   - anything else (cross-site, same-site): another page started it.
+//
+// The app's page only ever calls /api/ on its own origin, so there nothing
+// else is legitimate -- not even another port on localhost or another
+// subdomain (same-site), where other software runs. Outside /api/ is only
+// the page and its static files: following a link to the app, a dashboard
+// framing it or showing its icon, or a status check fetching it all stay
+// working; only a write is refused, as before.
 func sameOriginGuard(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.Method {
-		case http.MethodGet, http.MethodHead, http.MethodOptions:
-		default:
-			if r.Header.Get("Sec-Fetch-Site") == "cross-site" {
-				http.Error(w, "cross-site request blocked", http.StatusForbidden)
-				return
-			}
+		if foreignRequest(r) {
+			http.Error(w, "cross-site request blocked", http.StatusForbidden)
+			return
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+// foreignRequest says whether a request was started by another site and has
+// to be refused (see sameOriginGuard).
+func foreignRequest(r *http.Request) bool {
+	site := strings.ToLower(strings.TrimSpace(r.Header.Get("Sec-Fetch-Site")))
+	switch site {
+	case "", "same-origin", "none":
+		return false
+	}
+	if r.URL.Path == "/api" || strings.HasPrefix(r.URL.Path, "/api/") {
+		return true
+	}
+	switch r.Method {
+	case http.MethodGet, http.MethodHead, http.MethodOptions:
+		return false
+	}
+	return site == "cross-site"
 }
 
 // hostGuard rejects requests whose Host is not an address this machine is

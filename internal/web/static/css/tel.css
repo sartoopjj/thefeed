@@ -1947,6 +1947,7 @@ input.tel-fwd-search:focus {
 
 .tel-profile-field {
   padding: 6px 16px 10px;
+  min-width: 0;
 }
 
 .tel-profile-label {
@@ -1956,6 +1957,10 @@ input.tel-fwd-search:focus {
 }
 
 .tel-profile-un {
+  /* A username has no spaces: without this a long one ran off the sheet. */
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  text-align: start;
   background: none;
   border: 0;
   padding: 2px 0;
@@ -1972,6 +1977,24 @@ input.tel-fwd-search:focus {
 
 .tel-profile-also .tel-profile-un {
   font-size: var(--text-sm);
+}
+
+.tel-profile-about {
+  /* Telegram keeps the line breaks; a long link has no spaces to break at. */
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  text-align: start;
+  font-size: var(--text-sm);
+  max-height: 40vh;
+  overflow-y: auto;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.tel-profile-note {
+  padding: 0 16px 10px;
+  font-size: var(--text-xs);
+  color: var(--text-dim);
 }
 
 .tel-invite .tel-btn {

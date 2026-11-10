@@ -1,7 +1,7 @@
 // Tapping the open chat's name shows its info, as in the messenger and in
 // Telegram: picture, name, what it is and how many are in it, every username
-// (the main one and the others it holds), and what can be done with it.
-// Nothing here is fetched: all of it came with the conversation already.
+// (the main one and the others it holds), a channel's description, and what
+// can be done with it. Only the description may need a call (tel_about.test).
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
@@ -20,15 +20,19 @@ const grab = (name) => src.match(new RegExp('(?:async )?function ' + name + '\\(
 const esc = (x) => String(x).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 const jsStr = (x) => esc(x).replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '&quot;');
 
-function profile(peer, dialog, blocked) {
+function profile(peer, dialog, blocked, about) {
   let sheet = null;
-  const telState = { peer, members: {}, membersFresh: {}, blocked: blocked ? { [peer.id]: {} } : {} };
+  const telState = { peer, members: {}, membersFresh: {}, blocked: blocked ? { [peer.id]: {} } : {},
+    about: about || {}, aboutBusy: {}, aboutFailed: {} };
+  const asked = [];
   const run = new Function('telState', 'telT', 'telEsc', 'telAttrQ', 'telAvatar', 'telSheet', 'telDialogFor', 'telPeerKey',
-    'jsStr', 'icon', 'telIsBlocked', 'telFmtCount', 'telSafeText', 'telUIDir',
-    ['telSheetItem', 'telMembersLine', 'telPeerProfile'].map(grab).join('\n') + '\nreturn telPeerProfile;');
+    'jsStr', 'icon', 'telIsBlocked', 'telFmtCount', 'telSafeText', 'telUIDir', 'telProfileAbout',
+    ['telSheetItem', 'telMembersLine', 'telHasFullInfo', 'telAboutHTML', 'telPeerProfile'].map(grab).join('\n') + '\nreturn telPeerProfile;');
   run(telState, (k) => '[' + k + ']', esc, esc, (n, size, th) => `<avatar ${size}>`, (h) => { sheet = h; },
     () => dialog, (p) => p.kind + ':' + p.id, jsStr, (n) => `<i ${n}>`,
-    (p) => !!blocked && (p.kind === 'user' || p.kind === 'bot'), (n) => String(n), String, () => 'rtl')();
+    (p) => !!blocked && (p.kind === 'user' || p.kind === 'bot'), (n) => String(n),
+    (x) => String(x).replace(/[\u202A-\u202E\u2066-\u2069]/g, ''), () => 'rtl', (k) => asked.push(k))();
+  profile.asked = asked;
   return sheet;
 }
 const text = (h) => h.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
@@ -77,6 +81,27 @@ const text = (h) => h.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
   eq('nor an extra one', /<z/.test(h) || /x"y/.test(h), false);
 }
 
+// --- a channel's description ------------------------------------------------
+{
+  const peer = { kind: 'channel', id: '9', title: 'News' };
+  const h = profile(peer, { peer }, false, { 'channel:9': { text: 'Hourly news.\nhttps://example.org', fresh: false } });
+  eq('the description, as last read (an old one too)', /tel-profile-about[^>]*>Hourly news\.\nhttps:\/\/example\.org</.test(h), true);
+  eq('its own labelled field', /\[tel_info_about\]/.test(h), true);
+  eq('in a slot the read can repaint', /id="telProfileAbout" data-key="channel:9"/.test(h), true);
+  eq('and the sheet asks for it to be brought up to date', profile.asked, ['channel:9']);
+  eq('nothing read yet: no empty field', /tel-profile-about/.test(profile(peer, { peer })), false);
+  const evil = profile(peer, { peer }, false, { 'channel:9': { text: '<img src=x onerror=alert(1)>\u202Egnp.exe', fresh: true } });
+  eq('a description is text, never markup', /<img/.test(evil), false);
+  eq('nor a direction override', /\u202E/.test(evil), false);
+  const sg = profile({ kind: 'group', id: '8', accessHash: '5', title: 'SG' }, { peer: {} });
+  eq('a supergroup has one too', /telProfileAbout/.test(sg), true);
+  for (const [name, p] of [['a person', { kind: 'user', id: '7' }], ['a bot', { kind: 'bot', id: '7' }],
+    ['a basic group', { kind: 'group', id: '5', accessHash: '0' }], ['direct messages', { kind: 'channel', id: '4', direct: true }]]) {
+    const x = profile(p, { peer: p });
+    eq(`${name}: no description slot, nothing asked`, [/telProfileAbout/.test(x), profile.asked.length], [false, 0]);
+  }
+}
+
 // --- reached by tapping the header -------------------------------------------
 const pane = grab('telRenderPane');
 eq('the header title opens it', /class="tel-topbar-title[^"]*" role="button"[^>]*onclick="telPeerProfile\(\)"/.test(pane), true);
@@ -86,7 +111,17 @@ const menu = grab('telThreadMenu');
 for (const f of ['telToggleBlock', 'telToggleMute', 'telCopyUsername', 'telDeleteChat', 'telJoinChannel'])
   eq(`⋮ still has ${f}`, menu.includes(f), true);
 
-for (const k of ['tel_info', 'tel_info_username', 'tel_info_also']) {
+// A username has no spaces to break at: it must wrap anywhere, or a long one
+// runs off a 320px screen (seen in the browser).
+const css = readFileSync(join(here, '..', 'static', 'css', 'tel.css'), 'utf8');
+eq('a long username wraps inside the sheet', /\.tel-profile-un \{[^}]*overflow-wrap: anywhere/.test(css), true);
+// Counts use one kind of digit everywhere: "1 مشترک" beside "2 مشترک", not "۱".
+eq('the singular uses the same digits as every other count',
+  /tel_subscribers_one: '1 /.test(i18n) && /tel_members_one: '1 /.test(i18n) && !/tel_(subscribers|members)_one: '۱/.test(i18n), true);
+
+eq('a long description wraps and scrolls inside the sheet',
+  /\.tel-profile-about \{[^}]*white-space: pre-wrap[^}]*overflow-wrap: anywhere[^}]*overflow-y: auto/.test(css), true);
+for (const k of ['tel_info', 'tel_info_username', 'tel_info_also', 'tel_info_about', 'tel_loading_about', 'tel_about_failed']) {
   eq(`${k} in both languages`, (i18n.match(new RegExp('\\b' + k + ':', 'g')) || []).length, 2);
 }
 

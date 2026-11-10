@@ -616,31 +616,64 @@ func TestSameOriginGuard(t *testing.T) {
 		called = true
 		w.WriteHeader(http.StatusOK)
 	}))
-
-	run := func(method, fetchSite string) (code int, reached bool) {
+	run := func(method, path, site, mode string) bool {
 		called = false
-		req := httptest.NewRequest(method, "/api/chat/send", nil)
-		if fetchSite != "" {
-			req.Header.Set("Sec-Fetch-Site", fetchSite)
+		req := httptest.NewRequest(method, path, nil)
+		if site != "" {
+			req.Header.Set("Sec-Fetch-Site", site)
+		}
+		if mode != "" {
+			req.Header.Set("Sec-Fetch-Mode", mode)
 		}
 		rec := httptest.NewRecorder()
 		guarded.ServeHTTP(rec, req)
-		return rec.Code, called
-	}
-
-	// Cross-site state-changing request is blocked before reaching the handler.
-	if code, reached := run(http.MethodPost, "cross-site"); code != http.StatusForbidden || reached {
-		t.Fatalf("cross-site POST: code=%d reached=%v, want 403/false", code, reached)
-	}
-	// Same-origin / native (no header) writes pass through.
-	for _, site := range []string{"same-origin", "same-site", "none", ""} {
-		if code, reached := run(http.MethodPost, site); code != http.StatusOK || !reached {
-			t.Fatalf("POST Sec-Fetch-Site=%q: code=%d reached=%v, want 200/true", site, code, reached)
+		if called != (rec.Code == http.StatusOK) {
+			t.Fatalf("%s %s: code %d but reached=%v", method, path, rec.Code, called)
 		}
+		return called
 	}
-	// Reads are never blocked, even cross-site.
-	if code, reached := run(http.MethodGet, "cross-site"); code != http.StatusOK || !reached {
-		t.Fatalf("cross-site GET: code=%d reached=%v, want 200/true", code, reached)
+	for _, tc := range []struct {
+		method, path, site, mode string
+		want                     bool
+	}{
+		// The app's own page, the user's own typing, and anything that is not
+		// a browser (curl, native shells, a proxy's health check): everything.
+		{"GET", "/api/tel/dialogs?refresh=1", "same-origin", "cors", true},
+		{"POST", "/api/chat/send", "same-origin", "cors", true},
+		{"GET", "/api/events", "same-origin", "cors", true},
+		{"GET", "/api/backup/export", "none", "navigate", true},
+		{"GET", "/api/status", "", "", true},
+		{"POST", "/api/chat/send", "", "", true},
+		// Another web page: no API call, read or write. A GET is enough to
+		// spend Telegram queries and to tell the page the app is running.
+		{"GET", "/api/tel/dialogs?refresh=1", "cross-site", "no-cors", false},
+		{"GET", "/api/tel/dialogs?refresh=1", "cross-site", "navigate", false},
+		{"HEAD", "/api/status", "cross-site", "no-cors", false},
+		{"OPTIONS", "/api/chat/send", "cross-site", "cors", false},
+		{"POST", "/api/chat/send", "cross-site", "no-cors", false},
+		{"GET", "/api", "cross-site", "no-cors", false},
+		// Same-site is another port on localhost or another subdomain: other
+		// software, never this app's page.
+		{"GET", "/api/config", "same-site", "no-cors", false},
+		{"POST", "/api/chat/send", "same-site", "cors", false},
+		// A value the browser may add later is not trusted either.
+		{"GET", "/api/config", "something-new", "cors", false},
+		{"GET", "/api/config", "Cross-Site", "cors", false},
+		// The page and its files stay reachable from anywhere: a link from
+		// another site, a dashboard framing the app or showing its icon, a
+		// status check fetching the page.
+		{"GET", "/", "cross-site", "navigate", true},
+		{"GET", "/", "same-site", "navigate", true},
+		{"HEAD", "/", "cross-site", "no-cors", true},
+		{"GET", "/static/lion-sun.svg", "cross-site", "no-cors", true},
+		{"GET", "/apix", "cross-site", "no-cors", true},
+		// But never a write there either, as before.
+		{"POST", "/", "cross-site", "no-cors", false},
+	} {
+		if got := run(tc.method, tc.path, tc.site, tc.mode); got != tc.want {
+			t.Errorf("%s %s Sec-Fetch-Site=%q mode=%q: allowed=%v, want %v",
+				tc.method, tc.path, tc.site, tc.mode, got, tc.want)
+		}
 	}
 }
 

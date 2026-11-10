@@ -58,16 +58,17 @@ eq('the header line follows the UI direction', /class="tel-thread-sub" dir="' \+
 const open = grab('telOpenPeer');
 eq('opening a chat reads its count', /telLoadMembers\(/.test(open), true);
 const load = grab('telLoadMembers');
-eq('the count is read from the cache endpoint', /\/api\/tel\/members\?/.test(load), true);
+eq('the count is read from the cache endpoint', /telFetch\(telInfoURL\(/.test(load) && /\/api\/tel\/members\?/.test(grab('telInfoURL')), true);
 eq('without taking the link', /telOp\(|telBgOp\(|telCall\(/.test(load), false);
 eq('the backend does not fetch it behind the page\'s back', /tel-members/.test(sse), false);
 eq('a new account starts with no counts', /telState\.members = \{\}/.test(grab('telResetData')) &&
   /telState\.membersFresh = \{\}/.test(grab('telResetData')), true);
 {
   // The cache read keeps what is on screen but says whether it is current.
-  const st = { peer: { kind: 'channel', id: '9' }, members: { 'channel:9': 10 }, membersFresh: { 'channel:9': true } };
+  const st = { peer: { kind: 'channel', id: '9' }, members: { 'channel:9': 10 }, membersFresh: { 'channel:9': true }, about: {} };
   let answer = { ok: true, known: false, members: 0 };
-  const load = new Function('telState', 'telPeerKey', 'telFetch', 'telRender', grab('telLoadMembers') + '\nreturn telLoadMembers;')(
+  const load = new Function('telState', 'telPeerKey', 'telFetch', 'telRender',
+    ['telNoteInfo', 'telInfoURL', 'telLoadMembers'].map(grab).join('\n') + '\nreturn telLoadMembers;')(
     st, (p) => p.kind + ':' + p.id, async () => answer, () => {});
   await load();
   eq('expired in the backend: still shown, no longer fresh', [st.members['channel:9'], st.membersFresh['channel:9']], [10, false]);

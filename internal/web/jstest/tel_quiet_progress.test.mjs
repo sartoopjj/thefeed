@@ -50,7 +50,24 @@ function paint(state) {
 eq('idle stays down', paint({ info: { connected: true } }).shown, false);
 
 // The live query counter is re-read only while something runs.
-eq('the counter keeps moving during an ad fetch', /telState\.adBusy/.test(grab('telTick')), true);
+
+// While an ad loads, the automatic check still runs when it is due: ads are
+// the lowest priority, and the check's own operation cancels the ad. Counting
+// the ad as "in flight" there skipped every check for as long as the ad took
+// (up to the call timeout) -- found in review.
+async function tick(state) {
+  const calls = [];
+  const run = new Function('telState', 'telPaintCountdown', 'telPresenceTick', 'telExpireTick', 'telAutoResume',
+    'telFetch', 'telScreenKey', 'telPaintProgress', 'telRender', 'telReady', 'document', 'telScheduleNext',
+    'telThreadFetchNew', 'telRefreshTicks', 'telRefreshDialogs', grab('telTick') + '\nreturn telTick;');
+  run(state, () => {}, () => {}, () => {}, () => {}, async () => { calls.push('info'); return {}; }, () => '', () => {}, () => {},
+    () => true, { hidden: false }, () => {}, async () => { calls.push('thread'); }, async () => {}, async () => { calls.push('list'); })();
+  await Promise.resolve();
+  return calls;
+}
+eq('an ad loading does not stop the due check', (await tick({ open: true, adBusy: true, nextAt: 0, ticks: 1 })).includes('list'), true);
+eq('and its counter still moves', (await tick({ open: true, adBusy: true, nextAt: 0, ticks: 1 })).includes('info'), true);
+eq('a real operation still holds the check back', (await tick({ open: true, bg: true, nextAt: 0, ticks: 1 })).includes('list'), false);
 
 // --- ads: visible, yet still never in the way --------------------------------
 
@@ -86,7 +103,10 @@ eq('opening asks for the count after the counters, before the ads',
   open.indexOf('telFetchMembers(') < open.indexOf('telLoadAds('), true);
 eq('and inside the planned steps', open.indexOf('telFetchMembers(') < open.indexOf('telStepsDone()'), true);
 
-const fetchFn = grab('telFetchMembers');
+// The step and its helpers: the shared read (telAskInfo) and what it keeps.
+const fetchFn = 'var telInfoFlight = {};\n' +
+  ['telHasFullInfo', 'telNoteInfo', 'telAskInfo', 'telFetchMembers'].map(grab).join('\n') +
+  '\nfunction telPaintAbout() {}';
 function members(state, peer) {
   const calls = [];
   const run = new Function('telState', 'telPeerKey', 'telBgOp', 'telCallQuiet', 'telStepsMore', 'telRender',
@@ -95,17 +115,29 @@ function members(state, peer) {
     async (label, fn) => { calls.push(label); return fn(); },
     async (url, body) => { calls.push(url); return { ok: true, members: 321, known: true }; },
     () => {}, () => {}, async () => {});
-  return { calls, go: () => f('channel:9', peer) };
+  return { calls, go: () => f(peer.kind + ':' + peer.id, peer) };
 }
 {
-  const st = { peer: { kind: 'channel', id: '9' }, members: {}, membersFresh: {} };
+  const st = { peer: { kind: 'channel', id: '9' }, members: {}, membersFresh: {}, about: {} };
   const m = members(st, st.peer);
   await m.go();
   eq('an unknown count is a visible step', m.calls, ['tel_loading_members', '/api/tel/members']);
   eq('and lands in the header', st.members['channel:9'], 321);
 }
 {
-  const st = { peer: { kind: 'channel', id: '9' }, members: { 'channel:9': 10 }, membersFresh: { 'channel:9': true } };
+  // The user moves to another chat while the cache is being read: the step
+  // must not go on to ask Telegram about the chat they left.
+  const st = { peer: { kind: 'channel', id: '9' }, members: {}, membersFresh: {}, about: {} };
+  const calls = [];
+  const f = new Function('telState', 'telPeerKey', 'telBgOp', 'telCallQuiet', 'telStepsMore', 'telRender', 'telLoadMembers',
+    fetchFn + '\nreturn telFetchMembers;')(st, (p) => p.kind + ':' + p.id,
+    async (label, fn) => { calls.push(label); return fn(); }, async (u) => { calls.push(u); return { ok: true, known: true, members: 1 }; },
+    () => {}, () => {}, async () => { st.peer = { kind: 'user', id: '7' }; });
+  await f('channel:9', { kind: 'channel', id: '9' });
+  eq('switched away during the cache read: Telegram is not asked', calls, []);
+}
+{
+  const st = { peer: { kind: 'channel', id: '9' }, members: { 'channel:9': 10 }, membersFresh: { 'channel:9': true }, about: {} };
   const m = members(st, st.peer);
   await m.go();
   eq('a fresh count costs nothing', m.calls, []);
@@ -115,7 +147,7 @@ function members(state, peer) {
   // is no longer current. It is shown until the new one lands, and read again
   // -- held in memory as "known", it was never read again while the page
   // lived, which on a phone is days.
-  const st = { peer: { kind: 'channel', id: '9' }, members: { 'channel:9': 10 }, membersFresh: { 'channel:9': false } };
+  const st = { peer: { kind: 'channel', id: '9' }, members: { 'channel:9': 10 }, membersFresh: { 'channel:9': false }, about: {} };
   const m = members(st, st.peer);
   await m.go();
   eq('a stale count is read again', m.calls, ['tel_loading_members', '/api/tel/members']);
@@ -123,7 +155,7 @@ function members(state, peer) {
 }
 {
   const peer = { kind: 'channel', id: '9', members: 50 };
-  const st = { peer, members: {}, membersFresh: {} };
+  const st = { peer, members: {}, membersFresh: {}, about: {} };
   const m = members(st, peer);
   await m.go();
   eq('nor does one that came with the list', m.calls, []);
@@ -131,14 +163,14 @@ function members(state, peer) {
 for (const [what, peer] of [['person', { kind: 'user', id: '9' }], ['bot', { kind: 'bot', id: '9' }],
   ['direct chat', { kind: 'group', id: '9', accessHash: '4', direct: true }],
   ['basic group', { kind: 'group', id: '9', accessHash: '0' }]]) {
-  const st = { peer, members: {}, membersFresh: {} };
+  const st = { peer, members: {}, membersFresh: {}, about: {} };
   const m = members(st, peer);
   await m.go();
   eq(`no count is asked for a ${what}`, m.calls, []);
 }
 {
   const peer = { kind: 'group', id: '9', accessHash: '4' };
-  const st = { peer, members: {}, membersFresh: {} };
+  const st = { peer, members: {}, membersFresh: {}, about: {} };
   const m = members(st, peer);
   await m.go();
   eq('a supergroup is asked for', m.calls, ['tel_loading_members', '/api/tel/members']);

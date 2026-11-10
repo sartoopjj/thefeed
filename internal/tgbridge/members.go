@@ -7,30 +7,37 @@ import (
 	"github.com/gotd/td/tg"
 )
 
-// MemberCount reads a channel's or supergroup's member count from its full
-// info: one call, for when the entity came without one. 0 means the channel
-// does not show it.
-func (b *Bridge) MemberCount(ctx context.Context, peer Peer) (int, error) {
+// ChannelInfo is what a channel's full info adds to its entity: the member
+// count (0: the channel does not show it) and its description.
+type ChannelInfo struct {
+	Members int
+	About   string
+}
+
+// ChannelInfo reads a channel's or supergroup's full info: one call, for a
+// member count the entity came without or a description (the entity never
+// has one).
+func (b *Bridge) ChannelInfo(ctx context.Context, peer Peer) (ChannelInfo, error) {
 	if !peer.ChannelBased() || peer.Direct {
-		return 0, errors.New("tgbridge: member count is read for channels only")
+		return ChannelInfo{}, errors.New("tgbridge: full info is read for channels only")
 	}
 	_, api, err := b.snapshot()
 	if err != nil {
-		return 0, err
+		return ChannelInfo{}, err
 	}
 	full, err := api.ChannelsGetFullChannel(ctx, &tg.InputChannel{
 		ChannelID: peer.ID, AccessHash: peer.AccessHash,
 	})
 	if err != nil {
-		return 0, err
+		return ChannelInfo{}, err
 	}
-	return membersFromFull(full), nil
+	return infoFromFull(full), nil
 }
 
-func membersFromFull(full *tg.MessagesChatFull) int {
+func infoFromFull(full *tg.MessagesChatFull) ChannelInfo {
 	if cf, ok := full.FullChat.(*tg.ChannelFull); ok {
 		n, _ := cf.GetParticipantsCount()
-		return n
+		return ChannelInfo{Members: n, About: cf.About}
 	}
-	return 0
+	return ChannelInfo{}
 }

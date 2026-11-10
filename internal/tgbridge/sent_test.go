@@ -19,6 +19,17 @@ func TestSentMessageCarriesTelegramsTime(t *testing.T) {
 		"short sent (private chat)": {&tg.UpdateShortSentMessage{ID: 40, Date: 1_800_000_000}, 40, 1_800_000_000},
 		"updates with the message": {&tg.Updates{Date: 1_800_000_200, Updates: []tg.UpdateClass{
 			&tg.UpdateMessageID{ID: 41, RandomID: 7}, &tg.UpdateNewMessage{Message: newMsg}}}, 41, 1_800_000_100},
+		// Someone else's message rides along in the same answer, before and
+		// after ours: ours is the one with our random id, and its time.
+		"a message from them alongside": {&tg.Updates{Date: 1_800_000_200, Updates: []tg.UpdateClass{
+			&tg.UpdateNewMessage{Message: &tg.Message{ID: 39, Date: 1_700_000_000, PeerID: &tg.PeerUser{UserID: 1}}},
+			&tg.UpdateMessageID{ID: 41, RandomID: 7},
+			&tg.UpdateNewMessage{Message: newMsg},
+			&tg.UpdateNewMessage{Message: &tg.Message{ID: 42, Date: 1_900_000_000, PeerID: &tg.PeerUser{UserID: 1}}}}}, 41, 1_800_000_100},
+		// No id update at all: our own (outgoing) message, not theirs.
+		"no id update": {&tg.Updates{Date: 1_800_000_200, Updates: []tg.UpdateClass{
+			&tg.UpdateNewMessage{Message: &tg.Message{ID: 50, Date: 1_700_000_000, PeerID: &tg.PeerUser{UserID: 1}}},
+			&tg.UpdateNewMessage{Message: &tg.Message{ID: 51, Out: true, Date: 1_800_000_050, PeerID: &tg.PeerUser{UserID: 1}}}}}, 51, 1_800_000_050},
 		"channel message": {&tg.Updates{Date: 1_800_000_200, Updates: []tg.UpdateClass{
 			&tg.UpdateNewChannelMessage{Message: &tg.Message{ID: 9, Date: 1_800_000_150, PeerID: &tg.PeerChannel{ChannelID: 2}}}}}, 9, 1_800_000_150},
 		// Only the id: the container's own time is Telegram's clock too.
@@ -28,7 +39,7 @@ func TestSentMessageCarriesTelegramsTime(t *testing.T) {
 		// Says nothing: neither is known, and the caller reads it back.
 		"bare": {&tg.UpdatesTooLong{}, 0, 0},
 	} {
-		got := sentMessage(tc.ups)
+		got := sentMessage(tc.ups, 7)
 		if got.ID != tc.id || got.Date != tc.date {
 			t.Errorf("%s: got id %d date %d, want id %d date %d", name, got.ID, got.Date, tc.id, tc.date)
 		}

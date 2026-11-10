@@ -634,15 +634,17 @@ func (b *Bridge) SendText(ctx context.Context, peer Peer, text string, randomID 
 	if err != nil {
 		return Sent{}, err
 	}
-	return sentMessage(ups), nil
+	return sentMessage(ups, randomID), nil
 }
 
 // sentMessage digs the assigned id and Telegram's time out of a send's
 // answer. Zero means Telegram did not say, which is not an error -- the
 // message was accepted either way, and the caller falls back to reading it
-// back. The time is the message's own where the answer carries it, else the
-// answer's: both are Telegram's clock, never the device's.
-func sentMessage(ups tg.UpdatesClass) Sent {
+// back. The answer can carry other new messages too (someone else's, that
+// arrived meanwhile), so ours is the one Telegram files under our randomID;
+// failing that, the first outgoing one. The time is that message's own, else
+// the answer's: both are Telegram's clock, never the device's.
+func sentMessage(ups tg.UpdatesClass, randomID int64) Sent {
 	var (
 		list []tg.UpdateClass
 		date int
@@ -659,21 +661,46 @@ func sentMessage(ups tg.UpdatesClass) Sent {
 		list, date = []tg.UpdateClass{u.Update}, u.Date
 	}
 	var out Sent
+	firstID := 0
 	for _, up := range list {
-		switch t := up.(type) {
-		case *tg.UpdateMessageID:
-			if out.ID == 0 {
-				out.ID = t.ID
+		if m, ok := up.(*tg.UpdateMessageID); ok {
+			if m.RandomID == randomID {
+				out.ID = m.ID
+				break
 			}
-		case *tg.UpdateNewMessage:
-			if m, ok := t.Message.(*tg.Message); ok {
-				out.ID, out.Date = m.ID, m.Date
-			}
-		case *tg.UpdateNewChannelMessage:
-			if m, ok := t.Message.(*tg.Message); ok {
-				out.ID, out.Date = m.ID, m.Date
+			if firstID == 0 {
+				firstID = m.ID
 			}
 		}
+	}
+	if out.ID == 0 {
+		out.ID = firstID
+	}
+	// The new message itself: the one with that id, or with no id update,
+	// the first one we sent -- failing that, the first one at all, which is
+	// what a channel post answers with.
+	var first *tg.Message
+	for _, up := range list {
+		var msg *tg.Message
+		switch t := up.(type) {
+		case *tg.UpdateNewMessage:
+			msg, _ = t.Message.(*tg.Message)
+		case *tg.UpdateNewChannelMessage:
+			msg, _ = t.Message.(*tg.Message)
+		}
+		if msg == nil {
+			continue
+		}
+		if first == nil {
+			first = msg
+		}
+		if (out.ID != 0 && msg.ID == out.ID) || (out.ID == 0 && msg.Out) {
+			out.ID, out.Date = msg.ID, msg.Date
+			break
+		}
+	}
+	if out.ID == 0 && first != nil {
+		out.ID, out.Date = first.ID, first.Date
 	}
 	if out.ID != 0 && out.Date == 0 {
 		out.Date = date

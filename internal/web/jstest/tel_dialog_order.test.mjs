@@ -115,6 +115,23 @@ const order = (st) => st.dialogs.map((d) => d.peer.kind + ':' + d.peer.id);
 }
 
 {
+  // A chat unpinned on the phone that has aged off the first page: the page
+  // does not mention it, yet every pin is on the first page -- so it is not
+  // pinned any more. A later page says nothing about pins.
+  const h = harness();
+  h.telApplyPage({ dialogs: [row('user', 1, 10, 100, { pinned: true, pinOrder: 1 }), row('user', 2, 10, 5000)] }, true, true);
+  h.telApplyPage({ dialogs: [row('user', 2, 10, 5000)] }, false, true);
+  const d1 = h.telState.dialogs.find((d) => d.peer.id === '1');
+  eq('a first page without it unpins it', [d1.pinned, d1.pinOrder || 0], [false, 0]);
+  eq('so it drops to its place by time', order(h.telState), ['user:2', 'user:1']);
+  h.telApplyPage({ dialogs: [row('user', 1, 10, 100, { pinned: true, pinOrder: 1 })] }, false, true);
+  h.telApplyPage({ dialogs: [row('user', 9, 10, 50)] }, false, false);
+  eq('a later page leaves pins alone', !!h.telState.dialogs.find((d) => d.peer.id === '1').pinned, true);
+}
+for (const fn of ['telPrimeFromCache', 'telLoadDialogs', 'telRefreshDialogs'])
+  eq(`${fn} applies a FIRST page`, /telApplyPage\(r\.page, (true|false), true\)/.test(grab(fn)), true);
+eq('load-more applies a later page', /telApplyPage\(r\.page, false\)/.test(grab('telLoadMoreDialogs')), true);
+{
   // A channel opened by @username or a link, not joined: the row is there to
   // come back to, so it sits right under the pins -- newest visit first --
   // even with no messages at all. By time, an empty one went to the very

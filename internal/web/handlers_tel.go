@@ -1399,6 +1399,8 @@ func (h *telHub) resyncFromDialogs(ctx context.Context, st tgbridge.UpdateState)
 	// paid DNS queries for with "load more chats", and did so on any resync:
 	// a cursor gap, or a single post from a channel the cache had not seen.
 	h.store().MergeDialogs(page.Dialogs)
+	// A first page (twenty rows): every pin is on it.
+	h.store().SettlePins(page.Dialogs)
 	h.store().SetDialogTotal(page.TotalKnown)
 	// Deliberately NOT SetDialogsComplete: this fetches a short page on
 	// purpose, to re-establish the cursor. It says nothing about whether the

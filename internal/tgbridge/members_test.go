@@ -28,18 +28,19 @@ func TestMembersFromChannel(t *testing.T) {
 	}
 }
 
-// The fallback reads the count from a channel's full info.
+// The fallback reads the count from a channel's full info, and the
+// description with it: the same answer, so never a second call.
 func TestMembersFromFullChannel(t *testing.T) {
-	full := &tg.ChannelFull{ID: 9}
+	full := &tg.ChannelFull{ID: 9, About: "News, every hour.\nhttps://example.org"}
 	full.SetParticipantsCount(777)
-	if n := membersFromFull(&tg.MessagesChatFull{FullChat: full}); n != 777 {
-		t.Fatalf("members = %d, want 777", n)
+	if got := infoFromFull(&tg.MessagesChatFull{FullChat: full}); got.Members != 777 || got.About != full.About {
+		t.Fatalf("info = %+v", got)
 	}
 	// A channel that hides its count says nothing: 0, not an error.
-	if n := membersFromFull(&tg.MessagesChatFull{FullChat: &tg.ChannelFull{ID: 9}}); n != 0 {
-		t.Fatalf("hidden count = %d", n)
+	if got := infoFromFull(&tg.MessagesChatFull{FullChat: &tg.ChannelFull{ID: 9}}); got != (ChannelInfo{}) {
+		t.Fatalf("hidden count, no description = %+v", got)
 	}
-	if n := membersFromFull(&tg.MessagesChatFull{FullChat: &tg.ChatFull{ID: 5}}); n != 0 {
-		t.Fatalf("not a channel = %d", n)
+	if got := infoFromFull(&tg.MessagesChatFull{FullChat: &tg.ChatFull{ID: 5, About: "x"}}); got != (ChannelInfo{}) {
+		t.Fatalf("not a channel = %+v", got)
 	}
 }
