@@ -80,15 +80,17 @@ type telCacheData struct {
 	// Directs maps a channel to its direct-messages conversation, so finding
 	// it costs one call per channel, ever.
 	Directs map[string]tgbridge.Peer `json:"directs,omitempty"`
-	// Members are what a channel's full info was last read to say -- its
-	// member count (the entity often comes without one) and its description
-	// (the entity never has one) -- by conversation key. A read holds for a
-	// day; an older description is still shown when it cannot be read again.
+	// Members are what a conversation's full info was last read to say -- a
+	// channel's member count (the entity often comes without one) and the
+	// description or bio (the entity never has one) -- by conversation key.
+	// A read holds for a day; an older description is still shown when it
+	// cannot be read again.
 	Members map[string]telMemberCount `json:"members,omitempty"`
 }
 
-// telMemberCount is one read of a channel's full info. N 0 is a channel that
-// hides its count, which is an answer too.
+// telMemberCount is one read of a conversation's full info. N 0 is a channel
+// that hides its count, which is an answer too; a person's entry has only
+// the About half.
 type telMemberCount struct {
 	N  int   `json:"n"`
 	At int64 `json:"at"`
@@ -984,7 +986,7 @@ func (c *telCache) Members(key string, now time.Time) (int, bool) {
 	return m.N, true
 }
 
-// About is a channel's description as last read, whether it was ever read,
+// About is a channel's description or a person's or bot's bio as last read, whether it was ever read,
 // and whether that read is within the day. Kept past the day: a stale
 // description beats none when Telegram cannot be reached.
 func (c *telCache) About(key string, now time.Time) (text string, read, fresh bool) {
@@ -1000,20 +1002,41 @@ func (c *telCache) About(key string, now time.Time) (text string, read, fresh bo
 	return m.About, true, now.Sub(time.Unix(m.AboutAt, 0)) < telMembersFor
 }
 
-// SetChannelInfo records a full-info read from Telegram at now.
-func (c *telCache) SetChannelInfo(key string, info tgbridge.ChannelInfo, now time.Time) {
+// SetChannelInfo records a channel's full-info read from Telegram at now:
+// its member count and its description.
+func (c *telCache) SetChannelInfo(key string, info tgbridge.PeerInfo, now time.Time) {
 	c.putInfo(key, now, func(m *telMemberCount) {
 		*m = telMemberCount{N: info.Members, At: now.Unix(), About: info.About, AboutAt: now.Unix()}
 	})
 }
 
-// SetInfoRefused records Telegram declining to describe a channel (private,
-// banned): no count, held for the day like a hidden one so every open does
-// not ask again, and the description it last had stays.
-func (c *telCache) SetInfoRefused(key string, now time.Time) {
+// SetAbout records a person's or bot's bio read from Telegram at now. No
+// member count: they have none.
+func (c *telCache) SetAbout(key, about string, now time.Time) {
 	c.putInfo(key, now, func(m *telMemberCount) {
-		m.N, m.At, m.AboutAt = 0, now.Unix(), now.Unix()
+		m.About, m.AboutAt = about, now.Unix()
 	})
+}
+
+// SetInfoRefused records Telegram declining to describe a conversation
+// (a private or banned channel, a deleted account): held for the day so
+// every open does not ask again -- for a channel as a hidden count too --
+// and the description it last had stays.
+func (c *telCache) SetInfoRefused(key string, channel bool, now time.Time) {
+	c.putInfo(key, now, func(m *telMemberCount) {
+		if channel {
+			m.N, m.At = 0, now.Unix()
+		}
+		m.AboutAt = now.Unix()
+	})
+}
+
+// readAt is when an entry was last written, for eviction.
+func (m telMemberCount) readAt() int64 {
+	if m.AboutAt > m.At {
+		return m.AboutAt
+	}
+	return m.At
 }
 
 func (c *telCache) putInfo(key string, now time.Time, set func(*telMemberCount)) {
@@ -1039,7 +1062,7 @@ func (c *telCache) putInfo(key string, now time.Time, set func(*telMemberCount))
 		for k := range c.data.Members {
 			keys = append(keys, k)
 		}
-		sort.Slice(keys, func(i, j int) bool { return c.data.Members[keys[i]].At < c.data.Members[keys[j]].At })
+		sort.Slice(keys, func(i, j int) bool { return c.data.Members[keys[i]].readAt() < c.data.Members[keys[j]].readAt() })
 		for _, k := range keys[:over] {
 			delete(c.data.Members, k)
 		}

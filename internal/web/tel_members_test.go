@@ -34,7 +34,7 @@ func TestTelMembersCache(t *testing.T) {
 	if _, ok := c.Members(telCacheKey(telTestChannel), now); ok {
 		t.Fatal("a channel with no count claims one")
 	}
-	c.SetChannelInfo(telCacheKey(telTestChannel), tgbridge.ChannelInfo{Members: 12345}, now)
+	c.SetChannelInfo(telCacheKey(telTestChannel), tgbridge.PeerInfo{Members: 12345}, now)
 	if n, ok := c.Members(telCacheKey(telTestChannel), now.Add(23*time.Hour)); !ok || n != 12345 {
 		t.Fatalf("within the day: %d %v", n, ok)
 	}
@@ -42,14 +42,14 @@ func TestTelMembersCache(t *testing.T) {
 		t.Fatal("a count older than a day is still served as fresh")
 	}
 	// A hidden count is an answer too: asked once a day, not every open.
-	c.SetChannelInfo("channel:77", tgbridge.ChannelInfo{Members: 0}, now)
+	c.SetChannelInfo("channel:77", tgbridge.PeerInfo{Members: 0}, now)
 	if n, ok := c.Members("channel:77", now.Add(time.Hour)); !ok || n != 0 {
 		t.Fatalf("hidden count: %d %v", n, ok)
 	}
 	// Writing a new read drops expired counts kept from before descriptions
 	// were (nothing to show from them); a read with its description stays.
 	c.data.Members["channel:76"] = telMemberCount{N: 3, At: now.Unix()}
-	c.SetChannelInfo("channel:78", tgbridge.ChannelInfo{Members: 5}, now.Add(48*time.Hour))
+	c.SetChannelInfo("channel:78", tgbridge.PeerInfo{Members: 5}, now.Add(48*time.Hour))
 	if _, ok := c.data.Members["channel:76"]; ok {
 		t.Fatal("an expired count with no description was kept")
 	}
@@ -90,7 +90,7 @@ func TestTelMembersDoNotFreeze(t *testing.T) {
 		t.Fatalf("a message without a count kept the old one: %d", n)
 	}
 	// Read on the next open, it holds for the day, then is read again.
-	c.SetChannelInfo(key, tgbridge.ChannelInfo{Members: 700}, now)
+	c.SetChannelInfo(key, tgbridge.PeerInfo{Members: 700}, now)
 	if n, ok := c.Members(key, now.Add(23*time.Hour)); !ok || n != 700 {
 		t.Fatalf("today's read: %d %v", n, ok)
 	}
@@ -146,7 +146,7 @@ func TestTelMembersFetch(t *testing.T) {
 	if ok, _, _, raw := post(`{"kind":"channel","id":"9","accessHash":"1"}`); ok {
 		t.Fatalf("a missing count was answered without asking Telegram: %s", raw)
 	}
-	s.tel.store().SetChannelInfo(telCacheKey(telTestChannel), tgbridge.ChannelInfo{Members: 10}, time.Now())
+	s.tel.store().SetChannelInfo(telCacheKey(telTestChannel), tgbridge.PeerInfo{Members: 10}, time.Now())
 	if ok, known, n, raw := post(`{"kind":"channel","id":"9","accessHash":"1"}`); !ok || !known || n != 10 {
 		t.Fatalf("a count read today was asked for again: %s", raw)
 	}
@@ -155,7 +155,7 @@ func TestTelMembersFetch(t *testing.T) {
 // The page reads the count from here: the cache only, never the link.
 func TestTelMembersEndpoint(t *testing.T) {
 	s := newTelTestServer(t)
-	s.tel.store().SetChannelInfo(telCacheKey(telTestChannel), tgbridge.ChannelInfo{Members: 12345}, time.Now())
+	s.tel.store().SetChannelInfo(telCacheKey(telTestChannel), tgbridge.PeerInfo{Members: 12345}, time.Now())
 	rec := httptest.NewRecorder()
 	s.handleTelMembers(rec, httptest.NewRequest(http.MethodGet, "/api/tel/members?kind=channel&id=9&accessHash=1", nil))
 	var resp struct {
@@ -205,7 +205,7 @@ func TestTelChannelAboutCache(t *testing.T) {
 	if _, read, _ := c.About(key, now); read {
 		t.Fatal("a count kept from before reads as an (empty) description")
 	}
-	c.SetChannelInfo(key, tgbridge.ChannelInfo{Members: 9, About: "Hourly news"}, now)
+	c.SetChannelInfo(key, tgbridge.PeerInfo{Members: 9, About: "Hourly news"}, now)
 	if a, read, fresh := c.About(key, now.Add(23*time.Hour)); a != "Hourly news" || !read || !fresh {
 		t.Fatalf("within the day: %q %v %v", a, read, fresh)
 	}
@@ -216,7 +216,7 @@ func TestTelChannelAboutCache(t *testing.T) {
 	// Telegram refuses it now (left, went private): no count, the old text
 	// stays, and it is not asked again today.
 	later := now.Add(30 * time.Hour)
-	c.SetInfoRefused(key, later)
+	c.SetInfoRefused(key, true, later)
 	if a, read, fresh := c.About(key, later.Add(time.Hour)); a != "Hourly news" || !read || !fresh {
 		t.Fatalf("after a refusal: %q %v %v", a, read, fresh)
 	}
@@ -224,7 +224,7 @@ func TestTelChannelAboutCache(t *testing.T) {
 		t.Fatalf("refusal count: %d %v", n, ok)
 	}
 	// An empty description read is an answer too.
-	c.SetChannelInfo("channel:5", tgbridge.ChannelInfo{}, now)
+	c.SetChannelInfo("channel:5", tgbridge.PeerInfo{}, now)
 	if a, read, fresh := c.About("channel:5", now); a != "" || !read || !fresh {
 		t.Fatalf("empty description: %q %v %v", a, read, fresh)
 	}
@@ -234,7 +234,7 @@ func TestTelChannelAboutCache(t *testing.T) {
 	}
 	// Bounded: past telInfoMax the oldest reads go, never the one just made.
 	for i := 0; i < telInfoMax+20; i++ {
-		c.SetChannelInfo(fmt.Sprintf("channel:%d", 1000+i), tgbridge.ChannelInfo{About: "x"}, now.Add(time.Duration(i)*time.Second))
+		c.SetChannelInfo(fmt.Sprintf("channel:%d", 1000+i), tgbridge.PeerInfo{About: "x"}, now.Add(time.Duration(i)*time.Second))
 	}
 	if len(c.data.Members) != telInfoMax {
 		t.Fatalf("kept %d reads, bound is %d", len(c.data.Members), telInfoMax)
@@ -253,7 +253,7 @@ func TestTelClearCacheDropsChannelInfo(t *testing.T) {
 	for _, which := range []string{"one", "all"} {
 		s := newTelTestServer(t)
 		key := telCacheKey(telTestChannel)
-		s.tel.store().SetChannelInfo(key, tgbridge.ChannelInfo{Members: 7, About: "about"}, time.Now())
+		s.tel.store().SetChannelInfo(key, tgbridge.PeerInfo{Members: 7, About: "about"}, time.Now())
 		rec := httptest.NewRecorder()
 		if which == "one" {
 			s.handleCacheClearOne(rec, telJSONReq("/api/cache/clear-one", `{"which":"telegram"}`))
@@ -285,11 +285,11 @@ func TestTelChannelAboutFetch(t *testing.T) {
 	s.tel.store().PutDialogs([]tgbridge.Dialog{{Peer: free}})
 	key := telCacheKey(telTestChannel)
 	calls := 0
-	var answer tgbridge.ChannelInfo
+	var answer tgbridge.PeerInfo
 	var fail error
-	orig := telReadChannelInfo
-	defer func() { telReadChannelInfo = orig }()
-	telReadChannelInfo = func(ctx context.Context, h *telHub, p tgbridge.Peer) (tgbridge.ChannelInfo, error) {
+	orig := telReadPeerInfo
+	defer func() { telReadPeerInfo = orig }()
+	telReadPeerInfo = func(ctx context.Context, h *telHub, p tgbridge.Peer) (tgbridge.PeerInfo, error) {
 		calls++
 		return answer, fail
 	}
@@ -314,7 +314,7 @@ func TestTelChannelAboutFetch(t *testing.T) {
 		t.Fatalf("count from the row: %+v, %d calls", r, calls)
 	}
 	// The info sheet: the description was never read, so one call.
-	answer = tgbridge.ChannelInfo{Members: 501, About: "Hourly news"}
+	answer = tgbridge.PeerInfo{Members: 501, About: "Hourly news"}
 	if r := post(`{"peer":` + ch + `,"about":true}`); !r.OK || r.About != "Hourly news" || !r.AboutFresh || calls != 1 {
 		t.Fatalf("first open of the info: %+v, %d calls", r, calls)
 	}
@@ -348,12 +348,100 @@ func TestTelChannelAboutFetch(t *testing.T) {
 	if r := post(`{"peer":` + ch + `,"about":true}`); calls != 3 {
 		t.Fatalf("a refusal was asked again the same day: %+v", r)
 	}
-	// Not channels: never a call, whatever is asked.
-	s.tel.store().PutDialogs([]tgbridge.Dialog{{Peer: telTestGroup}})
-	for _, p := range []string{`{"kind":"user","id":"1","accessHash":"1"}`, `{"kind":"group","id":"5","accessHash":"0"}`} {
+	// A basic group or a channel's direct messages: never a call.
+	direct := tgbridge.Peer{Kind: tgbridge.PeerGroup, ID: 31, AccessHash: 4, Direct: true}
+	s.tel.store().PutDialogs([]tgbridge.Dialog{{Peer: telTestGroup}, {Peer: direct}})
+	for _, p := range []string{`{"kind":"group","id":"5","accessHash":"0"}`, `{"kind":"group","id":"31","accessHash":"4"}`} {
 		if r := post(`{"peer":` + p + `,"about":true}`); !r.OK || calls != 3 {
 			t.Fatalf("%s: %+v, %d calls", p, r, calls)
 		}
+	}
+}
+
+// A person's or bot's bio: read when their info is opened, once a day, the
+// old one kept when a read fails. Never read by opening the chat itself, and
+// never a member count.
+func TestTelPersonBioFetch(t *testing.T) {
+	s := newTelTestServer(t)
+	calls := 0
+	var asked tgbridge.Peer
+	answer, fail := tgbridge.PeerInfo{About: "Photographer. DMs open."}, error(nil)
+	orig := telReadPeerInfo
+	defer func() { telReadPeerInfo = orig }()
+	telReadPeerInfo = func(ctx context.Context, h *telHub, p tgbridge.Peer) (tgbridge.PeerInfo, error) {
+		calls++
+		asked = p
+		return answer, fail
+	}
+	type resp struct {
+		OK         bool   `json:"ok"`
+		Known      bool   `json:"known"`
+		About      string `json:"about"`
+		AboutRead  bool   `json:"aboutRead"`
+		AboutFresh bool   `json:"aboutFresh"`
+	}
+	post := func(body string) resp {
+		rec := httptest.NewRecorder()
+		s.handleTelMembers(rec, telJSONReq("/api/tel/members", body))
+		var r resp
+		_ = json.Unmarshal(rec.Body.Bytes(), &r)
+		return r
+	}
+	person := `{"kind":"user","id":"7","accessHash":"13"}`
+	if r := post(`{"peer":` + person + `}`); !r.OK || r.Known || calls != 0 {
+		t.Fatalf("opening a person's chat asked for something: %+v, %d calls", r, calls)
+	}
+	r := post(`{"peer":` + person + `,"about":true}`)
+	if !r.OK || r.About != "Photographer. DMs open." || !r.AboutFresh || r.Known || calls != 1 {
+		t.Fatalf("first open of the info: %+v, %d calls", r, calls)
+	}
+	if asked.Kind != tgbridge.PeerUser || asked.ID != 7 || asked.AccessHash != 13 {
+		t.Fatalf("asked about %+v", asked)
+	}
+	if r := post(`{"peer":` + person + `,"about":true}`); calls != 1 || r.About == "" {
+		t.Fatalf("asked again the same day: %+v", r)
+	}
+	// A day on, unreachable: the old bio still answers.
+	key := "user:7"
+	m := s.tel.store().data.Members[key]
+	m.AboutAt -= 25 * 3600
+	s.tel.store().data.Members[key] = m
+	fail = errors.New("dial tcp: i/o timeout")
+	s.handleTelMembers(httptest.NewRecorder(), telJSONReq("/api/tel/members", `{"peer":`+person+`,"about":true}`))
+	if a, read, fresh := s.tel.store().About(key, time.Now()); calls != 2 || a != "Photographer. DMs open." || !read || fresh {
+		t.Fatalf("after a failed read: %q %v %v, %d calls", a, read, fresh, calls)
+	}
+	// A deleted account: Telegram refuses; held for the day, no count made up.
+	fail = tgerr.New(400, "USER_ID_INVALID")
+	if r := post(`{"peer":` + person + `,"about":true}`); !r.OK || !r.AboutFresh || r.Known || calls != 3 {
+		t.Fatalf("refused: %+v, %d calls", r, calls)
+	}
+	// A bot's description too.
+	fail, answer = nil, tgbridge.PeerInfo{About: "I fetch weather."}
+	if r := post(`{"peer":{"kind":"bot","id":"8","accessHash":"1"},"about":true}`); r.About != "I fetch weather." || calls != 4 {
+		t.Fatalf("bot: %+v, %d calls", r, calls)
+	}
+	// Bios are bounded and cleared with the cache like the rest.
+	s.handleCacheClearOne(httptest.NewRecorder(), telJSONReq("/api/cache/clear-one", `{"which":"telegram"}`))
+	if _, read, _ := s.tel.store().About(key, time.Now()); read {
+		t.Fatal("a bio survived clearing the Telegram cache")
+	}
+}
+
+// Eviction goes by when an entry was last read, a bio's time included: a bio
+// read just now (no member-count time at all) is not the first to go.
+func TestTelInfoEvictionCountsBios(t *testing.T) {
+	c := loadTelCache(t.TempDir())
+	now := time.Unix(1_800_000_000, 0)
+	for i := 0; i < telInfoMax; i++ {
+		c.SetChannelInfo(fmt.Sprintf("channel:%d", i), tgbridge.PeerInfo{About: "x"}, now.Add(time.Duration(i)*time.Second))
+	}
+	c.SetAbout("user:1", "bio", now.Add(time.Hour))
+	if _, read, _ := c.About("user:1", now.Add(time.Hour)); !read {
+		t.Fatal("the newest read, a bio, was evicted")
+	}
+	if _, read, _ := c.About("channel:0", now); read {
+		t.Fatal("the oldest read was kept past the bound")
 	}
 }
 
@@ -363,14 +451,14 @@ func TestTelChannelInfoAskedOnce(t *testing.T) {
 	var mu sync.Mutex
 	calls := 0
 	release := make(chan struct{})
-	orig := telReadChannelInfo
-	defer func() { telReadChannelInfo = orig }()
-	telReadChannelInfo = func(ctx context.Context, h *telHub, p tgbridge.Peer) (tgbridge.ChannelInfo, error) {
+	orig := telReadPeerInfo
+	defer func() { telReadPeerInfo = orig }()
+	telReadPeerInfo = func(ctx context.Context, h *telHub, p tgbridge.Peer) (tgbridge.PeerInfo, error) {
 		mu.Lock()
 		calls++
 		mu.Unlock()
 		<-release
-		return tgbridge.ChannelInfo{Members: 3, About: "a"}, nil
+		return tgbridge.PeerInfo{Members: 3, About: "a"}, nil
 	}
 	var wg sync.WaitGroup
 	for _, body := range []string{`{"peer":{"kind":"channel","id":"9","accessHash":"1"}}`,

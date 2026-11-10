@@ -259,9 +259,9 @@ function telHistAbort() {
 // is reading or typing: the shield already says it, the reconnect is already
 // running, and the message they were sending goes through anyway. Raising it
 // here showed "not connected" over a connection that was about to work.
-async function telCallQuiet(url, body) {
+async function telCallQuiet(url, body, signal) {
   var had = telState.error;
-  var r = await telCall(url, body);
+  var r = await telCall(url, body, undefined, signal);
   if (!r) telState.error = had;
   return r;
 }
@@ -366,6 +366,10 @@ async function telBgOp(label, fn) {
 var telIdleWaiters = [];
 
 function telWhenIdle() {
+  // A description being read for an info sheet is the one background read a
+  // user action does not wait behind: it gives way, and is read on the next
+  // open (the old text stays meanwhile).
+  telAboutAbort();
   if (!telState.busy && !telState.bg) return Promise.resolve();
   return new Promise(function (resolve) { telIdleWaiters.push(resolve); });
 }
@@ -1160,6 +1164,9 @@ window.telJumpToMsg = telJumpToMsg;
 async function telJoinChannel(key) {
   var d = telDialogFor(key);
   if (!d) return;
+  // Taken behind whatever runs (a refresh, the info sheet's read), not
+  // dropped: telOp alone refuses while anything is in flight.
+  await telWhenIdle();
   await telOp('tel_working', async function () {
     var r = await telCall('/api/tel/join', { peer: d.peer }, 'tel_err_generic');
     if (!r) return;
@@ -3002,6 +3009,21 @@ function telNoteInfo(key, r) {
   return JSON.stringify([telState.members[key], telState.about[key] || null]) !== was;
 }
 
+// telHasAbout says whether a conversation has a description to read: a
+// channel's or supergroup's, or a person's or bot's bio. Basic groups and a
+// channel's direct messages are not asked.
+function telHasAbout(peer) {
+  if (!peer || peer.direct) return false;
+  return telHasFullInfo(peer) || peer.kind === 'user' || peer.kind === 'bot';
+}
+
+// telAboutWord is the key of a description's words ('info', 'loading' or
+// 'failed'): a person's is a bio.
+function telAboutWord(key, what) {
+  var kind = String(key).indexOf('user:') === 0 ? 'bio' : 'about';
+  return what === 'failed' ? 'tel_' + kind + '_failed' : 'tel_' + what + '_' + kind;
+}
+
 function telInfoURL(peer) {
   return '/api/tel/members?kind=' + encodeURIComponent(peer.kind) +
     '&id=' + encodeURIComponent(peer.id) + '&accessHash=' + encodeURIComponent(peer.accessHash || 0);
@@ -3025,9 +3047,9 @@ window.telLoadMembers = telLoadMembers;
 // chat's step and its info sheet share one call.
 var telInfoFlight = {};
 
-function telAskInfo(key, peer, about) {
+function telAskInfo(key, peer, about, signal) {
   if (telInfoFlight[key]) return telInfoFlight[key];
-  var p = telCallQuiet('/api/tel/members', about ? { peer: peer, about: true } : { peer: peer });
+  var p = telCallQuiet('/api/tel/members', about ? { peer: peer, about: true } : { peer: peer }, signal);
   telInfoFlight[key] = p;
   var done = function () { if (telInfoFlight[key] === p) delete telInfoFlight[key]; };
   p.then(done, done);
@@ -3051,19 +3073,19 @@ async function telFetchMembers(key, peer) {
   }
 }
 
-// telAboutHTML is the description part of the info sheet: the text as last
-// read -- an old one too, when a new read fails -- and whether it is being
-// read.
+// telAboutHTML is the description (or bio) part of the info sheet: the text
+// as last read -- an old one too, when a new read fails -- and whether it is
+// being read.
 function telAboutHTML(key) {
   var a = telState.about[key], h = '';
   if (a && a.text) {
-    h += '<div class="tel-profile-field"><div class="tel-profile-label" dir="auto">' + telEsc(telT('tel_info_about')) + '</div>' +
+    h += '<div class="tel-profile-field"><div class="tel-profile-label" dir="auto">' + telEsc(telT(telAboutWord(key, 'info'))) + '</div>' +
       '<div class="tel-profile-about" dir="auto">' + telEsc(telSafeText(a.text)) + '</div></div>';
   }
   if (telState.aboutBusy[key]) {
-    h += '<div class="tel-profile-note" dir="auto">' + telEsc(telT('tel_loading_about')) + '</div>';
+    h += '<div class="tel-profile-note" dir="auto">' + telEsc(telT(telAboutWord(key, 'loading'))) + '</div>';
   } else if (telState.aboutFailed[key] && !a) {
-    h += '<div class="tel-profile-note" dir="auto">' + telEsc(telT('tel_about_failed')) + '</div>';
+    h += '<div class="tel-profile-note" dir="auto">' + telEsc(telT(telAboutWord(key, 'failed'))) + '</div>';
   }
   return h;
 }
@@ -3080,12 +3102,22 @@ function telPaintAbout(key) {
   el.innerHTML = telAboutHTML(key);
 }
 
-// telProfileAbout brings the open info sheet's description up to date: from
-// the backend's cache, or -- when today's read has none -- one call to
-// Telegram, which brings the member count with it. A failed read leaves the
+// telAboutCtl cancels the description read in flight for an info sheet.
+var telAboutCtl = null;
+
+function telAboutAbort() {
+  if (telAboutCtl) {
+    try { telAboutCtl.abort(); } catch (e) { }
+    telAboutCtl = null;
+  }
+}
+
+// telProfileAbout brings the open info sheet's description or bio up to
+// date: from the backend's cache, or -- when today's read has none -- one
+// call to Telegram, which for a channel brings the member count with it. A failed read leaves the
 // old text on screen. Closing the sheet before the call starts cancels it.
 async function telProfileAbout(key, peer) {
-  if (!telHasFullInfo(peer) || telState.aboutBusy[key]) return;
+  if (!telHasAbout(peer) || telState.aboutBusy[key]) return;
   try {
     if (telNoteInfo(key, await telFetch(telInfoURL(peer)))) {
       if (telPeerKey(telState.peer) === key) telRender();
@@ -3108,7 +3140,14 @@ async function telProfileAbout(key, peer) {
       a = telState.about[key];
       if (a && a.fresh) { skipped = true; break; }
       if (telState.busy || telState.bg) continue;
-      r = await telBgOp('tel_loading_about', function () { return telAskInfo(key, peer, true); });
+      var ctl = new AbortController();
+      r = await telBgOp(telAboutWord(key, 'loading'), function () {
+        telAboutCtl = ctl;
+        return telAskInfo(key, peer, true, ctl.signal);
+      });
+      if (telAboutCtl === ctl) telAboutCtl = null;
+      // Gave way to something the user did: not a failure.
+      if (ctl.signal.aborted) skipped = true;
       break;
     }
   } finally {
@@ -3377,6 +3416,7 @@ window.telJoinInvite = telJoinInvite;
 // telOpenByUsername resolves @name and opens that conversation here.
 async function telOpenByUsername(user, msgId) {
   var opened = null;
+  await telWhenIdle();
   await telOp('tel_working', async function () {
     var r = await telCall('/api/tel/resolve', { username: user }, 'tel_err_username');
     if (!r || !r.peer) return;
@@ -4694,9 +4734,9 @@ function telThreadMenu() {
 window.telThreadMenu = telThreadMenu;
 
 // telPeerProfile is the open chat's info: picture, name, what it is and how
-// many are in it, every username it holds, a channel's description, and what
-// can be done with it. Only the description may cost a call (telProfileAbout,
-// at most once a day per channel); the rest came with the conversation. The ⋮
+// many are in it, every username it holds, a channel's description or a
+// person's bio, and what can be done with it. Only the description may cost a
+// call (telProfileAbout, at most once a day per chat); the rest came with the conversation. The ⋮
 // menu keeps its items too.
 function telPeerProfile() {
   var peer = telState.peer;
@@ -4720,7 +4760,7 @@ function telPeerProfile() {
     }
     h += '</div>';
   }
-  if (telHasFullInfo(peer)) {
+  if (telHasAbout(peer)) {
     h += '<div id="telProfileAbout" data-key="' + telAttrQ(key) + '">' + telAboutHTML(key) + '</div>';
   }
   if (d && d.visiting && (peer.kind === 'channel' || peer.kind === 'forum')) {
@@ -4741,7 +4781,7 @@ function telPeerProfile() {
       icon('delete') + ' <span dir="auto">' + telEsc(telT(isChannel ? 'tel_leave' : 'tel_delete')) + '</span></button>';
   }
   telSheet(h);
-  if (telHasFullInfo(peer)) telProfileAbout(key, peer);
+  if (telHasAbout(peer)) telProfileAbout(key, peer);
 }
 window.telPeerProfile = telPeerProfile;
 

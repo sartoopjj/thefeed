@@ -1,7 +1,8 @@
 // Tapping the open chat's name shows its info, as in the messenger and in
 // Telegram: picture, name, what it is and how many are in it, every username
 // (the main one and the others it holds), a channel's description, and what
-// can be done with it. Only the description may need a call (tel_about.test).
+// can be done with it. Only the description or bio may need a call
+// (tel_about.test).
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
@@ -27,7 +28,7 @@ function profile(peer, dialog, blocked, about) {
   const asked = [];
   const run = new Function('telState', 'telT', 'telEsc', 'telAttrQ', 'telAvatar', 'telSheet', 'telDialogFor', 'telPeerKey',
     'jsStr', 'icon', 'telIsBlocked', 'telFmtCount', 'telSafeText', 'telUIDir', 'telProfileAbout',
-    ['telSheetItem', 'telMembersLine', 'telHasFullInfo', 'telAboutHTML', 'telPeerProfile'].map(grab).join('\n') + '\nreturn telPeerProfile;');
+    ['telSheetItem', 'telMembersLine', 'telHasFullInfo', 'telHasAbout', 'telAboutWord', 'telAboutHTML', 'telPeerProfile'].map(grab).join('\n') + '\nreturn telPeerProfile;');
   run(telState, (k) => '[' + k + ']', esc, esc, (n, size, th) => `<avatar ${size}>`, (h) => { sheet = h; },
     () => dialog, (p) => p.kind + ':' + p.id, jsStr, (n) => `<i ${n}>`,
     (p) => !!blocked && (p.kind === 'user' || p.kind === 'bot'), (n) => String(n),
@@ -95,8 +96,13 @@ const text = (h) => h.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
   eq('nor a direction override', /\u202E/.test(evil), false);
   const sg = profile({ kind: 'group', id: '8', accessHash: '5', title: 'SG' }, { peer: {} });
   eq('a supergroup has one too', /telProfileAbout/.test(sg), true);
-  for (const [name, p] of [['a person', { kind: 'user', id: '7' }], ['a bot', { kind: 'bot', id: '7' }],
-    ['a basic group', { kind: 'group', id: '5', accessHash: '0' }], ['direct messages', { kind: 'channel', id: '4', direct: true }]]) {
+  // A person's is a bio, under its own word; a bot's is a description.
+  const bio = profile({ kind: 'user', id: '7', title: 'P' }, { peer: {} }, false, { 'user:7': { text: 'Photographer', fresh: true } });
+  eq('a person: their bio, under "bio"', /\[tel_info_bio\][\s\S]*Photographer/.test(bio) && !/tel_info_about/.test(bio), true);
+  eq('and it is brought up to date', profile.asked, ['user:7']);
+  const bot = profile({ kind: 'bot', id: '8', title: 'B' }, { peer: {} }, false, { 'bot:8': { text: 'Weather bot', fresh: true } });
+  eq('a bot: its description', /\[tel_info_about\][\s\S]*Weather bot/.test(bot), true);
+  for (const [name, p] of [['a basic group', { kind: 'group', id: '5', accessHash: '0' }], ['direct messages', { kind: 'channel', id: '4', direct: true }]]) {
     const x = profile(p, { peer: p });
     eq(`${name}: no description slot, nothing asked`, [/telProfileAbout/.test(x), profile.asked.length], [false, 0]);
   }
@@ -121,7 +127,8 @@ eq('the singular uses the same digits as every other count',
 
 eq('a long description wraps and scrolls inside the sheet',
   /\.tel-profile-about \{[^}]*white-space: pre-wrap[^}]*overflow-wrap: anywhere[^}]*overflow-y: auto/.test(css), true);
-for (const k of ['tel_info', 'tel_info_username', 'tel_info_also', 'tel_info_about', 'tel_loading_about', 'tel_about_failed']) {
+for (const k of ['tel_info', 'tel_info_username', 'tel_info_also', 'tel_info_about', 'tel_loading_about', 'tel_about_failed',
+  'tel_info_bio', 'tel_loading_bio', 'tel_bio_failed']) {
   eq(`${k} in both languages`, (i18n.match(new RegExp('\\b' + k + ':', 'g')) || []).length, 2);
 }
 

@@ -1004,12 +1004,14 @@ func (s *Server) handleTelPeer(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]any{"ok": true, "dialog": d})
 }
 
-// handleTelMembers answers what a channel's full info says: its member count
-// and its description. GET reads the cache only. POST is the page's own step
-// (opening a chat, or its info with about:true): it asks Telegram -- one call,
-// both at once -- only when the count is not known from the list or a read
-// within the day, or the description was asked for and not read within it.
-// A failed read leaves what was there: an old description is still shown.
+// handleTelMembers answers what a conversation's full info says: a
+// channel's member count, and the description (a channel's, or a person's or
+// bot's bio). GET reads the cache only. POST is the page's own step: opening
+// a channel asks Telegram (one call) when its count is not known from the
+// list or a read within the day; opening a chat's info (about:true) asks when
+// its description was not read within the day -- for a channel the same call
+// brings both. A failed read leaves what was there: an old description is
+// still shown.
 func (s *Server) handleTelMembers(w http.ResponseWriter, r *http.Request) {
 	h := s.telHubOrFail(w)
 	if h == nil {
@@ -1043,13 +1045,7 @@ func (s *Server) handleTelMembers(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, map[string]any{"ok": true, "members": n, "known": known,
 			"about": about, "aboutRead": read, "aboutFresh": fresh})
 	}
-	needed := func() bool {
-		now := time.Now()
-		_, known := h.store().Members(key, now)
-		_, _, fresh := h.store().About(key, now)
-		return !known || (wantAbout && !fresh)
-	}
-	if r.Method != http.MethodPost || !needed() {
+	if r.Method != http.MethodPost {
 		answer()
 		return
 	}
@@ -1058,7 +1054,20 @@ func (s *Server) handleTelMembers(w http.ResponseWriter, r *http.Request) {
 	if cached, ok := h.store().PeerFor(key); ok {
 		peer = cached
 	}
-	if !peer.ChannelBased() || peer.Direct {
+	channel := peer.ChannelBased() && !peer.Direct
+	needed := func() bool {
+		if !peer.HasAbout() {
+			return false
+		}
+		now := time.Now()
+		_, _, fresh := h.store().About(key, now)
+		if wantAbout && !fresh {
+			return true
+		}
+		_, known := h.store().Members(key, now)
+		return channel && !known
+	}
+	if !needed() {
 		answer()
 		return
 	}
@@ -1073,9 +1082,13 @@ func (s *Server) handleTelMembers(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), telCallTimeout)
 	defer cancel()
-	info, err := telReadChannelInfo(ctx, h, peer)
+	info, err := telReadPeerInfo(ctx, h, peer)
 	if errors.Is(err, errTelNoLink) {
 		writeJSON(w, map[string]any{"ok": false, "reason": "tel_err_not_connected"})
+		return
+	}
+	if err != nil && r.Context().Err() != nil {
+		// The page gave it up for something the user did: nothing failed.
 		return
 	}
 	if err != nil {
@@ -1083,15 +1096,19 @@ func (s *Server) handleTelMembers(w http.ResponseWriter, r *http.Request) {
 			telFail(w, h, err)
 			return
 		}
-		// Telegram will not say (a private or banned channel): held for the
-		// day like a hidden count, or every open would ask again.
+		// Telegram will not say (a private or banned channel, a deleted
+		// account): held for the day, or every open would ask again.
 		h.setErr(nil)
-		h.store().SetInfoRefused(key, time.Now())
+		h.store().SetInfoRefused(key, channel, time.Now())
 		answer()
 		return
 	}
 	h.setErr(nil)
-	h.store().SetChannelInfo(key, info, time.Now())
+	if channel {
+		h.store().SetChannelInfo(key, info, time.Now())
+	} else {
+		h.store().SetAbout(key, info.About, time.Now())
+	}
 	answer()
 }
 
@@ -1101,18 +1118,18 @@ var telInfoMu sync.Mutex
 // errTelNoLink is a call that could not be made: no Telegram link.
 var errTelNoLink = errors.New("tel: not connected")
 
-// telReadChannelInfo asks Telegram for a channel's full info: one call. A
+// telReadPeerInfo asks Telegram for a conversation's full info: one call. A
 // variable so tests can stand in for Telegram.
-var telReadChannelInfo = func(ctx context.Context, h *telHub, peer tgbridge.Peer) (tgbridge.ChannelInfo, error) {
+var telReadPeerInfo = func(ctx context.Context, h *telHub, peer tgbridge.Peer) (tgbridge.PeerInfo, error) {
 	if _, err := h.current(); err != nil {
-		return tgbridge.ChannelInfo{}, errTelNoLink
+		return tgbridge.PeerInfo{}, errTelNoLink
 	}
 	h.beginOp()
 	defer h.endOp()
-	var info tgbridge.ChannelInfo
+	var info tgbridge.PeerInfo
 	err := h.withBridge(ctx, func(b *tgbridge.Bridge) error {
 		var e error
-		info, e = b.ChannelInfo(ctx, peer)
+		info, e = b.PeerInfo(ctx, peer)
 		return e
 	})
 	return info, err

@@ -19,15 +19,14 @@ const grab = (name) => src.match(new RegExp('(?:async )?function ' + name + '\\(
 const esc = (x) => String(x).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 const tick = () => new Promise((r) => setTimeout(r, 0));
 
-const body = 'var telInfoFlight = {};\n' + ['telHasFullInfo', 'telNoteInfo', 'telInfoURL', 'telAskInfo', 'telAboutHTML',
+const body = 'var telInfoFlight = {};\nvar telAboutCtl = null;\n' + ['telAboutAbort', 'telHasFullInfo', 'telHasAbout', 'telAboutWord', 'telNoteInfo', 'telInfoURL', 'telAskInfo', 'telAboutHTML',
   'telAboutShown', 'telPaintAbout', 'telProfileAbout'].map(grab).join('\n') +
-  '\nreturn { telProfileAbout: telProfileAbout, telAskInfo: telAskInfo, telAboutHTML: telAboutHTML };';
+  '\nreturn { telProfileAbout: telProfileAbout, telAskInfo: telAskInfo, telAboutHTML: telAboutHTML, telAboutAbort: telAboutAbort };';
 
 // world builds the page around one open info sheet: the backend's cache
 // (cached), what Telegram answers (live; null is a failed read), the tunnel.
-function world({ cached, live, busy = false, about = {} }) {
-  const peer = { kind: 'channel', id: '9', accessHash: '3' };
-  const key = 'channel:9';
+function world({ cached, live, busy = false, about = {}, peer = { kind: 'channel', id: '9', accessHash: '3' } }) {
+  const key = peer.kind + ':' + peer.id;
   const st = { peer, members: {}, membersFresh: {}, about, aboutBusy: {}, aboutFailed: {}, busy, bg: false };
   const log = [];
   // The sheet's description slot; every paint of it is kept.
@@ -45,7 +44,9 @@ function world({ cached, live, busy = false, about = {} }) {
     'telFetch', 'telCallQuiet', 'telBgOp', 'telWhenIdle', body)(
     st, (k) => '[' + k + ']', esc, (x) => String(x), (p) => p.kind + ':' + p.id, () => log.push('render'), doc,
     async (url) => { log.push('GET'); return w.cached; },
-    async (url, b) => { log.push('POST ' + JSON.stringify(b)); await tick(); return w.live; },
+    async (url, b, signal) => { log.push('POST ' + JSON.stringify(b)); w.signal = signal;
+      for (let i = 0; i < (w.slowTicks || 1); i++) { await tick(); if (signal && signal.aborted) return null; }
+      return w.live; },
     async (label, fn) => { if (st.busy || st.bg) return null; st.bg = true; log.push('step ' + label);
       w.paints.push(slot.innerHTML); try { return await fn(); } finally { st.bg = false; } },
     () => (st.busy || st.bg) ? new Promise((r) => waiters.push(r)) : Promise.resolve());
@@ -143,9 +144,66 @@ const text = (h) => h.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
   eq('and the next one after it is its own', posts(w).length, 2);
 }
 
+// A person's bio: the same rule, under its own words.
+{
+  const peer = { kind: 'user', id: '7', accessHash: '13' };
+  const w = world({ peer, cached: { ok: true, known: false, aboutRead: false },
+    live: { ok: true, known: false, about: 'Photographer', aboutRead: true, aboutFresh: true } });
+  await w.open();
+  eq('a person: their bio is read once', posts(w), ['POST {"peer":{"kind":"user","id":"7","accessHash":"13"},"about":true}']);
+  eq('as a "bio" step', w.log.includes('step tel_loading_bio'), true);
+  eq('and shown as their bio', text(w.slot.innerHTML), '[tel_info_bio] Photographer');
+  eq('no member count is made up for them', w.st.members['user:7'], undefined);
+  const f = world({ peer, cached: { ok: true, known: false, aboutRead: false }, live: null });
+  await f.open();
+  eq('a person, failed with nothing kept: says the bio could not load', text(f.slot.innerHTML), '[tel_bio_failed]');
+  const old = world({ peer, cached: { ok: true, known: false, about: 'Old bio', aboutRead: true, aboutFresh: false }, live: null });
+  await old.open();
+  eq('a person, failed: the old bio stays', text(old.slot.innerHTML), '[tel_info_bio] Old bio');
+}
+
+// Every word the sheet can ask for exists, in both languages (a misnamed key
+// once showed its own name instead of "could not load").
+{
+  const i18n = readFileSync(join(here, '..', 'static', 'js', 'i18n.js'), 'utf8');
+  const word = new Function(grab('telAboutWord') + '\nreturn telAboutWord;')();
+  for (const k of ['user:1', 'bot:1', 'channel:1', 'group:1', 'forum:1']) for (const w of ['info', 'loading', 'failed']) {
+    const key = word(k, w);
+    eq(`${k} ${w}: ${key} in both languages`, (i18n.match(new RegExp('\\b' + key + ':', 'g')) || []).length, 2);
+  }
+}
+
+// The user does something while a bio is being read (opens another chat,
+// sends, joins): the read gives way at once. Not a failure -- the old text
+// stays, nothing says "could not load", and the next open reads it again.
+{
+  const w = world({ cached: { ok: true, known: true, about: 'Old text', aboutRead: true, aboutFresh: false },
+    live: { ok: true, about: 'New text', aboutRead: true, aboutFresh: true } });
+  w.slowTicks = 50;
+  const p = w.open();
+  for (let i = 0; i < 5; i++) await tick();
+  eq('the read is in flight, cancellable', !!w.signal && !w.signal.aborted, true);
+  w.api.telAboutAbort();   // what telWhenIdle does for every user action
+  await p;
+  eq('a user action cancels it', w.signal.aborted, true);
+  eq('the old text stays', text(w.slot.innerHTML), '[tel_info_about] Old text');
+  eq('not counted as a failure', !!w.st.aboutFailed['channel:9'], false);
+  eq('and the tunnel is free again', [w.st.bg, !!w.st.aboutBusy['channel:9']], [false, false]);
+  w.slowTicks = 1;
+  await w.open();
+  eq('the next open reads it', text(w.slot.innerHTML), '[tel_info_about] New text');
+}
+// Every user action waits its turn rather than being dropped, and that wait
+// is what cancels a description read.
+eq('waiting for the tunnel cancels a description read first', /^function telWhenIdle\(\) \{[\s\S]*?telAboutAbort\(\);[\s\S]*?if \(!telState\.busy/.test(grab('telWhenIdle')), true);
+for (const f of ['telJoinChannel', 'telOpenByUsername']) {
+  const b = grab(f);
+  eq(`${f} waits its turn instead of being dropped`, b.indexOf('await telWhenIdle()') > -1 && b.indexOf('await telWhenIdle()') < b.indexOf('telOp('), true);
+}
+
 eq('a new account starts with no descriptions', /telState\.about = \{\}/.test(grab('telResetData')), true);
-// Opening a chat still costs only the member step: the description is never
-// read for a chat nobody opened the info of.
+// Opening a chat still costs only a channel's member step: a description or
+// bio is never read for a chat nobody opened the info of.
 eq('opening a chat does not read the description', /about: true|telProfileAbout/.test(grab('telOpenPeer') + grab('telFetchMembers')), false);
 
 console.log(`${pass} passed, ${fail} failed`);
