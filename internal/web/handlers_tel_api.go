@@ -1005,8 +1005,8 @@ func (s *Server) handleTelPeer(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleTelMembers answers what a conversation's full info says: a
-// channel's member count, and the description (a channel's, or a person's or
-// bot's bio). GET reads the cache only. POST is the page's own step: opening
+// channel's member count, and the description (a channel's or group's, or a
+// person's or bot's bio). GET reads the cache only. POST is the page's own step: opening
 // a channel asks Telegram (one call) when its count is not known from the
 // list or a read within the day; opening a chat's info (about:true) asks when
 // its description was not read within the day -- for a channel the same call
@@ -1096,8 +1096,9 @@ func (s *Server) handleTelMembers(w http.ResponseWriter, r *http.Request) {
 			telFail(w, h, err)
 			return
 		}
-		// Telegram will not say (a private or banned channel, a deleted
-		// account): held for the day, or every open would ask again.
+		// Telegram will not say (a private or banned channel, a group we
+		// left, a deleted account): held for the day, or every open would
+		// ask again.
 		h.setErr(nil)
 		h.store().SetInfoRefused(key, channel, time.Now())
 		answer()

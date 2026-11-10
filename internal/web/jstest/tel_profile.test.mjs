@@ -102,7 +102,10 @@ const text = (h) => h.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
   eq('and it is brought up to date', profile.asked, ['user:7']);
   const bot = profile({ kind: 'bot', id: '8', title: 'B' }, { peer: {} }, false, { 'bot:8': { text: 'Weather bot', fresh: true } });
   eq('a bot: its description', /\[tel_info_about\][\s\S]*Weather bot/.test(bot), true);
-  for (const [name, p] of [['a basic group', { kind: 'group', id: '5', accessHash: '0' }], ['direct messages', { kind: 'channel', id: '4', direct: true }]]) {
+  const bg = profile({ kind: 'group', id: '5', accessHash: '0', title: 'G', members: 4 }, { peer: {} }, false, { 'group:5': { text: 'Family group', fresh: true } });
+  eq('a basic group: its description too', /\[tel_info_about\][\s\S]*Family group/.test(bg) && /telProfileAbout/.test(bg), true);
+  eq('and it is brought up to date', profile.asked, ['group:5']);
+  for (const [name, p] of [['direct messages', { kind: 'channel', id: '4', direct: true }], ['a group\'s direct messages', { kind: 'group', id: '4', accessHash: '2', direct: true }]]) {
     const x = profile(p, { peer: p });
     eq(`${name}: no description slot, nothing asked`, [/telProfileAbout/.test(x), profile.asked.length], [false, 0]);
   }

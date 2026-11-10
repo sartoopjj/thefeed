@@ -348,13 +348,25 @@ func TestTelChannelAboutFetch(t *testing.T) {
 	if r := post(`{"peer":` + ch + `,"about":true}`); calls != 3 {
 		t.Fatalf("a refusal was asked again the same day: %+v", r)
 	}
-	// A basic group or a channel's direct messages: never a call.
+	// A channel's direct messages: never a call.
 	direct := tgbridge.Peer{Kind: tgbridge.PeerGroup, ID: 31, AccessHash: 4, Direct: true}
 	s.tel.store().PutDialogs([]tgbridge.Dialog{{Peer: telTestGroup}, {Peer: direct}})
-	for _, p := range []string{`{"kind":"group","id":"5","accessHash":"0"}`, `{"kind":"group","id":"31","accessHash":"4"}`} {
-		if r := post(`{"peer":` + p + `,"about":true}`); !r.OK || calls != 3 {
-			t.Fatalf("%s: %+v, %d calls", p, r, calls)
-		}
+	if r := post(`{"peer":{"kind":"group","id":"31","accessHash":"4"},"about":true}`); !r.OK || calls != 3 {
+		t.Fatalf("direct messages: %+v, %d calls", r, calls)
+	}
+	// A basic group: its count came with the list, so opening it asks
+	// nothing; its info reads the description once, and keeps the free count.
+	basic := `{"kind":"group","id":"5","accessHash":"0"}`
+	if r := post(`{"peer":` + basic + `}`); !r.OK || r.Members != 42 || calls != 3 {
+		t.Fatalf("basic group opened: %+v, %d calls", r, calls)
+	}
+	fail, answer = nil, tgbridge.PeerInfo{About: "Family group"}
+	r := post(`{"peer":` + basic + `,"about":true}`)
+	if !r.OK || r.About != "Family group" || r.Members != 42 || calls != 4 {
+		t.Fatalf("basic group info: %+v, %d calls", r, calls)
+	}
+	if r := post(`{"peer":` + basic + `,"about":true}`); calls != 4 || r.About != "Family group" {
+		t.Fatalf("basic group asked again the same day: %+v", r)
 	}
 }
 

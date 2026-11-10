@@ -3010,11 +3010,11 @@ function telNoteInfo(key, r) {
 }
 
 // telHasAbout says whether a conversation has a description to read: a
-// channel's or supergroup's, or a person's or bot's bio. Basic groups and a
-// channel's direct messages are not asked.
+// channel's or group's (basic or super), or a person's or bot's bio. A
+// channel's direct messages have none.
 function telHasAbout(peer) {
   if (!peer || peer.direct) return false;
-  return telHasFullInfo(peer) || peer.kind === 'user' || peer.kind === 'bot';
+  return ['channel', 'forum', 'group', 'user', 'bot'].indexOf(peer.kind) >= 0;
 }
 
 // telAboutWord is the key of a description's words ('info', 'loading' or

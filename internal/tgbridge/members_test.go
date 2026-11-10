@@ -40,13 +40,14 @@ func TestMembersFromFullChannel(t *testing.T) {
 	if got := infoFromFull(&tg.MessagesChatFull{FullChat: &tg.ChannelFull{ID: 9}}); got != (PeerInfo{}) {
 		t.Fatalf("hidden count, no description = %+v", got)
 	}
-	if got := infoFromFull(&tg.MessagesChatFull{FullChat: &tg.ChatFull{ID: 5, About: "x"}}); got != (PeerInfo{}) {
-		t.Fatalf("not a channel = %+v", got)
+	// A basic group: its description only (its count came with the list).
+	if got := infoFromFull(&tg.MessagesChatFull{FullChat: &tg.ChatFull{ID: 5, About: "x"}}); got != (PeerInfo{About: "x"}) {
+		t.Fatalf("basic group = %+v", got)
 	}
 }
 
-// Who has a description to read: channels, supergroups, people and bots; not
-// basic groups (theirs would be another call shape) nor direct messages.
+// Who has a description to read: channels, groups (basic or super), people
+// and bots; not a channel's direct messages.
 func TestHasAbout(t *testing.T) {
 	for _, c := range []struct {
 		p    Peer
@@ -57,7 +58,8 @@ func TestHasAbout(t *testing.T) {
 		{Peer{Kind: PeerGroup, ID: 1, AccessHash: 1}, true}, // supergroup
 		{Peer{Kind: PeerUser, ID: 1, AccessHash: 1}, true},
 		{Peer{Kind: PeerBot, ID: 1, AccessHash: 1}, true},
-		{Peer{Kind: PeerGroup, ID: 1}, false}, // basic group
+		{Peer{Kind: PeerGroup, ID: 1}, true}, // basic group
+		{Peer{Kind: PeerGroup, ID: 1, Direct: true}, false},
 		{Peer{Kind: PeerChannel, ID: 1, AccessHash: 1, Direct: true}, false},
 	} {
 		if got := c.p.HasAbout(); got != c.want {
