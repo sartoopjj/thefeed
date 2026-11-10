@@ -1,6 +1,6 @@
 # thefeed
 
-DNS-based **feed reader and lite messenger** for networks where only DNS gets through. Read Telegram channels and public X accounts, and exchange end-to-end-encrypted messages with other users — all over plain DNS.
+DNS-based **feed reader and messenger** for networks where only DNS gets through. Read Telegram channels and public X accounts, send end-to-end-encrypted messages to other users, and even log in to your own Telegram account, with the thefeed server acting as the proxy. All over plain DNS.
 
 Built during Iran's 2026 internet shutdown — [read the story behind the project →](https://sartoopjj.github.io/thefeed/project-brief.html)
 

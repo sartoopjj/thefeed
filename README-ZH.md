@@ -1,6 +1,6 @@
 # thefeed
 
-**基于 DNS 的消息流阅读器 + 轻量私信**，专为只有 DNS 能通过的网络设计。阅读 Telegram 频道和公开 X 账号，并与其他用户交换端到端加密消息 —— 全部走普通 DNS。
+**基于 DNS 的消息流阅读器 + 私信**，专为只有 DNS 能通过的网络设计。阅读 Telegram 频道和公开 X 账号，与其他用户交换端到端加密消息，甚至可以登录你自己的 Telegram 账号，由 thefeed 服务器充当代理。全部走普通 DNS。
 
 诞生于伊朗断网期间——[阅读项目背后的故事 →](https://sartoopjj.github.io/thefeed/project-brief-zh.html)
 
