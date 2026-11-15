@@ -35,5 +35,53 @@ ok('repaints immediately', fn.slice(clearsAt, fetchesAt).includes('telRender()')
 // A failed request must not leave the user looking signed in.
 ok('a failed request is swallowed, not surfaced', /catch \(e\) \{ \}/.test(fn));
 
+// The question before signing out goes through the app's own dialog. The iOS
+// WebView has no handler for window.confirm, so there it answers "no" without
+// showing anything and the button did nothing at all.
+const grab = (name) => src.match(new RegExp('async function ' + name + '\\([\\s\\S]*?\\n}'))[0];
+const names = ['telLogout', 'telUseDefaultCredentials', 'telSaveCredentials'];
+const body = names.map(grab).join('\n') + '\nreturn {' + names.join(',') + '};';
+
+// world runs the three with confirm() behaving as on iOS, and the app dialog
+// answering `answer`.
+function world(answer) {
+  const w = { asked: [], native: 0, calls: [], st: null };
+  w.st = { authorized: true, user: { id: 1 }, info: { hasSession: true, apiId: 1, apiHash: 'a' } };
+  const doc = { getElementById: (id) => ({ telApiId: { value: '2' }, telApiHash: { value: 'b' } })[id] || null };
+  w.api = new Function('telState', 'telT', 'confirm', 'showConfirmDialog', 'telCloseSheet', 'telHistAbort',
+    'telResetData', 'telRender', 'telFetch', 'telPost', 'telRefreshInfo', 'telOp', 'telCall', 'document', body)(
+    w.st, (k) => k, () => { w.native++; return false; },
+    async (msg) => { w.asked.push(msg); return answer; },
+    () => {}, () => {}, () => {}, () => {},
+    async (url, b) => { w.calls.push(b); return {}; }, (b) => b, async () => {},
+    async (label, f) => { await f(); },
+    async (url, b) => { w.calls.push(b); return { ok: true, signedOut: true }; }, doc);
+  return w;
+}
+
+{
+  const w = world(true);
+  await w.api.telLogout();
+  ok('logout: asks in the app dialog', w.asked.length === 1 && w.asked[0] === 'tel_logout_confirm');
+  ok('logout: yes signs out', w.st.authorized === false && w.st.user === null);
+  ok('logout: yes tells the backend', w.calls.length === 1 && w.calls[0].action === 'logout');
+  ok('logout: never uses window.confirm', w.native === 0);
+}
+{
+  const w = world(false);
+  await w.api.telLogout();
+  ok('logout: no keeps the account', w.st.authorized === true && w.calls.length === 0);
+}
+for (const name of ['telUseDefaultCredentials', 'telSaveCredentials']) {
+  const yes = world(true);
+  await yes.api[name]();
+  ok(name + ': asks in the app dialog', yes.asked.length === 1 && yes.asked[0] === 'tel_creds_signout_confirm');
+  ok(name + ': yes goes ahead', yes.calls.length === 1 && yes.st.authorized === false);
+  ok(name + ': never uses window.confirm', yes.native === 0);
+  const no = world(false);
+  await no.api[name]();
+  ok(name + ': no changes nothing', no.calls.length === 0 && no.st.authorized === true);
+}
+
 console.log(`${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

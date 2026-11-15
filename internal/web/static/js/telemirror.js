@@ -594,7 +594,8 @@
       // Mount over the posts column (a positioned ancestor) so it sits above
       // the posts at the right stacking — the standalone modal is gone now.
       var modal = document.querySelector('.chat-area');
-      if (!modal) { resolve(window.confirm(message)); return; }
+      // Not window.confirm: on iOS it answers "no" without showing anything.
+      if (!modal) { showConfirmDialog(message, yesText, noText).then(resolve); return; }
       var overlay = document.createElement('div');
       overlay.className = 'tm-confirm-overlay';
       overlay.innerHTML =

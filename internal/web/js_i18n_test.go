@@ -149,6 +149,19 @@ func TestJSTelegramLogout(t *testing.T) {
 	t.Logf("%s", out)
 }
 
+// No native confirm/alert/prompt: the iOS WebView ignores them.
+func TestJSNoNativeDialogs(t *testing.T) {
+	node, err := exec.LookPath("node")
+	if err != nil {
+		t.Skip("node not installed")
+	}
+	out, err := exec.Command(node, "jstest/native_dialogs.test.mjs").CombinedOutput()
+	if err != nil {
+		t.Fatalf("native dialog checks failed:\n%s", out)
+	}
+	t.Logf("%s", out)
+}
+
 // Every field the backend sends on a conversation row must be taken when the
 // row is refreshed. Run with the rest of the suite, not by hand.
 func TestJSTelegramDialogFieldsRefresh(t *testing.T) {

@@ -399,43 +399,6 @@ async function saveCurrentResolverListPrompt() {
   } catch (e) { showToast(e.message || 'save failed'); }
 }
 
-async function clearCache() {
-  try { await mediaWipeIDB(); } catch (e) { }
-  Object.keys(mediaBlobURLs).forEach(function (k) {
-    try { URL.revokeObjectURL(mediaBlobURLs[k]); } catch (e) { }
-  });
-  mediaBlobURLs = {};
-  mediaBlobs = {};
-  // Clear last-seen tracking. Keep thefeed_lang / thefeed_theme /
-  // version-update flags. Profiles live server-side, untouched.
-  try {
-    localStorage.removeItem('thefeed_seen_ids');
-    localStorage.removeItem('thefeed_seen_hashes');
-    var toRemove = [];
-    for (var i = 0; i < localStorage.length; i++) {
-      var k = localStorage.key(i);
-      if (k && k.indexOf('thefeed_seen_ts_') === 0) toRemove.push(k);
-    }
-    toRemove.forEach(function (k) { localStorage.removeItem(k); });
-  } catch (e) { }
-  previousMsgIDs = {};
-  previousContentHashes = {};
-  autoFetchedChannels = {};
-  try { var r = await fetch('/api/cache/clear', { method: 'POST' }); var j = await r.json(); if (j.ok) { alert(t('cache_cleared')) } } catch (e) { }
-  // Server cache was just wiped; force a fresh DNS-backed refresh of the
-  // selected channel. Other channels auto-refresh on first open.
-  try { await doRefresh(false); } catch (e) { }
-}
-
-async function mediaWipeIDB() {
-  var db = await mediaDBOpen();
-  if (!db) return;
-  try {
-    var tx = db.transaction(MEDIA_DB_STORE, 'readwrite');
-    tx.objectStore(MEDIA_DB_STORE).clear();
-  } catch (e) { }
-}
-
 // ===== SAVED RESOLVERS PROMPT =====
 function checkAndShowSavedResolversPrompt(status) {
   // Suppressed by the user via "Don't show again" → settings can
