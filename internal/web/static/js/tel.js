@@ -822,7 +822,7 @@ async function telSaveCredentials() {
   }
   // The stored session belongs to the app that created it, so changing these
   // signs the account out. Said before the fact, not discovered afterwards.
-  if (info.hasSession && !confirm(telT('tel_creds_signout_confirm'))) return;
+  if (info.hasSession && !(await showConfirmDialog(telT('tel_creds_signout_confirm')))) return;
   await telOp('tel_working', async function () {
     var r = await telCall('/api/tel/credentials', { apiId: id, apiHash: hash });
     if (!r) return;
@@ -841,7 +841,7 @@ window.telSaveCredentials = telSaveCredentials;
 // any change of key, it signs the account out.
 async function telUseDefaultCredentials() {
   var info = telState.info || {};
-  if (info.hasSession && !confirm(telT('tel_creds_signout_confirm'))) return;
+  if (info.hasSession && !(await showConfirmDialog(telT('tel_creds_signout_confirm')))) return;
   await telOp('tel_working', async function () {
     var r = await telCall('/api/tel/credentials', { useDefault: true });
     if (!r) return;
@@ -1063,7 +1063,9 @@ window.telSignInPassword = telSignInPassword;
 
 async function telLogout() {
   telCloseSheet();
-  if (!confirm(telT('tel_logout_confirm'))) return;
+  // Not confirm(): iOS WKWebView has no UI delegate, so it returns false
+  // without showing anything and the button would do nothing.
+  if (!(await showConfirmDialog(telT('tel_logout_confirm')))) return;
   // Deliberately NOT inside telOp: telOp does nothing while another operation
   // holds the link, which would make "log out" during a fetch a no-op with
   // nothing on screen to say so. Signing out must always be possible, so it
