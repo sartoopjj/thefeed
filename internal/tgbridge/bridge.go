@@ -133,45 +133,16 @@ func (b *Bridge) AuthStatus(ctx context.Context) (*auth.Status, error) {
 
 // SendCode asks Telegram to send a login code to the user's own device. The
 // code never passes through the relay or through us.
-func (b *Bridge) SendCode(ctx context.Context, phone string) (string, string, error) {
+func (b *Bridge) SendCode(ctx context.Context, phone string) (CodeSent, error) {
 	client, _, err := b.snapshot()
 	if err != nil {
-		return "", "", err
+		return CodeSent{}, err
 	}
 	sent, err := client.Auth().SendCode(ctx, phone, auth.SendCodeOptions{})
 	if err != nil {
-		return "", "", err
+		return CodeSent{}, err
 	}
-	code, ok := sent.(*tg.AuthSentCode)
-	if !ok {
-		return "", "", fmt.Errorf("tgbridge: unexpected sent-code type %T", sent)
-	}
-	return code.PhoneCodeHash, deliveryOf(code.Type), nil
-}
-
-// deliveryOf names where Telegram actually put the code. Without it the user is
-// told only that a code was sent, and the commonest case by far -- Telegram
-// delivering it INSIDE an app the user is already signed in to, not by SMS --
-// looks exactly like a code that never arrived.
-func deliveryOf(t tg.AuthSentCodeTypeClass) string {
-	switch t.(type) {
-	case *tg.AuthSentCodeTypeApp:
-		return "app"
-	case *tg.AuthSentCodeTypeSMS, *tg.AuthSentCodeTypeSMSWord, *tg.AuthSentCodeTypeSMSPhrase:
-		return "sms"
-	case *tg.AuthSentCodeTypeFragmentSMS:
-		return "fragment"
-	case *tg.AuthSentCodeTypeFirebaseSMS:
-		return "sms"
-	case *tg.AuthSentCodeTypeCall:
-		return "call"
-	case *tg.AuthSentCodeTypeFlashCall, *tg.AuthSentCodeTypeMissedCall:
-		return "missedcall"
-	case *tg.AuthSentCodeTypeEmailCode, *tg.AuthSentCodeTypeSetUpEmailRequired:
-		return "email"
-	default:
-		return ""
-	}
+	return codeSentOf(sent)
 }
 
 // Ping keeps the connection alive; Telegram drops one idle for about a minute,
@@ -202,28 +173,28 @@ func safeCall(fn func() error) (err error) {
 
 // ResendCode asks for the code through Telegram's next delivery method,
 // reusing the existing hash.
-func (b *Bridge) ResendCode(ctx context.Context, phone, codeHash string) (string, string, error) {
+func (b *Bridge) ResendCode(ctx context.Context, phone, codeHash string) (CodeSent, error) {
 	client, _, err := b.snapshot()
 	if err != nil {
-		return "", "", err
+		return CodeSent{}, err
 	}
 	sent, err := client.Auth().ResendCode(ctx, phone, codeHash)
 	if err != nil {
-		return "", "", err
+		return CodeSent{}, err
 	}
-	code, ok := sent.(*tg.AuthSentCode)
-	if !ok {
-		return "", "", fmt.Errorf("tgbridge: unexpected resend type %T", sent)
-	}
-	return code.PhoneCodeHash, deliveryOf(code.Type), nil
+	return codeSentOf(sent)
 }
 
 // SignIn completes the code step. ErrPasswordNeeded means the account has
-// two-step verification on and SignInPassword is next.
-func (b *Bridge) SignIn(ctx context.Context, phone, code, codeHash string) error {
-	client, _, err := b.snapshot()
+// two-step verification on and SignInPassword is next. byEmail says the code
+// came by email, which Telegram takes in a different field.
+func (b *Bridge) SignIn(ctx context.Context, phone, code, codeHash string, byEmail bool) error {
+	client, api, err := b.snapshot()
 	if err != nil {
 		return err
+	}
+	if byEmail {
+		return signInByEmail(ctx, api, phone, code, codeHash)
 	}
 	_, err = client.Auth().SignIn(ctx, phone, code, codeHash)
 	return err

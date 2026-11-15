@@ -363,6 +363,52 @@ func (s *Server) handleTelDisconnect(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]any{"ok": true})
 }
 
+// telAuther is the part of the bridge the login steps use.
+type telAuther interface {
+	SendCode(ctx context.Context, phone string) (tgbridge.CodeSent, error)
+	ResendCode(ctx context.Context, phone, codeHash string) (tgbridge.CodeSent, error)
+	SignIn(ctx context.Context, phone, code, codeHash string, byEmail bool) error
+	SetupLoginEmail(ctx context.Context, phone, codeHash, email string) (string, error)
+	VerifyLoginEmail(ctx context.Context, phone, codeHash, code string) (tgbridge.CodeSent, error)
+	PasswordHint(ctx context.Context) string
+}
+
+// telAuthLinked reports whether there is a connection to log in over.
+var telAuthLinked = func(h *telHub) bool {
+	_, err := h.current()
+	return err == nil
+}
+
+// telAuthCall runs one login step. once: never repeat it on a rebuilt
+// connection (see withBridgeOnce).
+var telAuthCall = func(ctx context.Context, h *telHub, once bool, fn func(telAuther) error) error {
+	call := func(b *tgbridge.Bridge) error { return fn(b) }
+	if once {
+		return h.withBridgeOnce(ctx, call)
+	}
+	return h.withBridge(ctx, call)
+}
+
+// codeSentJSON is the answer to every step that leaves a code on its way.
+func codeSentJSON(c tgbridge.CodeSent) map[string]any {
+	if c.Done {
+		return map[string]any{"ok": true, "done": true}
+	}
+	return map[string]any{"ok": true, "codeHash": c.Hash, "via": c.Via, "emailPattern": c.EmailPattern}
+}
+
+// logCodeVia records where Telegram put the code, so "no code came" can be
+// told apart from "it went somewhere else". No number, no address.
+func (h *telHub) logCodeVia(step string, c tgbridge.CodeSent) {
+	via := c.Via
+	if c.Done {
+		via = "none needed"
+	} else if via == "" {
+		via = "unknown"
+	}
+	h.s.addLog("[tel] " + step + ": code via " + via)
+}
+
 // handleTelAuth drives the login steps. The code is sent by Telegram to the
 // user's own device and typed here; it never passes through the relay.
 func (s *Server) handleTelAuth(w http.ResponseWriter, r *http.Request) {
@@ -375,11 +421,16 @@ func (s *Server) handleTelAuth(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req struct {
-		Action   string `json:"action"` // status | code | signin | password | logout
+		// status | code | resend | signin | password | emailsetup | emailverify | logout
+		Action   string `json:"action"`
 		Phone    string `json:"phone"`
 		Code     string `json:"code"`
 		CodeHash string `json:"codeHash"`
 		Password string `json:"password"`
+		Email    string `json:"email"`
+		// Via is where the code being signed in with came from; "email"
+		// changes the field Telegram expects it in.
+		Via string `json:"via"`
 	}
 	if err := s.telDecode(r, &req); err != nil {
 		http.Error(w, "bad request", 400)
@@ -398,7 +449,7 @@ func (s *Server) handleTelAuth(w http.ResponseWriter, r *http.Request) {
 		s.telLogout(w, r, h)
 		return
 	}
-	if _, err := h.current(); err != nil {
+	if !telAuthLinked(h) {
 		writeJSON(w, map[string]any{"ok": false, "error": "not connected", "reason": "tel_err_not_connected"})
 		return
 	}
@@ -440,28 +491,29 @@ func (s *Server) handleTelAuth(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, resp)
 
 	case "code":
-		var hash, via string
-		err := h.withBridgeOnce(ctx, func(b *tgbridge.Bridge) error {
+		var sent tgbridge.CodeSent
+		err := telAuthCall(ctx, h, true, func(b telAuther) error {
 			var e error
-			hash, via, e = b.SendCode(ctx, strings.TrimSpace(req.Phone))
+			sent, e = b.SendCode(ctx, strings.TrimSpace(req.Phone))
 			return e
 		})
 		if err != nil {
 			telFailAs(w, h, err, "tel_err_lost_code_hash")
 			return
 		}
-		writeJSON(w, map[string]any{"ok": true, "codeHash": hash, "via": via})
+		h.logCodeVia("code", sent)
+		writeJSON(w, codeSentJSON(sent))
 
 	case "resend":
 		phone := strings.TrimSpace(req.Phone)
-		var hash, via string
-		err := h.withBridgeOnce(ctx, func(b *tgbridge.Bridge) error {
+		var sent tgbridge.CodeSent
+		err := telAuthCall(ctx, h, true, func(b telAuther) error {
 			var e error
-			hash, via, e = b.ResendCode(ctx, phone, req.CodeHash)
+			sent, e = b.ResendCode(ctx, phone, req.CodeHash)
 			// resendCode needs a next delivery method; without one Telegram
 			// says SEND_CODE_UNAVAILABLE, so ask for a fresh code instead.
 			if e != nil && tgerr.Is(e, "SEND_CODE_UNAVAILABLE") {
-				hash, via, e = b.SendCode(ctx, phone)
+				sent, e = b.SendCode(ctx, phone)
 			}
 			return e
 		})
@@ -469,11 +521,42 @@ func (s *Server) handleTelAuth(w http.ResponseWriter, r *http.Request) {
 			telFailAs(w, h, err, "tel_err_lost_code_hash")
 			return
 		}
-		writeJSON(w, map[string]any{"ok": true, "codeHash": hash, "via": via})
+		h.logCodeVia("resend", sent)
+		writeJSON(w, codeSentJSON(sent))
+
+	case "emailsetup":
+		// Telegram sent no code: it wants a login email first. This sends a
+		// code to that email, to prove the user can read it.
+		var pattern string
+		err := telAuthCall(ctx, h, true, func(b telAuther) error {
+			var e error
+			pattern, e = b.SetupLoginEmail(ctx, strings.TrimSpace(req.Phone), req.CodeHash, strings.TrimSpace(req.Email))
+			return e
+		})
+		if err != nil {
+			telFailAs(w, h, err, "tel_err_lost_code_hash")
+			return
+		}
+		writeJSON(w, map[string]any{"ok": true, "emailPattern": pattern})
+
+	case "emailverify":
+		// The email is proven; Telegram now sends the login code itself.
+		var sent tgbridge.CodeSent
+		err := telAuthCall(ctx, h, true, func(b telAuther) error {
+			var e error
+			sent, e = b.VerifyLoginEmail(ctx, strings.TrimSpace(req.Phone), req.CodeHash, strings.TrimSpace(req.Code))
+			return e
+		})
+		if err != nil {
+			telFailAs(w, h, err, "tel_err_lost_code_hash")
+			return
+		}
+		h.logCodeVia("email verified", sent)
+		writeJSON(w, codeSentJSON(sent))
 
 	case "signin":
-		if err := h.withBridgeOnce(ctx, func(b *tgbridge.Bridge) error {
-			return b.SignIn(ctx, strings.TrimSpace(req.Phone), strings.TrimSpace(req.Code), req.CodeHash)
+		if err := telAuthCall(ctx, h, true, func(b telAuther) error {
+			return b.SignIn(ctx, strings.TrimSpace(req.Phone), strings.TrimSpace(req.Code), req.CodeHash, req.Via == "email")
 		}); err != nil {
 			// A 2FA account needs the password step next; say so explicitly
 			// rather than looking like a wrong code.
@@ -481,7 +564,7 @@ func (s *Server) handleTelAuth(w http.ResponseWriter, r *http.Request) {
 				// The hint comes from the same connection, so fetch it while
 				// we are still on it.
 				var hint string
-				_ = h.withBridge(ctx, func(b *tgbridge.Bridge) error {
+				_ = telAuthCall(ctx, h, false, func(b telAuther) error {
 					hint = b.PasswordHint(ctx)
 					return nil
 				})
@@ -1220,10 +1303,14 @@ func telStatusKey(err error) string {
 		return "tel_err_bad_credentials"
 	// Telegram names the exact login failure; a generic error hides whether
 	// the code or the connection is at fault.
-	case tgerr.Is(err, "PHONE_CODE_INVALID"):
+	case tgerr.Is(err, "PHONE_CODE_INVALID", "CODE_INVALID", "EMAIL_CODE_INVALID"):
 		return "tel_err_code_invalid"
-	case tgerr.Is(err, "PHONE_CODE_EXPIRED"):
+	case tgerr.Is(err, "PHONE_CODE_EXPIRED", "EMAIL_VERIFY_EXPIRED", "EMAIL_HASH_EXPIRED"):
 		return "tel_err_code_expired"
+	case tgerr.Is(err, "EMAIL_INVALID", "EMAIL_NOT_ALLOWED", "EMAIL_NOT_SETUP"):
+		return "tel_err_email_invalid"
+	case isSignUpRequired(err):
+		return "tel_err_no_account"
 	case tgerr.Is(err, "PHONE_CODE_EMPTY"):
 		return "tel_err_code_empty"
 	case tgerr.Is(err, "PHONE_NUMBER_INVALID"):
@@ -1352,6 +1439,13 @@ func isBadAPICredentials(err error) bool {
 // isPasswordNeeded reports whether sign-in stopped on two-step verification.
 // gotd replaces SESSION_PASSWORD_NEEDED with a typed error reading "2FA
 // required", so the typed check is the one that fires.
+// isSignUpRequired: the number has no Telegram account, whichever way the
+// code was entered.
+func isSignUpRequired(err error) bool {
+	var su *auth.SignUpRequired
+	return errors.Is(err, tgbridge.ErrSignUpRequired) || errors.As(err, &su)
+}
+
 func isPasswordNeeded(err error) bool {
 	if err == nil {
 		return false

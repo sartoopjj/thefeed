@@ -67,6 +67,8 @@ var telState = {
   // login
   codeHash: '',
   codeVia: '',   // where Telegram says it put the code
+  codeEmail: '', // masked address an email code went to
+  emailSent: '', // setupemail: masked address the setup code went to
   phone: '',
   needPassword: false,
   passwordHint: '',
@@ -667,6 +669,8 @@ function telAutoResume() {
 function telClearLoginStep() {
   telState.codeHash = '';
   telState.codeVia = '';
+  telState.codeEmail = '';
+  telState.emailSent = '';
   telState.needPassword = false;
   telState.passwordHint = '';
 }
@@ -760,6 +764,8 @@ async function telChangeServer() {
   // the moment the new config connects.
   telState.codeHash = '';
   telState.codeVia = '';
+  telState.codeEmail = '';
+  telState.emailSent = '';
   telState.needPassword = false;
   await telDisconnect();
 }
@@ -928,8 +934,32 @@ async function telSendCode() {
   telState.phone = phone;   // remembered, so a failure never clears the field
   await telOp('tel_sending_code', async function () {
     var r = await telCall('/api/tel/auth', { action: 'code', phone: phone }, 'tel_err_code');
-    if (r) { telState.codeHash = r.codeHash; telState.codeVia = r.via || ''; }
+    if (r) await telTakeCode(r);
   });
+}
+
+// telTakeCode records where Telegram sent the code. done: Telegram signed the
+// session in without one.
+async function telTakeCode(r) {
+  if (r.done) { await telSignedIn(); return; }
+  if (!r.codeHash) return;
+  telState.codeHash = r.codeHash;
+  telState.codeVia = r.via || '';
+  telState.codeEmail = r.emailPattern || '';
+  telState.emailSent = '';
+}
+
+// telSignedIn starts the new account clean, whatever a late answer for the
+// previous one left behind.
+async function telSignedIn() {
+  telState.codeHash = '';
+  telState.codeVia = '';
+  telState.codeEmail = '';
+  telState.emailSent = '';
+  telState.needPassword = false;
+  telResetData();
+  await telRefreshInfo();
+  if (telReady()) telLoadDialogs();
 }
 window.telSendCode = telSendCode;
 
@@ -939,7 +969,7 @@ async function telResendCode() {
   await telOp('tel_sending_code', async function () {
     var r = await telCall('/api/tel/auth',
       { action: 'resend', phone: telState.phone, codeHash: telState.codeHash }, 'tel_err_code');
-    if (r && r.codeHash) { telState.codeHash = r.codeHash; telState.codeVia = r.via || ''; }
+    if (r) await telTakeCode(r);
   });
 }
 window.telResendCode = telResendCode;
@@ -950,6 +980,8 @@ function telEditPhone() {
   if (telState.busy) return;
   telState.codeHash = '';
   telState.codeVia = '';
+  telState.codeEmail = '';
+  telState.emailSent = '';
   telState.error = '';
   telRender();
 }
@@ -960,7 +992,8 @@ async function telSignIn() {
   if (!code) return;
   await telOp('tel_signing_in', async function () {
     var payload = {
-      action: 'signin', phone: telState.phone, code: code, codeHash: telState.codeHash
+      action: 'signin', phone: telState.phone, code: code, codeHash: telState.codeHash,
+      via: telState.codeVia
     };
     try {
       var r = await telFetch('/api/tel/auth', telPost(payload));
@@ -975,14 +1008,47 @@ async function telSignIn() {
       telState.error = telT('tel_err_signin');
       return;
     }
-    // A new account starts clean, whatever a late answer for the previous
-    // one left behind.
-    telResetData();
-    await telRefreshInfo();
-    if (telReady()) telLoadDialogs();
+    await telSignedIn();
   });
 }
 window.telSignIn = telSignIn;
+
+// telSetupEmail answers "setupemail": Telegram sent no code and wants a login
+// email first. It sends a code to the address given, to prove it is theirs.
+async function telSetupEmail() {
+  var email = ((document.getElementById('telEmail') || {}).value || '').trim();
+  if (!email || email.indexOf('@') < 1) { telState.error = telT('tel_err_email_invalid'); telRender(); return; }
+  await telOp('tel_sending_code', async function () {
+    var r = await telCall('/api/tel/auth', {
+      action: 'emailsetup', phone: telState.phone, codeHash: telState.codeHash, email: email
+    }, 'tel_err_code');
+    if (r) telState.emailSent = r.emailPattern || email;
+  });
+}
+window.telSetupEmail = telSetupEmail;
+
+// telVerifyEmail checks the setup code; Telegram then sends the login code
+// itself, usually to that same email.
+async function telVerifyEmail() {
+  var code = ((document.getElementById('telEmailCode') || {}).value || '').trim();
+  if (!code) return;
+  await telOp('tel_signing_in', async function () {
+    var r = await telCall('/api/tel/auth', {
+      action: 'emailverify', phone: telState.phone, codeHash: telState.codeHash, code: code
+    }, 'tel_err_signin');
+    if (r) await telTakeCode(r);
+  });
+}
+window.telVerifyEmail = telVerifyEmail;
+
+// telChangeEmail goes back to the address field. Local only.
+function telChangeEmail() {
+  if (telState.busy) return;
+  telState.emailSent = '';
+  telState.error = '';
+  telRender();
+}
+window.telChangeEmail = telChangeEmail;
 
 async function telSignInPassword() {
   var pw = (document.getElementById('telPassword') || {}).value || '';
@@ -990,10 +1056,7 @@ async function telSignInPassword() {
   await telOp('tel_signing_in', async function () {
     var r = await telCall('/api/tel/auth', { action: 'password', password: pw }, 'tel_err_signin');
     if (!r) return;
-    telState.needPassword = false;
-    telResetData();
-    await telRefreshInfo();
-    if (telReady()) telLoadDialogs();
+    await telSignedIn();
   });
 }
 window.telSignInPassword = telSignInPassword;
@@ -1013,6 +1076,8 @@ async function telLogout() {
   telState.user = null;
   telState.codeHash = '';
   telState.codeVia = '';
+  telState.codeEmail = '';
+  telState.emailSent = '';
   telState.needPassword = false;
   telResetData();
   telRender();
@@ -2552,6 +2617,8 @@ async function telPickServer(key) {
   if (key !== current) {
     telState.codeHash = '';
     telState.codeVia = '';
+    telState.codeEmail = '';
+    telState.emailSent = '';
     telState.needPassword = false;
   }
   // A switch away from a live link: the backend drops that link itself, so
@@ -2611,9 +2678,11 @@ function telPaintCountdown() {
 function telRenderCodeVia() {
   if (!telState.codeVia) return '';
   var k = 'tel_code_via_' + telState.codeVia;
+  if (telState.codeVia === 'email' && telState.codeEmail) k = 'tel_code_via_email_to';
   var txt = telT(k);
   if (txt === k) return '';
-  return '<div class="tel-hint" dir="auto">' + telEsc(txt) + '</div>';
+  return '<div class="tel-hint" dir="auto">' +
+    telEsc(txt).replace('{email}', function () { return telLTR(telEsc(telState.codeEmail)); }) + '</div>';
 }
 
 // telResume rebuilds the connection on the config we already had. Reading the
@@ -2940,6 +3009,7 @@ function telRenderLogin() {
       '<div class="tel-hint" dir="auto">' + telEsc(telT('tel_login_hint')) + '</div></div>';
     return html;
   }
+  if (telState.codeVia === 'setupemail') return html + telRenderEmailSetup() + '</div>';
   html += '<div class="tel-step-head" dir="auto">' +
     telEsc(telT('tel_code_sent').replace('{phone}', telLTR(telState.phone))) + '</div>' +
     telRenderCodeVia() +
@@ -2951,8 +3021,34 @@ function telRenderLogin() {
     telEsc(telT('tel_resend')) + '</button>' +
     '<button class="tel-btn" onclick="telEditPhone()"' + (telState.busy ? ' disabled' : '') + '>' +
     telEsc(telT('tel_edit_phone')) + '</button>' +
-    '<div class="tel-hint" dir="auto">' + telEsc(telT('tel_code_hint')) + '</div></div>';
+    // "It came in your own Telegram" is only true of an in-app code.
+    (telState.codeVia === '' || telState.codeVia === 'app'
+      ? '<div class="tel-hint" dir="auto">' + telEsc(telT('tel_code_hint')) + '</div>' : '') + '</div>';
   return html;
+}
+
+// telRenderEmailSetup is the step Telegram asks for instead of sending a code:
+// add a login email, then type the code sent to it.
+function telRenderEmailSetup() {
+  var dis = telState.busy ? ' disabled' : '';
+  var back = '<button class="tel-btn" onclick="telEditPhone()"' + dis + '>' +
+    telEsc(telT('tel_edit_phone')) + '</button>';
+  if (!telState.emailSent) {
+    return '<div class="tel-step-head" dir="auto">' + telEsc(telT('tel_email_setup_intro')) + '</div>' +
+      '<label class="tel-label" for="telEmail" dir="auto">' + telEsc(telT('tel_email')) + '</label>' +
+      '<input id="telEmail" class="tel-input" type="email" inputmode="email" autocomplete="email" dir="ltr">' +
+      '<button class="tel-btn tel-btn-primary" onclick="telSetupEmail()"' + dis + '>' +
+      telEsc(telT('tel_send_code')) + '</button>' + back +
+      '<div class="tel-hint" dir="auto">' + telEsc(telT('tel_email_setup_hint')) + '</div>';
+  }
+  return '<div class="tel-step-head" dir="auto">' +
+    telEsc(telT('tel_email_code_sent')).replace('{email}', function () { return telLTR(telEsc(telState.emailSent)); }) + '</div>' +
+    '<label class="tel-label" for="telEmailCode" dir="auto">' + telEsc(telT('tel_code')) + '</label>' +
+    '<input id="telEmailCode" class="tel-input" type="text" inputmode="numeric" autocomplete="one-time-code" dir="ltr">' +
+    '<button class="tel-btn tel-btn-primary" onclick="telVerifyEmail()"' + dis + '>' +
+    telEsc(telT('tel_continue')) + '</button>' +
+    '<button class="tel-btn" onclick="telChangeEmail()"' + dis + '>' + telEsc(telT('tel_change_email')) + '</button>' +
+    back;
 }
 
 // telThreadSub is the line under the open chat's name, as HTML: how many are
