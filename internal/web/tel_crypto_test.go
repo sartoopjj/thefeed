@@ -1,14 +1,18 @@
 package web
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/gotd/td/session"
 	"github.com/sartoopjj/thefeed/internal/tgbridge"
@@ -24,6 +28,219 @@ func sessionFor(t *testing.T, dir string) tgbridge.SessionFile {
 	return tgbridge.SessionFile{
 		Path: filepath.Join(dir, "session.json"),
 		Seal: tc.seal, Open: tc.open,
+	}
+}
+
+func TestTelCryptoConcurrentFirstUse(t *testing.T) {
+	run := func(t *testing.T, dirs ...string) {
+		t.Helper()
+		type result struct {
+			dir int
+			tc  *telCrypto
+			err error
+		}
+		start := make(chan struct{})
+		results := make(chan result, 16*len(dirs))
+		var workers sync.WaitGroup
+		for i, dir := range dirs {
+			for range 16 {
+				workers.Go(func() {
+					<-start
+					tc, err := loadTelCrypto(dir)
+					results <- result{dir: i, tc: tc, err: err}
+				})
+			}
+		}
+		close(start)
+		workers.Wait()
+		close(results)
+
+		handles := make([][]*telCrypto, len(dirs))
+		for r := range results {
+			if r.err != nil {
+				t.Fatalf("directory %d: concurrent first load: %v", r.dir, r.err)
+			}
+			if r.tc == nil || r.tc.locked {
+				t.Fatalf("directory %d: concurrent first load did not return an unlocked handle", r.dir)
+			}
+			handles[r.dir] = append(handles[r.dir], r.tc)
+		}
+		for i, dir := range dirs {
+			first := handles[i][0]
+			plain := []byte("synthetic concurrent session")
+			sealed, err := first.seal(plain)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for j, tc := range handles[i] {
+				if tc.dek != first.dek {
+					t.Fatalf("directory %d: worker %d holds a different DEK", i, j)
+				}
+				if got, err := tc.open(sealed); err != nil || string(got) != string(plain) {
+					t.Fatalf("directory %d: worker %d cannot open the original ciphertext: %v", i, j, err)
+				}
+			}
+			again, err := loadTelCrypto(dir)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if again.locked || again.dek != first.dek {
+				t.Fatalf("directory %d: final reload did not retain the original DEK", i)
+			}
+		}
+		if len(dirs) == 2 && handles[0][0].dek == handles[1][0].dek {
+			t.Fatal("distinct directories share a DEK")
+		}
+	}
+
+	for round := range 4 {
+		t.Run(fmt.Sprintf("round_%d", round), func(t *testing.T) {
+			run(t, t.TempDir())
+		})
+	}
+	t.Run("independent_directories", func(t *testing.T) {
+		run(t, t.TempDir(), t.TempDir())
+	})
+}
+
+func TestTelCryptoLifecycleUsesSharedLock(t *testing.T) {
+	for _, test := range []struct {
+		name string
+		mode string
+	}{
+		{name: "load", mode: "device"},
+		{name: "set", mode: "passphrase"},
+		{name: "unlock", mode: "passphrase"},
+		{name: "remove", mode: "device"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			dir := t.TempDir()
+			t.Cleanup(func() { forgetTelKey(telCryptoDir(dir)) })
+			tc, err := loadTelCrypto(dir)
+			if err != nil {
+				t.Fatal(err)
+			}
+			dek := tc.dek
+			fixtures := []struct {
+				name   string
+				plain  string
+				sealed []byte
+			}{
+				{name: "session.json", plain: "synthetic lifecycle session"},
+				{name: "cache.bin", plain: "synthetic lifecycle cache"},
+			}
+			for i := range fixtures {
+				f := &fixtures[i]
+				f.sealed, err = tc.seal([]byte(f.plain))
+				if err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(filepath.Join(dir, f.name), f.sealed, 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if test.name == "unlock" || test.name == "remove" {
+				if err := tc.setPassphrase("synthetic lifecycle passphrase"); err != nil {
+					t.Fatal(err)
+				}
+				if test.name == "unlock" {
+					forgetTelKey(tc.dir)
+				}
+			}
+			var deviceKey []byte
+			if test.name == "load" {
+				deviceKey, err = os.ReadFile(tc.deviceKeyPath())
+				if err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			telCryptoMu.Lock()
+			held := true
+			release := func() {
+				if !held {
+					return
+				}
+				if test.name == "load" {
+					if err := os.WriteFile(tc.deviceKeyPath(), deviceKey, 0o600); err != nil {
+						t.Errorf("restore device key before releasing transaction: %v", err)
+					}
+				}
+				held = false
+				telCryptoMu.Unlock()
+			}
+			defer release()
+			if test.name == "load" {
+				if err := os.Remove(tc.deviceKeyPath()); err != nil {
+					t.Fatal(err)
+				}
+			}
+			type result struct {
+				tc  *telCrypto
+				err error
+			}
+			started := make(chan struct{})
+			done := make(chan result, 1)
+			go func() {
+				close(started)
+				got := tc
+				var err error
+				switch test.name {
+				case "load":
+					got, err = loadTelCrypto(dir)
+				case "set":
+					err = got.setPassphrase("synthetic lifecycle passphrase")
+				case "unlock":
+					got, err = unlockTelCrypto(dir, "synthetic lifecycle passphrase")
+				case "remove":
+					err = got.removePassphrase()
+				}
+				done <- result{tc: got, err: err}
+			}()
+			<-started
+			select {
+			case <-done:
+				t.Fatal("lifecycle operation completed while the shared lock was held")
+			case <-time.After(100 * time.Millisecond):
+			}
+			release()
+
+			var got *telCrypto
+			select {
+			case r := <-done:
+				if r.err != nil {
+					t.Fatal(r.err)
+				}
+				got = r.tc
+			case <-time.After(10 * time.Second):
+				t.Fatal("lifecycle operation deadlocked after releasing the shared lock")
+			}
+			if got == nil || got.locked || got.mode != test.mode || got.dek != dek {
+				t.Fatal("lifecycle operation did not preserve the unlocked DEK and expected mode")
+			}
+			if test.name == "remove" {
+				forgetTelKey(tc.dir)
+			}
+			again, err := loadTelCrypto(dir)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if again.locked || again.mode != test.mode || again.dek != dek {
+				t.Fatal("fresh load did not retain the unlocked DEK and expected mode")
+			}
+			for _, f := range fixtures {
+				raw, err := os.ReadFile(filepath.Join(dir, f.name))
+				if err != nil {
+					t.Fatal(err)
+				}
+				if !bytes.Equal(raw, f.sealed) {
+					t.Fatalf("%s changed during the lifecycle operation", f.name)
+				}
+				if plain, err := got.open(raw); err != nil || string(plain) != f.plain {
+					t.Fatalf("%s is unreadable after the lifecycle operation: %v", f.name, err)
+				}
+			}
+		})
 	}
 }
 

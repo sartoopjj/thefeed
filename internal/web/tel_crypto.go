@@ -43,6 +43,9 @@ func (tc *telCrypto) deviceKeyPath() string { return filepath.Join(tc.dir, "devi
 // user holds the means to unlock.
 var errTelLocked = errors.New("tel: store is locked")
 
+// telCryptoMu keeps the keyring/device-key pair and remembered key in one transaction.
+var telCryptoMu sync.Mutex
+
 // telUnlocked remembers the data key of a passphrase-mode store that has been
 // opened this run, keyed by its keys directory.
 //
@@ -86,6 +89,9 @@ func resetSealed(dir string) {
 // DEK and device key; a passing read error locks, a keyring that is gone or
 // cut short starts fresh.
 func loadTelCrypto(dir string) (*telCrypto, error) {
+	telCryptoMu.Lock()
+	defer telCryptoMu.Unlock()
+
 	tc := &telCrypto{dir: telCryptoDir(dir), mode: "device"}
 	if err := os.MkdirAll(tc.dir, 0o700); err != nil {
 		return nil, err
@@ -174,6 +180,9 @@ func (tc *telCrypto) writeKeyring(kr savedKeyring) error {
 // setPassphrase rewraps the SAME DEK under a passcode-derived key and removes
 // the device key. The DEK is never regenerated, so the sealed session survives.
 func (tc *telCrypto) setPassphrase(passphrase string) error {
+	telCryptoMu.Lock()
+	defer telCryptoMu.Unlock()
+
 	if tc.locked {
 		return errTelLocked
 	}
@@ -199,6 +208,9 @@ func (tc *telCrypto) setPassphrase(passphrase string) error {
 
 // unlockTelCrypto opens a passphrase-mode keyring for this run.
 func unlockTelCrypto(dir, passphrase string) (*telCrypto, error) {
+	telCryptoMu.Lock()
+	defer telCryptoMu.Unlock()
+
 	tc := &telCrypto{dir: telCryptoDir(dir), mode: "passphrase", locked: true}
 	raw, err := os.ReadFile(tc.keyringPath())
 	if err != nil {
@@ -223,6 +235,9 @@ func unlockTelCrypto(dir, passphrase string) (*telCrypto, error) {
 
 // removePassphrase goes back to device mode, keeping the same DEK.
 func (tc *telCrypto) removePassphrase() error {
+	telCryptoMu.Lock()
+	defer telCryptoMu.Unlock()
+
 	if tc.locked {
 		return errTelLocked
 	}

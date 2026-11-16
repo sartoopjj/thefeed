@@ -1,12 +1,20 @@
 package web
 
 import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
+	"sync"
 	"testing"
+
+	"github.com/sartoopjj/thefeed/internal/tgbridge"
 )
 
 // Binding the device passcode to the Telegram data key.
@@ -251,6 +259,132 @@ func TestTelLockEndpointsFollowTheDeviceLifecycle(t *testing.T) {
 	// nothing and read as success.
 	if rec := post(s.handleTelLock, "/api/tel/lock", `{"passphrase":""}`); rec.Code != http.StatusBadRequest {
 		t.Errorf("an empty passcode got %d, want 400", rec.Code)
+	}
+}
+
+func TestTelLockConcurrentReadersKeepData(t *testing.T) {
+	dataDir := t.TempDir()
+	s := &Server{dataDir: dataDir}
+	s.tel = newTelHub(s, dataDir)
+	dir := s.telDir()
+	t.Cleanup(func() { forgetTelKey(telCryptoDir(dir)) })
+	tc, err := loadTelCrypto(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dek := tc.dek
+	wantSession := []byte("synthetic HTTP lifecycle session")
+	f := sessionFor(t, dir)
+	if err := f.StoreSession(context.Background(), wantSession); err != nil {
+		t.Fatal(err)
+	}
+	wantDialogs := []tgbridge.Dialog{{Peer: tgbridge.Peer{Kind: "channel", ID: 1, Title: "synthetic dialog"}, Unread: 2}}
+	loadTelCache(dir).PutDialogs(wantDialogs)
+	sealed := make(map[string][]byte)
+	for _, path := range []string{f.Path, telCachePath(dir)} {
+		sealed[path], err = os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	read := func() error {
+		rec := httptest.NewRecorder()
+		s.handleTelLock(rec, httptest.NewRequest(http.MethodGet, "/api/tel/lock", nil))
+		if rec.Code != http.StatusOK {
+			return fmt.Errorf("GET lock status = %d, want 200", rec.Code)
+		}
+		var state struct {
+			Mode   string `json:"mode"`
+			Locked bool   `json:"locked"`
+		}
+		if err := json.Unmarshal(rec.Body.Bytes(), &state); err != nil {
+			return fmt.Errorf("decode lock state: %w", err)
+		}
+		if (state.Mode != "device" && state.Mode != "passphrase") || state.Locked {
+			return fmt.Errorf("unexpected lock state: mode=%q locked=%v", state.Mode, state.Locked)
+		}
+		got, err := s.tel.sessionFile().LoadSession(context.Background())
+		if err != nil {
+			return fmt.Errorf("load original session: %w", err)
+		}
+		if !bytes.Equal(got, wantSession) {
+			return fmt.Errorf("session content changed during passcode transition")
+		}
+		if !reflect.DeepEqual(loadTelCache(dir).Dialogs(), wantDialogs) {
+			return fmt.Errorf("cached dialog changed during passcode transition")
+		}
+		return nil
+	}
+	start := make(chan struct{})
+	done := make(chan struct{})
+	errs := make(chan error, 8)
+	var readers sync.WaitGroup
+	for reader := range 8 {
+		readers.Go(func() {
+			<-start
+			for {
+				if err := read(); err != nil {
+					errs <- fmt.Errorf("reader %d: %w", reader, err)
+					return
+				}
+				select {
+				case <-done:
+					return
+				default:
+				}
+			}
+		})
+	}
+	post := func(h http.HandlerFunc, path, body string) *httptest.ResponseRecorder {
+		rec := httptest.NewRecorder()
+		h(rec, httptest.NewRequest(http.MethodPost, path, strings.NewReader(body)))
+		return rec
+	}
+	close(start)
+	var writerErr error
+	for cycle := range 4 {
+		if rec := post(s.handleTelLock, "/api/tel/lock", `{"passphrase":"synthetic HTTP passphrase"}`); rec.Code != http.StatusOK {
+			writerErr = fmt.Errorf("cycle %d: set passcode status = %d, want 200", cycle, rec.Code)
+			break
+		}
+		if rec := post(s.handleTelLockRemove, "/api/tel/lock/remove", `{}`); rec.Code != http.StatusOK {
+			writerErr = fmt.Errorf("cycle %d: remove passcode status = %d, want 200", cycle, rec.Code)
+			break
+		}
+	}
+	close(done)
+	readers.Wait()
+	close(errs)
+	for err := range errs {
+		t.Error(err)
+	}
+	if writerErr != nil {
+		t.Error(writerErr)
+	}
+	if t.Failed() {
+		t.FailNow()
+	}
+
+	forgetTelKey(telCryptoDir(dir))
+	back, err := loadTelCrypto(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if back.locked || back.mode != "device" || back.dek != dek {
+		t.Fatal("passcode cycles did not preserve the original device-mode DEK")
+	}
+	if err := read(); err != nil {
+		t.Fatal(err)
+	}
+	for path, want := range sealed {
+		got, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !bytes.Equal(got, want) {
+			t.Fatalf("encrypted %s changed during passcode cycles", filepath.Base(path))
+		}
 	}
 }
 
